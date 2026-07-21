@@ -4090,7 +4090,7 @@ public struct SessionsListParams: Codable, Sendable {
     }
 }
 
-public struct SessionPresentation: Codable, Sendable {
+public struct SessionPresentation: Codable, Sendable, Hashable {
     public let title: String
     public let titlesource: String
     public let subtitle: String?
