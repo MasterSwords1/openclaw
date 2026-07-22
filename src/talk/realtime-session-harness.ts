@@ -92,11 +92,11 @@ export type RealtimeVoiceOutputAudioEvents = {
   turn: TalkEnsureTurnResult;
 };
 
-type RealtimeVoiceSessionHarnessBase<TForcedConsultContext> = {
+type RealtimeVoiceSessionHarnessBase<TForcedConsultContext, TTalkbackMetadata> = {
   readonly forcedConsults: RealtimeVoiceForcedConsultCoordinator<TForcedConsultContext>;
   readonly outputActivity: RealtimeVoiceOutputActivityTracker;
   readonly talk: TalkSessionController;
-  readonly talkback: RealtimeVoiceAgentTalkbackQueue | undefined;
+  readonly talkback: RealtimeVoiceAgentTalkbackQueue<TTalkbackMetadata> | undefined;
   readonly transcript: RealtimeVoiceTranscriptEntry[];
   close(): void;
   createBridge(params: RealtimeVoiceBridgeSessionParams): RealtimeVoiceBridgeSession;
@@ -131,11 +131,12 @@ type RealtimeVoiceSessionHarnessMethods<TReturnEvents extends boolean> = {
 export type RealtimeVoiceSessionHarness<
   TForcedConsultContext = unknown,
   TReturnEvents extends boolean = false,
-> = RealtimeVoiceSessionHarnessBase<TForcedConsultContext> &
+  TTalkbackMetadata = unknown,
+> = RealtimeVoiceSessionHarnessBase<TForcedConsultContext, TTalkbackMetadata> &
   RealtimeVoiceSessionHarnessMethods<TReturnEvents>;
 
-type RealtimeVoiceSessionHarnessImplementation<TForcedConsultContext> =
-  RealtimeVoiceSessionHarnessBase<TForcedConsultContext> & {
+type RealtimeVoiceSessionHarnessImplementation<TForcedConsultContext, TTalkbackMetadata> =
+  RealtimeVoiceSessionHarnessBase<TForcedConsultContext, TTalkbackMetadata> & {
     ensureTurn(): string | TalkEnsureTurnResult;
     endTurn(reason?: string): TalkTurnResult | undefined;
     finishOutputAudio(
@@ -149,28 +150,37 @@ type RealtimeVoiceSessionHarnessImplementation<TForcedConsultContext> =
     ): RealtimeVoiceOutputAudioEvents | undefined;
   };
 
-type RealtimeVoiceSessionHarnessParams = {
+type RealtimeVoiceSessionHarnessParams<TTalkbackMetadata> = {
   talk: TalkSessionControllerParams;
   talkPayloads: RealtimeVoiceSessionHarnessTalkPayloads;
   onTalkEvent?: (event: TalkEvent) => void;
-  talkback?: Omit<RealtimeVoiceAgentTalkbackQueueParams, "isStopped">;
+  talkback?: Omit<RealtimeVoiceAgentTalkbackQueueParams<TTalkbackMetadata>, "isStopped">;
   forcedConsults?: RealtimeVoiceForcedConsultCoordinatorOptions;
   echoSuppression?: RealtimeVoiceSessionHarnessEchoSuppression;
   transcriptLookbackMs?: number;
   captureBridgeEvents?: boolean;
 };
 
-export function createRealtimeVoiceSessionHarness<TForcedConsultContext = unknown>(
-  params: RealtimeVoiceSessionHarnessParams & { returnEvents: true },
-): RealtimeVoiceSessionHarness<TForcedConsultContext, true>;
-export function createRealtimeVoiceSessionHarness<TForcedConsultContext = unknown>(
-  params: RealtimeVoiceSessionHarnessParams & { returnEvents?: false },
-): RealtimeVoiceSessionHarness<TForcedConsultContext>;
-export function createRealtimeVoiceSessionHarness<TForcedConsultContext = unknown>(
-  params: RealtimeVoiceSessionHarnessParams & { returnEvents?: boolean },
+export function createRealtimeVoiceSessionHarness<
+  TForcedConsultContext = unknown,
+  TTalkbackMetadata = unknown,
+>(
+  params: RealtimeVoiceSessionHarnessParams<TTalkbackMetadata> & { returnEvents: true },
+): RealtimeVoiceSessionHarness<TForcedConsultContext, true, TTalkbackMetadata>;
+export function createRealtimeVoiceSessionHarness<
+  TForcedConsultContext = unknown,
+  TTalkbackMetadata = unknown,
+>(
+  params: RealtimeVoiceSessionHarnessParams<TTalkbackMetadata> & { returnEvents?: false },
+): RealtimeVoiceSessionHarness<TForcedConsultContext, false, TTalkbackMetadata>;
+export function createRealtimeVoiceSessionHarness<
+  TForcedConsultContext = unknown,
+  TTalkbackMetadata = unknown,
+>(
+  params: RealtimeVoiceSessionHarnessParams<TTalkbackMetadata> & { returnEvents?: boolean },
 ):
-  | RealtimeVoiceSessionHarness<TForcedConsultContext>
-  | RealtimeVoiceSessionHarness<TForcedConsultContext, true> {
+  | RealtimeVoiceSessionHarness<TForcedConsultContext, false, TTalkbackMetadata>
+  | RealtimeVoiceSessionHarness<TForcedConsultContext, true, TTalkbackMetadata> {
   let closed = false;
   let bridge: RealtimeVoiceBridgeSession | undefined;
   let lastInputAt: string | undefined;
@@ -215,7 +225,10 @@ export function createRealtimeVoiceSessionHarness<TForcedConsultContext = unknow
     flush();
   };
 
-  const harness: RealtimeVoiceSessionHarnessImplementation<TForcedConsultContext> = {
+  const harness: RealtimeVoiceSessionHarnessImplementation<
+    TForcedConsultContext,
+    TTalkbackMetadata
+  > = {
     forcedConsults,
     outputActivity,
     talk,
@@ -368,6 +381,6 @@ export function createRealtimeVoiceSessionHarness<TForcedConsultContext = unknow
   };
 
   return harness as
-    | RealtimeVoiceSessionHarness<TForcedConsultContext>
-    | RealtimeVoiceSessionHarness<TForcedConsultContext, true>;
+    | RealtimeVoiceSessionHarness<TForcedConsultContext, false, TTalkbackMetadata>
+    | RealtimeVoiceSessionHarness<TForcedConsultContext, true, TTalkbackMetadata>;
 }
