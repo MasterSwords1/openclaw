@@ -81,6 +81,7 @@ export async function processResponsesStream(
   let pendingMessageText: string | null = null;
   const streamStartedAt = Date.now();
   let eventCount = 0;
+  let hasTerminalResponseEvent = false;
   const eventTypes = new Map<string, number>();
   const sseDebugMode = resolveModelSseDebugMode();
   const blockIndex = () => output.content.length - 1;
@@ -542,6 +543,7 @@ export async function processResponsesStream(
       if (streamingToolCalls.hasActive()) {
         throw new Error("Responses stream completed with unresolved tool calls");
       }
+      hasTerminalResponseEvent = true;
       const response = event.response as Record<string, unknown> | undefined;
       if (typeof response?.id === "string") {
         output.responseId = response.id;
@@ -577,8 +579,14 @@ export async function processResponsesStream(
     }
     await cooperativeScheduler.afterEvent();
   }
+  // The SDK silently ends iteration on intentional abort; preserve cancellation
+  // before distinguishing a genuine disconnect from a semantic terminal.
+  throwIfModelStreamAborted(options?.signal);
   if (streamingToolCalls.hasActive()) {
     throw new Error("Responses stream ended with unresolved tool calls");
+  }
+  if (!hasTerminalResponseEvent) {
+    throw new Error("OpenAI Responses stream ended before a terminal response event");
   }
   const eventTypeSummary = [...eventTypes.entries()]
     .slice(0, 12)
