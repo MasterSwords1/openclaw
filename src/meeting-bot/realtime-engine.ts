@@ -499,16 +499,16 @@ export async function startMeetingRealtimeEngine(params: {
         isOpen: () => !stopped,
         sendAudio: (audio) => {
           harness.outputActivity.markPlaybackStarted();
-          harness.appendOutputAudio(audio);
+          harness.recordOutputAudio(audio);
           writeOutputAudio(audio);
         },
         clearAudio: () => {
           harness.flushOutput(clearOutputPlayback);
-          harness.completeOutputAudio("clear");
+          harness.finishOutputAudio("clear");
         },
       },
       onTranscript: (role, text, isFinal) => {
-        const turnId = harness.ensureActiveTurn().turnId;
+        const turnId = harness.ensureTurn();
         const eventType =
           role === "assistant"
             ? isFinal
@@ -557,7 +557,7 @@ export async function startMeetingRealtimeEngine(params: {
       },
       onEvent: (event) => {
         if (event.type === "input_audio_buffer.speech_started") {
-          harness.ensureActiveTurn();
+          harness.ensureTurn();
         } else if (event.type === "input_audio_buffer.speech_stopped") {
           const turnId = harness.talk.activeTurnId;
           if (!turnId) {
@@ -570,8 +570,8 @@ export async function startMeetingRealtimeEngine(params: {
             final: true,
           });
         } else if (event.type === "response.done") {
-          harness.completeOutputAudio("response.done");
-          harness.completeTurn("response.done");
+          harness.finishOutputAudio("response.done");
+          harness.endTurn("response.done");
         } else if (event.type === "error") {
           harness.emit({
             type: "session.error",
@@ -596,12 +596,12 @@ export async function startMeetingRealtimeEngine(params: {
       onToolCall: (event, session) => {
         harness.emit({
           type: "tool.call",
-          turnId: harness.ensureActiveTurn().turnId,
+          turnId: harness.ensureTurn(),
           itemId: event.itemId,
           callId: event.callId,
           payload: { name: event.name, args: event.args },
         });
-        const turnId = harness.ensureActiveTurn().turnId;
+        const turnId = harness.ensureTurn();
         return params.handleToolCall({
           strategy,
           session,
@@ -626,7 +626,7 @@ export async function startMeetingRealtimeEngine(params: {
       },
       onClose: (reason) => {
         realtimeReady = false;
-        harness.completeOutputAudio(reason);
+        harness.finishOutputAudio(reason);
         harness.emit({
           type: "session.closed",
           payload: { reason },
@@ -651,7 +651,7 @@ export async function startMeetingRealtimeEngine(params: {
       if (stopped || audio.byteLength === 0) {
         return;
       }
-      if (!harness.acceptInputAudio(audio)) {
+      if (!harness.recordInputAudio(audio)) {
         return;
       }
       bridge?.sendAudio(audio);

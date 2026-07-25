@@ -101,7 +101,7 @@ export async function startMeetingAgentRealtimeEngine(params: {
 
   const writeOutputAudio = async (audio: Buffer) => {
     harness.outputActivity.markPlaybackStarted();
-    harness.appendOutputAudio(audio);
+    harness.recordOutputAudio(audio);
     await params.transport.writeOutput(audio);
   };
 
@@ -123,7 +123,7 @@ export async function startMeetingAgentRealtimeEngine(params: {
             normalized,
           ),
         );
-        const turnId = harness.ensureActiveTurn().turnId;
+        const turnId = harness.ensureTurn();
         harness.emit({
           type: "output.text.done",
           turnId,
@@ -149,14 +149,14 @@ export async function startMeetingAgentRealtimeEngine(params: {
             params.platform.displayName,
           ),
         );
-        harness.completeOutputAudio("completed");
-        harness.completeTurn();
+        harness.finishOutputAudio("completed");
+        harness.endTurn();
       })
       .catch((error: unknown) => {
         // TTS and sink failures happen after a turn, and sometimes output, has started.
         // Close both spans so later input cannot inherit stale playback suppression.
-        harness.completeOutputAudio("failed");
-        harness.completeTurn("failed");
+        harness.finishOutputAudio("failed");
+        harness.endTurn("failed");
         params.logger.warn(
           `${params.platform.logScope} ${agentLogScope} TTS failed: ${formatErrorMessage(error)}`,
         );
@@ -232,7 +232,7 @@ export async function startMeetingAgentRealtimeEngine(params: {
         }
         // Shipped Meet semantics keep assistant echoes in transcript history and events.
         // Echo suppression only prevents the recorded line from entering talkback.
-        const turnId = harness.ensureActiveTurn().turnId;
+        const turnId = harness.ensureTurn();
         harness.emit({
           type: "input.audio.committed",
           turnId,
@@ -288,7 +288,7 @@ export async function startMeetingAgentRealtimeEngine(params: {
       if (stopped || !realtimeReady || audio.byteLength === 0) {
         return;
       }
-      if (!harness.acceptInputAudio(audio)) {
+      if (!harness.recordInputAudio(audio)) {
         return;
       }
       sttSession?.sendAudio(
