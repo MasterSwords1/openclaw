@@ -58,7 +58,9 @@ describe("plugin Talk session", () => {
     const session = await openPluginTalkSession({
       sessionKey: "agent:main:avatar",
       voice: "alloy",
-      onEvent: (event) => events.push(event),
+      onEvent: (event) => {
+        events.push(event);
+      },
     });
     const relayParams = mocks.createRelay.mock.calls[0]?.[0];
 

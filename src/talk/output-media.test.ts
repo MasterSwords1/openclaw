@@ -16,7 +16,9 @@ describe("realtime voice output media", () => {
   it("delivers ordered, copied media only to the owning session listener", async () => {
     const events: RealtimeVoiceOutputMediaEvent[] = [];
     const session = createRealtimeVoiceOutputMediaSession({
-      onEvent: (event) => events.push(event),
+      onEvent: (event) => {
+        events.push(event);
+      },
     });
     const pcm = new Uint8Array([1, 0, 2, 0]);
 
@@ -62,7 +64,9 @@ describe("realtime voice output media", () => {
   it("ends the owner stream instead of silently dropping queued audio", async () => {
     const events: RealtimeVoiceOutputMediaEvent[] = [];
     const session = createRealtimeVoiceOutputMediaSession({
-      onEvent: (event) => events.push(event),
+      onEvent: (event) => {
+        events.push(event);
+      },
     });
 
     expect(session.sendAudio(new Uint8Array(1024 * 1024 + 2))).toBe(false);
