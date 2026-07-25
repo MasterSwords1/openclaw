@@ -360,6 +360,48 @@ describe("installTestEnv", () => {
     ).toBe(false);
   });
 
+  it("does not load SQLite auth state for hermetic test workers", async () => {
+    const sqliteModuleId = "../src/agents/auth-profiles/sqlite.js";
+    const attemptedStaticSqliteLoads = vi.fn();
+    const attemptedRequiredSqliteLoads = vi.fn();
+    vi.doMock(sqliteModuleId, () => {
+      attemptedStaticSqliteLoads();
+      throw new Error("hermetic test setup must not import SQLite auth state");
+    });
+    vi.doMock("node:module", async (importOriginal) => {
+      const actual = await importOriginal<typeof import("node:module")>();
+      return {
+        ...actual,
+        createRequire: (source: string | URL) => {
+          const realRequire = actual.createRequire(source);
+          const guardedRequire = (moduleId: string) => {
+            if (moduleId === sqliteModuleId) {
+              attemptedRequiredSqliteLoads();
+              throw new Error("hermetic test setup must not require SQLite auth state");
+            }
+            return realRequire(moduleId);
+          };
+          return Object.assign(guardedRequire, realRequire);
+        },
+      };
+    });
+
+    try {
+      const { installTestEnv: installFreshTestEnv } = await importFreshModule<
+        typeof import("./test-env.js")
+      >(import.meta.url, "./test-env.js?scope=hermetic-without-sqlite");
+      const testEnv = installFreshTestEnv({ mode: "hermetic" });
+      cleanupFns.push(testEnv.cleanup);
+
+      expect(process.env.HOME).toBe(testEnv.tempHome);
+      expect(attemptedStaticSqliteLoads).not.toHaveBeenCalled();
+      expect(attemptedRequiredSqliteLoads).not.toHaveBeenCalled();
+    } finally {
+      vi.doUnmock("node:module");
+      vi.doUnmock(sqliteModuleId);
+    }
+  });
+
   it("clears and restores OPENCLAW_HOME for normal isolated test runs", () => {
     const realHome = createTempHome();
     const configuredOpenClawHome = path.join(realHome, "custom-openclaw-home");

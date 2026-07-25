@@ -6,13 +6,6 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import JSON5 from "json5";
-import {
-  inspectPersistedAuthProfileStateRaw,
-  inspectPersistedAuthProfileStoreRaw,
-  runAuthProfileWriteTransaction,
-  writePersistedAuthProfileStateRaw,
-  writePersistedAuthProfileStoreRaw,
-} from "../src/agents/auth-profiles/sqlite.js";
 import { resolveEffectiveHomeDir } from "../src/infra/home-dir.js";
 import { deleteTestEnvValue, setTestEnvValue } from "../src/test-utils/env.js";
 
@@ -49,9 +42,11 @@ const LIVE_GEMINI_EXCLUDED_PATHS = [
 ] as const;
 const requireFromHere = createRequire(import.meta.url);
 
+type AuthProfileSqliteApi = typeof import("../src/agents/auth-profiles/sqlite.js");
 type LegacyConfigCompatApi = typeof import("../src/commands/doctor/shared/legacy-config-compat.js");
 type ConfigValidationApi = typeof import("../src/config/validation.js");
 
+let cachedAuthProfileSqliteApi: AuthProfileSqliteApi | undefined;
 let cachedLegacyConfigCompatApi: LegacyConfigCompatApi | undefined;
 let cachedConfigValidationApi: ConfigValidationApi | undefined;
 
@@ -79,6 +74,13 @@ function restoreEnv(entries: RestoreEntry[]): void {
       setTestEnvValue(key, value);
     }
   }
+}
+
+function loadAuthProfileSqliteApi(): AuthProfileSqliteApi {
+  cachedAuthProfileSqliteApi ??= requireFromHere(
+    "../src/agents/auth-profiles/sqlite.js",
+  ) as AuthProfileSqliteApi;
+  return cachedAuthProfileSqliteApi;
 }
 
 function loadLegacyConfigCompatApi(): LegacyConfigCompatApi {
@@ -406,6 +408,14 @@ function copyLiveAuthProfiles(realStateDir: string, tempStateDir: string): void 
   if (!fs.existsSync(agentsDir)) {
     return;
   }
+  // Ordinary workers must not preload SQLite and capture filesystem mocks.
+  const {
+    inspectPersistedAuthProfileStateRaw,
+    inspectPersistedAuthProfileStoreRaw,
+    runAuthProfileWriteTransaction,
+    writePersistedAuthProfileStateRaw,
+    writePersistedAuthProfileStoreRaw,
+  } = loadAuthProfileSqliteApi();
   for (const entry of fs.readdirSync(agentsDir, { withFileTypes: true })) {
     if (!entry.isDirectory()) {
       continue;
