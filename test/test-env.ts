@@ -78,7 +78,7 @@ function restoreEnv(entries: RestoreEntry[]): void {
 
 function loadAuthProfileSqliteApi(): AuthProfileSqliteApi {
   cachedAuthProfileSqliteApi ??= requireFromHere(
-    "../src/agents/auth-profiles/sqlite.js",
+    "../src/agents/auth-profiles/sqlite.ts",
   ) as AuthProfileSqliteApi;
   return cachedAuthProfileSqliteApi;
 }

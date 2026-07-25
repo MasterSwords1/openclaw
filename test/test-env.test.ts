@@ -362,6 +362,7 @@ describe("installTestEnv", () => {
 
   it("does not load SQLite auth state for hermetic test workers", async () => {
     const sqliteModuleId = "../src/agents/auth-profiles/sqlite.js";
+    const sqliteSourceModuleId = "../src/agents/auth-profiles/sqlite.ts";
     const attemptedStaticSqliteLoads = vi.fn();
     const attemptedRequiredSqliteLoads = vi.fn();
     vi.doMock(sqliteModuleId, () => {
@@ -375,7 +376,7 @@ describe("installTestEnv", () => {
         createRequire: (source: string | URL) => {
           const realRequire = actual.createRequire(source);
           const guardedRequire = (moduleId: string) => {
-            if (moduleId === sqliteModuleId) {
+            if (moduleId === sqliteModuleId || moduleId === sqliteSourceModuleId) {
               attemptedRequiredSqliteLoads();
               throw new Error("hermetic test setup must not require SQLite auth state");
             }
