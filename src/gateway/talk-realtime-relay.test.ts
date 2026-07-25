@@ -1012,7 +1012,7 @@ describe("talk realtime gateway relay", () => {
     });
   });
 
-  it("does not replace provider errors with pre-ready close issues", () => {
+  it("does not replace provider errors with pre-ready close issues", async () => {
     let bridgeRequest: RealtimeVoiceBridgeCreateRequest | undefined;
     const provider: RealtimeVoiceProviderPlugin = {
       id: "openai",
@@ -1033,6 +1033,7 @@ describe("talk realtime gateway relay", () => {
       },
     };
     const events: Array<{ event: string; payload: unknown; connIds: string[] }> = [];
+    const mediaEvents: RealtimeVoiceOutputMediaEvent[] = [];
     const context = {
       broadcastToConnIds: (event: string, payload: unknown, connIds: ReadonlySet<string>) => {
         events.push({ event, payload, connIds: [...connIds] });
@@ -1046,6 +1047,9 @@ describe("talk realtime gateway relay", () => {
       instructions: "brief",
       tools: [],
       model: "gpt-realtime-2",
+      onOutputMediaEvent: (event) => {
+        mediaEvents.push(event);
+      },
     });
 
     bridgeRequest?.onError?.(new Error("OpenAI API key rejected with 401"));
@@ -1068,6 +1072,58 @@ describe("talk realtime gateway relay", () => {
       transport: "gateway-relay",
       phase: "connect",
     });
+    await vi.waitFor(() =>
+      expect(
+        mediaEvents.some((event) => event.type === "session.end" && event.reason === "error"),
+      ).toBe(true),
+    );
+    expect(findEventPayload(events, (payload) => payload.type === "close")).toMatchObject({
+      reason: "error",
+    });
+  });
+
+  it("does not register a relay after a synchronous provider error", async () => {
+    const close = vi.fn();
+    const mediaEvents: RealtimeVoiceOutputMediaEvent[] = [];
+    const provider: RealtimeVoiceProviderPlugin = {
+      id: "relay-test",
+      label: "Relay Test",
+      isConfigured: () => true,
+      createBridge: (request) => {
+        request.onError?.(new Error("provider failed during bridge creation"));
+        return {
+          connect: vi.fn(async () => undefined),
+          sendAudio: vi.fn(),
+          setMediaTimestamp: vi.fn(),
+          handleBargeIn: vi.fn(),
+          submitToolResult: vi.fn(),
+          acknowledgeMark: vi.fn(),
+          close,
+          isConnected: vi.fn(() => false),
+        };
+      },
+    };
+
+    expect(() =>
+      createTalkRealtimeRelaySession({
+        context: { broadcastToConnIds: vi.fn() } as never,
+        connId: "conn-sync-error",
+        provider,
+        providerConfig: {},
+        instructions: "brief",
+        tools: [],
+        onOutputMediaEvent: (event) => {
+          mediaEvents.push(event);
+        },
+      }),
+    ).toThrow("provider failed during bridge creation");
+
+    expect(close).toHaveBeenCalledOnce();
+    await vi.waitFor(() =>
+      expect(
+        mediaEvents.some((event) => event.type === "session.end" && event.reason === "error"),
+      ).toBe(true),
+    );
   });
 
   it("does not route assistant echo transcripts back into the realtime model", async () => {

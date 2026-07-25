@@ -58,4 +58,22 @@ describe("realtime voice output media", () => {
     await vi.waitFor(() => expect(onEvent).toHaveBeenCalled());
     expect(session.sendAudio(new Uint8Array([2, 0]))).toBe(true);
   });
+
+  it("ends the owner stream instead of silently dropping queued audio", async () => {
+    const events: RealtimeVoiceOutputMediaEvent[] = [];
+    const session = createRealtimeVoiceOutputMediaSession({
+      onEvent: (event) => events.push(event),
+    });
+
+    expect(session.sendAudio(new Uint8Array(1024 * 1024 + 2))).toBe(false);
+
+    await vi.waitFor(() => expect(events.at(-1)?.type).toBe("session.end"));
+    expect(events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: "clear", reason: "error" }),
+        expect.objectContaining({ type: "session.end", reason: "error" }),
+      ]),
+    );
+    expect(session.sendAudio(new Uint8Array([1, 0]))).toBe(false);
+  });
 });

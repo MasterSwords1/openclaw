@@ -876,6 +876,7 @@ export function createTalkRealtimeRelaySession(
   let currentOutputResponseId: string | undefined;
   let ready = false;
   let failureEmitted = false;
+  let preRegistrationError: Error | undefined;
   const bridgeParams: RealtimeVoiceBridgeSessionParams = {
     provider: params.provider,
     cfg: params.cfg,
@@ -1160,7 +1161,18 @@ export function createTalkRealtimeRelaySession(
         payload: issue,
         final: true,
       });
-      outputMedia?.setState(ready ? "listening" : "error");
+      if (!ready) {
+        const active = relaySessions.get(relaySessionId);
+        if (active) {
+          closeRelaySession(active, "error");
+        } else {
+          preRegistrationError =
+            error instanceof Error ? error : new Error(formatErrorMessage(error));
+          outputMedia?.end("error");
+        }
+        return;
+      }
+      outputMedia?.setState("listening");
     },
     onClose: (reason) => {
       const active = relaySessions.get(relaySessionId);
@@ -1196,6 +1208,10 @@ export function createTalkRealtimeRelaySession(
   let bridge: RealtimeVoiceBridgeSession;
   try {
     bridge = harness.createBridge(bridgeParams);
+    if (preRegistrationError) {
+      bridge.close();
+      throw preRegistrationError;
+    }
   } catch (error) {
     harness.close();
     outputMedia?.end("error");

@@ -81,21 +81,26 @@ class OutputMediaSession implements RealtimeVoiceOutputMediaSession {
     };
   }
 
-  private publish(event: RealtimeVoiceOutputMediaEvent): void {
+  private publish(event: RealtimeVoiceOutputMediaEvent): boolean {
     if (!this.listener) {
-      return;
+      return true;
     }
     if (event.type === "audio") {
       if (
         this.queue.length >= MAX_PENDING_EVENTS ||
         this.queuedAudioBytes + event.pcm.byteLength > MAX_PENDING_AUDIO_BYTES
       ) {
-        return;
+        this.end("error");
+        return false;
       }
       const copy = { ...event, pcm: Uint8Array.from(event.pcm) };
       this.queue.push(copy);
       this.queuedAudioBytes += copy.pcm.byteLength;
     } else {
+      if (event.type === "state" && this.queue.length >= MAX_PENDING_EVENTS) {
+        this.end("error");
+        return false;
+      }
       while (this.queue.length >= MAX_PENDING_EVENTS) {
         const audioIndex = this.queue.findIndex((queued) => queued.type === "audio");
         if (audioIndex < 0) {
@@ -110,6 +115,7 @@ class OutputMediaSession implements RealtimeVoiceOutputMediaSession {
       this.queue.push(event);
     }
     this.scheduleDrain();
+    return true;
   }
 
   private scheduleDrain(): void {
@@ -153,8 +159,7 @@ class OutputMediaSession implements RealtimeVoiceOutputMediaSession {
     }
     this.state = state;
     this.stateGeneration = this.currentGeneration;
-    this.publish(this.stateEvent());
-    return true;
+    return this.publish(this.stateEvent());
   }
 
   sendAudio(pcm: Uint8Array, generation = this.currentGeneration): boolean {
@@ -169,9 +174,11 @@ class OutputMediaSession implements RealtimeVoiceOutputMediaSession {
       ptsMs: this.ptsMs(),
       pcm,
     };
+    if (!this.publish(event)) {
+      return false;
+    }
     this.sequence += 1;
     this.audioBytes += pcm.byteLength;
-    this.publish(event);
     return true;
   }
 
