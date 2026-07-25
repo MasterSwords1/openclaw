@@ -200,6 +200,7 @@ openclaw_live_stage_node_modules "$tmp_dir"
 openclaw_live_link_runtime_tree "$tmp_dir"
 openclaw_live_stage_state_dir "$tmp_dir/.openclaw-state"
 openclaw_live_prepare_staged_config
+node --import tsx "$trusted_scripts_dir/live-docker-hydrate-auth-profiles.ts" "$tmp_dir"
 cd "$tmp_dir"
 node scripts/test-live.mjs -- src/agents/models.profiles.live.test.ts
 EOF

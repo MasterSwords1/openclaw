@@ -6,6 +6,13 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import JSON5 from "json5";
+import {
+  inspectPersistedAuthProfileStateRaw,
+  inspectPersistedAuthProfileStoreRaw,
+  runAuthProfileWriteTransaction,
+  writePersistedAuthProfileStateRaw,
+  writePersistedAuthProfileStoreRaw,
+} from "../src/agents/auth-profiles/sqlite.js";
 import { resolveEffectiveHomeDir } from "../src/infra/home-dir.js";
 import { deleteTestEnvValue, setTestEnvValue } from "../src/test-utils/env.js";
 
@@ -403,9 +410,34 @@ function copyLiveAuthProfiles(realStateDir: string, tempStateDir: string): void 
     if (!entry.isDirectory()) {
       continue;
     }
-    const sourcePath = path.join(agentsDir, entry.name, "agent", "auth-profiles.json");
-    const targetPath = path.join(tempStateDir, "agents", entry.name, "agent", "auth-profiles.json");
-    copyFileIfExists(sourcePath, targetPath);
+    const sourceAgentDir = path.join(agentsDir, entry.name, "agent");
+    const sourceStore = inspectPersistedAuthProfileStoreRaw(sourceAgentDir);
+    const sourceState = inspectPersistedAuthProfileStateRaw(sourceAgentDir);
+    if (sourceStore.status === "unreadable" || sourceState.status === "unreadable") {
+      throw new Error(
+        `Could not safely stage SQLite auth profiles for live agent "${entry.name}".`,
+      );
+    }
+    if (sourceStore.status !== "readable" && sourceState.status !== "readable") {
+      continue;
+    }
+
+    const targetAgentDir = path.join(tempStateDir, "agents", entry.name, "agent");
+    fs.mkdirSync(targetAgentDir, { recursive: true });
+    // Copy only the canonical auth rows; cloning the agent database would leak
+    // unrelated sessions into the isolated live-test home.
+    runAuthProfileWriteTransaction(
+      targetAgentDir,
+      (database) => {
+        if (sourceStore.status === "readable") {
+          writePersistedAuthProfileStoreRaw(sourceStore.raw, targetAgentDir, database);
+        }
+        if (sourceState.status === "readable") {
+          writePersistedAuthProfileStateRaw(sourceState.raw, targetAgentDir, database);
+        }
+      },
+      { stateDir: tempStateDir },
+    );
   }
 }
 

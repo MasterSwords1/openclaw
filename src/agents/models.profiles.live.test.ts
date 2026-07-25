@@ -13,6 +13,11 @@ import { coerceSecretRef, type SecretInput } from "../config/types.secrets.js";
 import { parseLiveCsvFilter } from "../media-generation/live-test-helpers.js";
 import { withBundledPluginEnablementCompat } from "../plugins/bundled-compat.js";
 import { resolveOwningPluginIdsForProviderRef } from "../plugins/providers.js";
+import {
+  activateSecretsRuntimeSnapshot,
+  prepareSecretsRuntimeSnapshot,
+  type PreparedSecretsRuntimeSnapshot,
+} from "../secrets/runtime.js";
 import { runTasksWithConcurrency } from "../utils/run-with-concurrency.js";
 import {
   discoverAuthStorage,
@@ -20,6 +25,7 @@ import {
   normalizeDiscoveredAgentModel,
 } from "./agent-model-discovery.js";
 import { resolveDefaultAgentDir } from "./agent-scope.js";
+import type { AuthProfileStore } from "./auth-profiles.js";
 import { externalCliDiscoveryForProviders } from "./auth-profiles/external-cli-discovery.js";
 import { ensureCustomApiRegistered } from "./custom-api-registry.js";
 import { isRateLimitErrorMessage } from "./embedded-agent-helpers/errors.js";
@@ -30,6 +36,7 @@ import { isModelNotFoundErrorMessage } from "./live-model-errors.js";
 import {
   DEFAULT_SMALL_LIVE_MODEL_LIMIT,
   isHighSignalLiveModelRef,
+  isModernModelRef,
   isPrioritizedHighSignalLiveModelRef,
   isSmallLiveModelRef,
   listPrioritizedSmallLiveModelRefs,
@@ -66,6 +73,7 @@ import {
   isLiveRateLimitDrift,
 } from "./live-test-provider-drift.test-support.js";
 import {
+  ensureAuthProfileStoreWithoutExternalProfiles,
   getApiKeyForModel,
   requireApiKey,
   resolveUsableCustomProviderApiKey,
@@ -204,6 +212,8 @@ function resolveLiveProviderDiscoveryProviderIds(params: {
   providerFilter: Set<string> | null;
   explicitRefs: readonly { provider: string; id: string }[];
   priorityRefs?: readonly { provider: string; id: string }[];
+  modelFilter?: ReadonlySet<string> | null;
+  isModernOpenAiModelRef?: (modelId: string) => boolean;
 }): string[] | undefined {
   // Narrow startup discovery to providers that can affect the requested live target set.
   const providers = new Set<string>();
@@ -218,6 +228,15 @@ function resolveLiveProviderDiscoveryProviderIds(params: {
   }
   for (const ref of params.priorityRefs ?? []) {
     providers.add(ref.provider);
+  }
+  const isModernOpenAiModelRef =
+    params.isModernOpenAiModelRef ??
+    ((modelId: string) => isModernModelRef({ provider: "openai", id: modelId }));
+  for (const modelId of params.modelFilter ?? []) {
+    if (!modelId.includes("/") && isModernOpenAiModelRef(modelId)) {
+      providers.add("openai");
+      break;
+    }
   }
   return providers.size > 0
     ? [...providers].toSorted((left, right) => left.localeCompare(right))
@@ -486,7 +505,12 @@ function canonicalOllamaCredentialBaseUrl(baseUrl: string): string {
 async function resolveLiveModelApiKeyInfo(params: {
   model: Model;
   cfg: OpenClawConfig;
+  agentDir?: string;
+  allowStagedOpenAiProfile?: boolean;
+  env?: NodeJS.ProcessEnv;
   requireProfileKeys: boolean;
+  resolveModelApiKey?: typeof getApiKeyForModel;
+  loadAuthProfileStore?: typeof ensureAuthProfileStoreWithoutExternalProfiles;
 }): Promise<Awaited<ReturnType<typeof getApiKeyForModel>>> {
   if (isLiveLocalOllamaModel(params.model, params.cfg)) {
     const configuredKey = canReuseConfiguredLocalOllamaApiKey(params.model, params.cfg)
@@ -508,9 +532,38 @@ async function resolveLiveModelApiKeyInfo(params: {
       mode: "api-key",
     };
   }
-  return await getApiKeyForModel({
+  const authProfileStore =
+    params.allowStagedOpenAiProfile && params.model.provider === "openai" && params.agentDir
+      ? (params.loadAuthProfileStore ?? ensureAuthProfileStoreWithoutExternalProfiles)(
+          params.agentDir,
+        )
+      : undefined;
+  const stagedProfile = authProfileStore?.profiles["openai:api-key"];
+  const liveEnv = params.env ?? process.env;
+  const stagedKeyEnvId = liveEnv.OPENCLAW_LIVE_OPENAI_KEY?.trim()
+    ? "OPENCLAW_LIVE_OPENAI_KEY"
+    : liveEnv.OPENAI_API_KEY?.trim()
+      ? "OPENAI_API_KEY"
+      : undefined;
+  // Lock only this run's hydrated, first-ordered SecretRef; never override an existing user order.
+  const stagedOpenAiAuth =
+    stagedProfile?.type === "api_key" &&
+    stagedProfile.provider === "openai" &&
+    stagedProfile.keyRef?.source === "env" &&
+    stagedProfile.keyRef.provider === "default" &&
+    stagedProfile.keyRef.id === stagedKeyEnvId &&
+    authProfileStore?.order?.openai?.[0] === "openai:api-key"
+      ? {
+          profileId: "openai:api-key",
+          store: authProfileStore,
+          lockedProfile: true,
+        }
+      : undefined;
+  return await (params.resolveModelApiKey ?? getApiKeyForModel)({
     model: params.model,
     cfg: params.cfg,
+    agentDir: params.agentDir,
+    ...stagedOpenAiAuth,
     credentialPrecedence: resolveLiveCredentialPrecedence(
       params.model.provider,
       params.requireProfileKeys,
@@ -617,6 +670,124 @@ function formatSkippedPreview(
   return formatFailurePreview(
     skipped.map((entry) => ({ model: entry.model, error: entry.reason })),
     maxItems,
+  );
+}
+
+function findUnmatchedExplicitLiveProviders(params: {
+  providers: ReadonlySet<string> | null;
+  models: readonly Pick<Model, "provider" | "id">[];
+  config?: OpenClawConfig;
+  env?: NodeJS.ProcessEnv;
+}): string[] {
+  return [...(params.providers ?? [])].filter((provider) => {
+    const matcher = createLiveTargetMatcher({
+      providerFilter: new Set([provider]),
+      modelFilter: null,
+      config: params.config,
+      env: params.env,
+    });
+    return !params.models.some((model) => matcher.matchesProvider(model.provider));
+  });
+}
+
+function requireRunnableLiveModelCandidates(params: {
+  candidateCount: number;
+  candidateModels?: readonly Pick<Model, "provider" | "id">[];
+  useExplicitModels: boolean;
+  providers: ReadonlySet<string> | null;
+  skipped: Array<{ model: string; reason: string }>;
+  config?: OpenClawConfig;
+  env?: NodeJS.ProcessEnv;
+}): void {
+  const missingProviders = params.candidateModels
+    ? findUnmatchedExplicitLiveProviders({
+        providers: params.providers,
+        models: params.candidateModels,
+        config: params.config,
+        env: params.env,
+      })
+    : [];
+  if (
+    (params.candidateCount > 0 && missingProviders.length === 0) ||
+    (!params.useExplicitModels && !params.providers?.size)
+  ) {
+    return;
+  }
+  const selection = params.useExplicitModels ? "model" : "provider";
+  const providerPreview =
+    missingProviders.length > 0 && (params.candidateCount > 0 || (params.providers?.size ?? 0) > 1)
+      ? ` for providers: ${missingProviders.join(", ")}`
+      : "";
+  const skippedPreview =
+    params.skipped.length > 0
+      ? `\nSkipped candidates:\n${formatSkippedPreview(params.skipped, 8)}`
+      : "";
+  throw new Error(
+    `[live-models] explicit ${selection} selection matched no runnable models${providerPreview}.${skippedPreview}`,
+  );
+}
+
+async function activateLiveOpenAiAuthProfiles(params: {
+  config: OpenClawConfig;
+  agentDir: string;
+  providers: readonly string[] | undefined;
+  env: NodeJS.ProcessEnv;
+  prepareSnapshot?: typeof prepareSecretsRuntimeSnapshot;
+  activateSnapshot?: typeof activateSecretsRuntimeSnapshot;
+}): Promise<boolean> {
+  if (!params.providers?.includes("openai")) {
+    return false;
+  }
+  const prepareSnapshot = params.prepareSnapshot ?? prepareSecretsRuntimeSnapshot;
+  const activateSnapshot = params.activateSnapshot ?? activateSecretsRuntimeSnapshot;
+  const snapshot = await prepareSnapshot({
+    config: params.config,
+    env: params.env,
+    agentDirs: [params.agentDir],
+    includeConfigRefs: false,
+    allowUnavailableSecretOwners: true,
+  });
+  // SecretRefs are published per process; SQLite hydration alone cannot authorize Vitest.
+  activateSnapshot(snapshot);
+  return true;
+}
+
+function requireCompletedLiveModelCandidates(params: {
+  completedCount: number;
+  completedModels?: readonly Pick<Model, "provider" | "id">[];
+  selectedCount: number;
+  useExplicitModels: boolean;
+  providers: ReadonlySet<string> | null;
+  skipped: Array<{ model: string; reason: string }>;
+  config?: OpenClawConfig;
+  env?: NodeJS.ProcessEnv;
+}): void {
+  const missingProviders = params.completedModels
+    ? findUnmatchedExplicitLiveProviders({
+        providers: params.providers,
+        models: params.completedModels,
+        config: params.config,
+        env: params.env,
+      })
+    : [];
+  if (
+    (params.completedCount > 0 && missingProviders.length === 0) ||
+    (!params.useExplicitModels && !params.providers?.size)
+  ) {
+    return;
+  }
+  const selection = params.useExplicitModels ? "model" : "provider";
+  const providerPreview =
+    missingProviders.length > 0 && (params.completedCount > 0 || (params.providers?.size ?? 0) > 1)
+      ? ` for providers: ${missingProviders.join(", ")}`
+      : "";
+  const skippedPreview =
+    params.skipped.length > 0
+      ? `\nSkipped candidates:\n${formatSkippedPreview(params.skipped, 8)}`
+      : "";
+  throw new Error(
+    `[live-models] explicit ${selection} selection completed zero successful models${providerPreview} ` +
+      `across ${params.selectedCount} selected models.${skippedPreview}`,
   );
 }
 
@@ -801,6 +972,474 @@ describe("resolveLiveModelsJsonTimeoutMs", () => {
 });
 
 describe("explicit live model discovery scope", () => {
+  it("resolves OpenAI from the exact activated agent's canonical auth profile", async () => {
+    const model = {
+      provider: "openai",
+      id: "gpt-5.4",
+      api: "openai-responses",
+    } as Model;
+    const config = {} satisfies OpenClawConfig;
+    const agentDir = "/isolated-live-state/agents/live-default/agent";
+    const env = { OPENCLAW_LIVE_OPENAI_KEY: "fixture" } as NodeJS.ProcessEnv; // pragma: allowlist secret
+    const authProfileStore = {
+      version: 1,
+      order: { openai: ["openai:api-key"] },
+      profiles: {
+        "openai:api-key": {
+          type: "api_key",
+          provider: "openai",
+          keyRef: {
+            source: "env",
+            provider: "default",
+            id: "OPENCLAW_LIVE_OPENAI_KEY",
+          },
+        },
+      },
+    } satisfies AuthProfileStore;
+    const loadAuthProfileStore = vi.fn(() => authProfileStore);
+    const resolveModelApiKey = vi.fn(
+      async (
+        _params: Parameters<typeof getApiKeyForModel>[0],
+      ): Promise<Awaited<ReturnType<typeof getApiKeyForModel>>> => ({
+        apiKey: "fixture",
+        source: "profile:openai:api-key",
+        profileId: "openai:api-key",
+        mode: "api-key",
+      }),
+    );
+
+    await expect(
+      resolveLiveModelApiKeyInfo({
+        model,
+        cfg: config,
+        agentDir,
+        allowStagedOpenAiProfile: true,
+        env,
+        requireProfileKeys: false,
+        resolveModelApiKey,
+        loadAuthProfileStore,
+      }),
+    ).resolves.toMatchObject({
+      source: "profile:openai:api-key",
+      profileId: "openai:api-key",
+    });
+    expect(resolveModelApiKey).toHaveBeenCalledExactlyOnceWith({
+      model,
+      cfg: config,
+      agentDir,
+      profileId: "openai:api-key",
+      store: authProfileStore,
+      lockedProfile: true,
+      credentialPrecedence: "profile-first",
+    });
+    expect(loadAuthProfileStore).toHaveBeenCalledExactlyOnceWith(agentDir);
+  });
+
+  it("preserves existing OpenAI profile selection without a staged API-key owner", async () => {
+    const model = {
+      provider: "openai",
+      id: "gpt-5.4",
+      api: "openai-responses",
+    } as Model;
+    const config = {} satisfies OpenClawConfig;
+    const agentDir = "/isolated-live-state/agents/live-default/agent";
+    const authProfileStore = { version: 1, profiles: {} } satisfies AuthProfileStore;
+    const loadAuthProfileStore = vi.fn(() => authProfileStore);
+    const resolveModelApiKey = vi.fn(
+      async (
+        _params: Parameters<typeof getApiKeyForModel>[0],
+      ): Promise<Awaited<ReturnType<typeof getApiKeyForModel>>> => ({
+        apiKey: "fixture",
+        source: "profile:openai:existing",
+        profileId: "openai:existing",
+        mode: "api-key",
+      }),
+    );
+
+    await expect(
+      resolveLiveModelApiKeyInfo({
+        model,
+        cfg: config,
+        agentDir,
+        allowStagedOpenAiProfile: true,
+        env: { OPENCLAW_LIVE_OPENAI_KEY: "fixture" }, // pragma: allowlist secret
+        requireProfileKeys: false,
+        resolveModelApiKey,
+        loadAuthProfileStore,
+      }),
+    ).resolves.toMatchObject({
+      source: "profile:openai:existing",
+      profileId: "openai:existing",
+    });
+    expect(resolveModelApiKey).toHaveBeenCalledExactlyOnceWith({
+      model,
+      cfg: config,
+      agentDir,
+      credentialPrecedence: "profile-first",
+    });
+    expect(loadAuthProfileStore).toHaveBeenCalledExactlyOnceWith(agentDir);
+  });
+
+  it.each([
+    {
+      label: "does not lock a preexisting OpenAI profile when this run did not activate it",
+      activated: false,
+      order: ["openai:api-key"],
+      keyRefId: "OPENCLAW_LIVE_OPENAI_KEY",
+      storeLoads: 0,
+    },
+    {
+      label: "does not override an existing higher-priority OpenAI profile after activation",
+      activated: true,
+      order: ["openai:existing", "openai:api-key"],
+      keyRefId: "OPENCLAW_LIVE_OPENAI_KEY",
+      storeLoads: 1,
+    },
+    {
+      label: "does not lock a preexisting profile bound to a different environment owner",
+      activated: true,
+      order: ["openai:api-key", "openai:existing"],
+      keyRefId: "EXISTING_OPENAI_API_KEY",
+      storeLoads: 1,
+    },
+  ])("$label", async ({ activated, order, keyRefId, storeLoads }) => {
+    const model = {
+      provider: "openai",
+      id: "gpt-5.4",
+      api: "openai-responses",
+    } as Model;
+    const config = {} satisfies OpenClawConfig;
+    const agentDir = "/isolated-live-state/agents/live-default/agent";
+    const authProfileStore = {
+      version: 1,
+      order: { openai: order },
+      profiles: {
+        "openai:api-key": {
+          type: "api_key",
+          provider: "openai",
+          keyRef: { source: "env", provider: "default", id: keyRefId },
+        },
+      },
+    } satisfies AuthProfileStore;
+    const loadAuthProfileStore = vi.fn(() => authProfileStore);
+    const resolveModelApiKey = vi.fn(
+      async (
+        _params: Parameters<typeof getApiKeyForModel>[0],
+      ): Promise<Awaited<ReturnType<typeof getApiKeyForModel>>> => ({
+        apiKey: "fixture",
+        source: "profile:openai:existing",
+        profileId: "openai:existing",
+        mode: "api-key",
+      }),
+    );
+
+    await expect(
+      resolveLiveModelApiKeyInfo({
+        model,
+        cfg: config,
+        agentDir,
+        allowStagedOpenAiProfile: activated,
+        env: { OPENCLAW_LIVE_OPENAI_KEY: "fixture" }, // pragma: allowlist secret
+        requireProfileKeys: false,
+        resolveModelApiKey,
+        loadAuthProfileStore,
+      }),
+    ).resolves.toMatchObject({
+      source: "profile:openai:existing",
+      profileId: "openai:existing",
+    });
+    expect(resolveModelApiKey).toHaveBeenCalledExactlyOnceWith({
+      model,
+      cfg: config,
+      agentDir,
+      credentialPrecedence: "profile-first",
+    });
+    expect(loadAuthProfileStore).toHaveBeenCalledTimes(storeLoads);
+  });
+
+  it("activates auth-only OpenAI SecretRefs in the live Vitest process", async () => {
+    const config = {} satisfies OpenClawConfig;
+    const env = { OPENAI_API_KEY: "live-openai-fixture" } as NodeJS.ProcessEnv; // pragma: allowlist secret
+    const snapshot = {} as PreparedSecretsRuntimeSnapshot;
+    const prepareSnapshot = vi.fn(async () => snapshot);
+    const activateSnapshot = vi.fn();
+
+    await activateLiveOpenAiAuthProfiles({
+      config,
+      agentDir: "/isolated-live-agent",
+      providers: ["openai"],
+      env,
+      prepareSnapshot,
+      activateSnapshot,
+    });
+
+    expect(prepareSnapshot).toHaveBeenCalledExactlyOnceWith({
+      config,
+      env,
+      agentDirs: ["/isolated-live-agent"],
+      includeConfigRefs: false,
+      allowUnavailableSecretOwners: true,
+    });
+    expect(activateSnapshot).toHaveBeenCalledExactlyOnceWith(snapshot);
+  });
+
+  it("does not activate OpenAI auth snapshots for other provider selections", async () => {
+    const prepareSnapshot = vi.fn(async () => ({}) as PreparedSecretsRuntimeSnapshot);
+    const activateSnapshot = vi.fn();
+
+    await activateLiveOpenAiAuthProfiles({
+      config: {},
+      agentDir: "/isolated-live-agent",
+      providers: ["anthropic"],
+      env: {},
+      prepareSnapshot,
+      activateSnapshot,
+    });
+
+    expect(prepareSnapshot).not.toHaveBeenCalled();
+    expect(activateSnapshot).not.toHaveBeenCalled();
+  });
+
+  it("activates OpenAI auth for mixed qualified and canonical bare model refs", async () => {
+    const modelFilter = parseModelFilter("anthropic/claude-sonnet-4-6,gpt-5.4");
+    const providers = resolveLiveProviderDiscoveryProviderIds({
+      providerFilter: null,
+      explicitRefs: parseExplicitLiveModelRefs(modelFilter),
+      modelFilter,
+      isModernOpenAiModelRef: (modelId) => modelId === "gpt-5.4",
+    });
+    const config = {} satisfies OpenClawConfig;
+    const env = { OPENAI_API_KEY: "live-openai-fixture" } as NodeJS.ProcessEnv; // pragma: allowlist secret
+    const snapshot = {} as PreparedSecretsRuntimeSnapshot;
+    const prepareSnapshot = vi.fn(async () => snapshot);
+    const activateSnapshot = vi.fn();
+
+    await expect(
+      activateLiveOpenAiAuthProfiles({
+        config,
+        agentDir: "/isolated-live-agent",
+        providers,
+        env,
+        prepareSnapshot,
+        activateSnapshot,
+      }),
+    ).resolves.toBe(true);
+    expect(providers).toEqual(["anthropic", "openai"]);
+    expect(prepareSnapshot).toHaveBeenCalledExactlyOnceWith({
+      config,
+      env,
+      agentDirs: ["/isolated-live-agent"],
+      includeConfigRefs: false,
+      allowUnavailableSecretOwners: true,
+    });
+    expect(activateSnapshot).toHaveBeenCalledExactlyOnceWith(snapshot);
+  });
+
+  it("fails closed when an explicitly selected provider has no runnable models", () => {
+    expect(() =>
+      requireRunnableLiveModelCandidates({
+        candidateCount: 0,
+        useExplicitModels: false,
+        providers: parseProviderFilter("openai"),
+        skipped: [],
+      }),
+    ).toThrow("[live-models] explicit provider selection matched no runnable models.");
+  });
+
+  it("preserves skipped credential reasons for explicitly selected providers", () => {
+    expect(() =>
+      requireRunnableLiveModelCandidates({
+        candidateCount: 0,
+        useExplicitModels: false,
+        providers: parseProviderFilter("openai"),
+        skipped: [{ model: "openai/gpt-5.6-luna", reason: "non-profile credential source: env" }],
+      }),
+    ).toThrow(
+      "[live-models] explicit provider selection matched no runnable models.\n" +
+        "Skipped candidates:\n" +
+        "1. openai/gpt-5.6-luna: non-profile credential source: env",
+    );
+  });
+
+  it("preserves the existing explicit-model failure", () => {
+    expect(() =>
+      requireRunnableLiveModelCandidates({
+        candidateCount: 0,
+        useExplicitModels: true,
+        providers: null,
+        skipped: [],
+      }),
+    ).toThrow("[live-models] explicit model selection matched no runnable models.");
+  });
+
+  it("allows default live discovery with no runnable models to skip", () => {
+    expect(() =>
+      requireRunnableLiveModelCandidates({
+        candidateCount: 0,
+        useExplicitModels: false,
+        providers: null,
+        skipped: [],
+      }),
+    ).not.toThrow();
+  });
+
+  it("accepts runnable models for an explicitly selected provider", () => {
+    expect(() =>
+      requireRunnableLiveModelCandidates({
+        candidateCount: 1,
+        useExplicitModels: false,
+        providers: parseProviderFilter("openai"),
+        skipped: [],
+      }),
+    ).not.toThrow();
+  });
+
+  it.each([
+    ["openai,anthropic", "anthropic", "openai"],
+    ["openai,anthropic", "openai", "anthropic"],
+    ["anthropic,openai", "anthropic", "openai"],
+    ["anthropic,openai", "openai", "anthropic"],
+  ])(
+    "rejects incomplete runnable provider coverage (%s; only %s)",
+    (providerFilter, runnableProvider, missingProvider) => {
+      expect(() =>
+        requireRunnableLiveModelCandidates({
+          candidateCount: 1,
+          candidateModels: [{ provider: runnableProvider, id: "live-model" }],
+          useExplicitModels: false,
+          providers: parseProviderFilter(providerFilter),
+          skipped: [
+            {
+              model: `${missingProvider}/unavailable-model`,
+              reason: "no configured profile credential",
+            },
+          ],
+        }),
+      ).toThrow(
+        `[live-models] explicit provider selection matched no runnable models for providers: ${missingProvider}.` +
+          `\nSkipped candidates:\n1. ${missingProvider}/unavailable-model: no configured profile credential`,
+      );
+    },
+  );
+
+  it("accepts runnable models for every explicitly selected provider", () => {
+    expect(() =>
+      requireRunnableLiveModelCandidates({
+        candidateCount: 2,
+        candidateModels: [
+          { provider: "openai", id: "gpt-5.4" },
+          { provider: "anthropic", id: "claude-sonnet-4-6" },
+        ],
+        useExplicitModels: false,
+        providers: parseProviderFilter("OPENAI,anthropic"),
+        skipped: [],
+      }),
+    ).not.toThrow();
+  });
+
+  it("fails when every runnable model for an explicit provider is skipped", () => {
+    expect(() =>
+      requireCompletedLiveModelCandidates({
+        completedCount: 0,
+        selectedCount: 1,
+        useExplicitModels: false,
+        providers: parseProviderFilter("openai"),
+        skipped: [
+          {
+            model: "openai/gpt-5.6-luna",
+            reason: "no text returned (provider returned empty content)",
+          },
+        ],
+      }),
+    ).toThrow(
+      "explicit provider selection completed zero successful models across 1 selected models.",
+    );
+  });
+
+  it("fails when every explicitly selected model is skipped", () => {
+    expect(() =>
+      requireCompletedLiveModelCandidates({
+        completedCount: 0,
+        selectedCount: 1,
+        useExplicitModels: true,
+        providers: null,
+        skipped: [{ model: "openai/gpt-5.6-luna", reason: "model not found" }],
+      }),
+    ).toThrow(
+      "explicit model selection completed zero successful models across 1 selected models.",
+    );
+  });
+
+  it("accepts at least one successful explicitly selected live model", () => {
+    expect(() =>
+      requireCompletedLiveModelCandidates({
+        completedCount: 1,
+        selectedCount: 2,
+        useExplicitModels: false,
+        providers: parseProviderFilter("openai"),
+        skipped: [{ model: "openai/gpt-5.6-luna", reason: "model not found" }],
+      }),
+    ).not.toThrow();
+  });
+
+  it.each([
+    ["openai,anthropic", "anthropic", "openai"],
+    ["openai,anthropic", "openai", "anthropic"],
+    ["anthropic,openai", "anthropic", "openai"],
+    ["anthropic,openai", "openai", "anthropic"],
+  ])(
+    "rejects incomplete successful provider coverage (%s; only %s)",
+    (providerFilter, completedProvider, missingProvider) => {
+      expect(() =>
+        requireCompletedLiveModelCandidates({
+          completedCount: 1,
+          completedModels: [{ provider: completedProvider, id: "live-model" }],
+          selectedCount: 2,
+          useExplicitModels: false,
+          providers: parseProviderFilter(providerFilter),
+          skipped: [
+            {
+              model: `${missingProvider}/unavailable-model`,
+              reason: "provider returned empty content",
+            },
+          ],
+        }),
+      ).toThrow(
+        `[live-models] explicit provider selection completed zero successful models for providers: ${missingProvider} ` +
+          "across 2 selected models.\n" +
+          `Skipped candidates:\n1. ${missingProvider}/unavailable-model: provider returned empty content`,
+      );
+    },
+  );
+
+  it("accepts successful completions for every explicitly selected provider", () => {
+    expect(() =>
+      requireCompletedLiveModelCandidates({
+        completedCount: 2,
+        completedModels: [
+          { provider: "openai", id: "gpt-5.4" },
+          { provider: "anthropic", id: "claude-sonnet-4-6" },
+        ],
+        selectedCount: 2,
+        useExplicitModels: false,
+        providers: parseProviderFilter("anthropic,OPENAI"),
+        skipped: [],
+      }),
+    ).not.toThrow();
+  });
+
+  it("keeps default all-skipped model sweeps advisory", () => {
+    expect(() =>
+      requireCompletedLiveModelCandidates({
+        completedCount: 0,
+        selectedCount: 1,
+        useExplicitModels: false,
+        providers: null,
+        skipped: [{ model: "openai/gpt-5.6-luna", reason: "model not found" }],
+      }),
+    ).not.toThrow();
+  });
+
   it("derives provider ids from explicit model refs", () => {
     const filter = parseModelFilter(
       "zai/glm-5.1, together/Qwen/Qwen2.5-7B-Instruct-Turbo, glm-5.1",
@@ -828,6 +1467,39 @@ describe("explicit live model discovery scope", () => {
         explicitRefs,
       }),
     ).toEqual(["deepseek", "together", "zai"]);
+  });
+
+  it("includes a bare OpenAI model alongside qualified provider model refs", () => {
+    const modelFilter = parseModelFilter("anthropic/claude-sonnet-4-6,gpt-5.4");
+    const explicitRefs = parseExplicitLiveModelRefs(modelFilter);
+    const isModernOpenAiModelRef = vi.fn((modelId: string) => modelId === "gpt-5.4");
+
+    expect(explicitRefs).toEqual([{ provider: "anthropic", id: "claude-sonnet-4-6" }]);
+    expect(
+      resolveLiveProviderDiscoveryProviderIds({
+        providerFilter: null,
+        explicitRefs,
+        modelFilter,
+        isModernOpenAiModelRef,
+      }),
+    ).toEqual(["anthropic", "openai"]);
+    expect(isModernOpenAiModelRef).toHaveBeenCalledExactlyOnceWith("gpt-5.4");
+  });
+
+  it("does not add OpenAI for another provider's bare model", () => {
+    const modelFilter = parseModelFilter("anthropic/claude-sonnet-4-6,gemini-2.5-pro");
+    const explicitRefs = parseExplicitLiveModelRefs(modelFilter);
+    const isModernOpenAiModelRef = vi.fn(() => false);
+
+    expect(
+      resolveLiveProviderDiscoveryProviderIds({
+        providerFilter: null,
+        explicitRefs,
+        modelFilter,
+        isModernOpenAiModelRef,
+      }),
+    ).toEqual(["anthropic"]);
+    expect(isModernOpenAiModelRef).toHaveBeenCalledExactlyOnceWith("gemini-2.5-pro");
   });
 
   it("includes curated small-model providers in discovery scope", () => {
@@ -1721,6 +2393,7 @@ describeLive("live models (profile keys)", () => {
         providerFilter: providers,
         explicitRefs,
         priorityRefs,
+        modelFilter: filter,
       });
       const cfg = applyLiveProviderDiscoveryPluginCompat({
         config: loadedCfg,
@@ -1758,6 +2431,15 @@ describeLive("live models (profile keys)", () => {
 
       logProgress("[live-models] resolving agent dir");
       const agentDir = resolveDefaultAgentDir(cfg);
+      const liveOpenAiProfileActivated = await withLiveStageTimeout(
+        activateLiveOpenAiAuthProfiles({
+          config: cfg,
+          agentDir,
+          providers: providerList,
+          env: process.env,
+        }),
+        "[live-models] activate OpenAI auth profiles",
+      );
       const useDefaultPriorityOnly = !filter && useModern && !providers;
       const useSmallPriorityOnly = !filter && useSmall && !providers;
       const allowNotFoundSkip = useModern || useSmall;
@@ -1827,6 +2509,7 @@ describeLive("live models (profile keys)", () => {
 
       const failures: Array<{ model: string; error: string }> = [];
       const skipped: Array<{ model: string; reason: string }> = [];
+      const completedModels: Array<Pick<Model, "provider" | "id">> = [];
       const candidates: Array<{
         model: Model;
         apiKeyInfo: Awaited<ReturnType<typeof getApiKeyForModel>>;
@@ -1873,6 +2556,9 @@ describeLive("live models (profile keys)", () => {
           const apiKeyInfo = await resolveLiveModelApiKeyInfo({
             model,
             cfg,
+            agentDir,
+            allowStagedOpenAiProfile: liveOpenAiProfileActivated,
+            env: process.env,
             requireProfileKeys: REQUIRE_PROFILE_KEYS,
           });
           if (
@@ -1894,14 +2580,16 @@ describeLive("live models (profile keys)", () => {
         }
       }
 
+      requireRunnableLiveModelCandidates({
+        candidateCount: candidates.length,
+        candidateModels: candidates.map((entry) => entry.model),
+        useExplicitModels: useExplicit,
+        providers,
+        skipped,
+        config: cfg,
+        env: process.env,
+      });
       if (candidates.length === 0) {
-        if (useExplicit) {
-          const skippedPreview =
-            skipped.length > 0 ? `\nSkipped candidates:\n${formatSkippedPreview(skipped, 8)}` : "";
-          throw new Error(
-            `[live-models] explicit model selection matched no runnable models.${skippedPreview}`,
-          );
-        }
         logProgress("[live-models] no API keys found; skipping");
         return;
       }
@@ -2079,6 +2767,7 @@ describeLive("live models (profile keys)", () => {
                 timeoutMs: perModelTimeoutMs,
                 progressLabel,
               });
+              completedModels.push({ provider: model.provider, id: model.id });
               logProgress(`${progressLabel}: done`);
               break;
             }
@@ -2097,6 +2786,7 @@ describeLive("live models (profile keys)", () => {
                 timeoutMs: perModelTimeoutMs,
                 progressLabel,
               });
+              completedModels.push({ provider: model.provider, id: model.id });
               logProgress(`${progressLabel}: done`);
               break;
             }
@@ -2170,6 +2860,7 @@ describeLive("live models (profile keys)", () => {
               timeoutMs: perModelTimeoutMs,
               progressLabel,
             });
+            completedModels.push({ provider: model.provider, id: model.id });
             logProgress(`${progressLabel}: done`);
             break;
           } catch (err) {
@@ -2348,7 +3039,16 @@ describeLive("live models (profile keys)", () => {
         );
       }
 
-      void skipped;
+      requireCompletedLiveModelCandidates({
+        completedCount: completedModels.length,
+        completedModels,
+        selectedCount: total,
+        useExplicitModels: useExplicit,
+        providers,
+        skipped,
+        config: cfg,
+        env: process.env,
+      });
     },
     LIVE_TEST_TIMEOUT_MS,
   );
