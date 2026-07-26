@@ -36,10 +36,10 @@ import {
   custodianErrorMessage,
   hasUnresolvedCustodianQuestion,
   readCustodianTranscript,
-  restoreCustodianQrCodes,
+  restoreCustodianQrCodes as restoreQrCodes,
   renderCustodianTranscriptEntry,
   retireCustodianQuestions,
-  scrubAnsweredCustodianQrCodes,
+  scrubAnsweredCustodianQrCodes as scrubQrCodes,
   type CustodianMessage,
 } from "./transcript.ts";
 
@@ -90,6 +90,7 @@ export class CustodianPage extends OpenClawLightDomElement {
   private eventNudgeClosed = false;
   private abandonedTurnOutcomeUnknown = false;
   private historyLoaded = false;
+  private readonly exitSetup = () => this.context.navigate("chat");
   private readonly subscriptions = new SubscriptionsController(this).watch(
     () => this.context?.gateway,
     (gateway, notify) => gateway.subscribe(notify),
@@ -331,11 +332,8 @@ export class CustodianPage extends OpenClawLightDomElement {
 
   private resetHistory(): void {
     this.historyEntries = [];
-    this.historyNextCursor = null;
-    this.historyLoading = false;
-    this.historyLoadingMore = false;
-    this.historyError = null;
-    this.historyLoaded = false;
+    this.historyNextCursor = this.historyError = null;
+    this.historyLoading = this.historyLoadingMore = this.historyLoaded = false;
   }
 
   private toggleHistory(): void {
@@ -496,12 +494,10 @@ export class CustodianPage extends OpenClawLightDomElement {
     display?: string,
     questionReply = this.hasUnresolvedQuestion(),
   ): Promise<eventNudgeState.CustodianSendOutcome> {
-    // Trim decides emptiness only; sensitive values (credentials) may carry
-    // meaningful whitespace and must reach the agent exactly as entered.
+    // Sensitive values may carry meaningful whitespace and must reach the agent exactly.
     const message = this.sensitive ? text : text.trim();
     const client = this.activeClient;
-    const questionState = [this.answeredQuestions, this.questionReplyUncertain] as const;
-    const questionMessages = questionReply ? this.messages : null;
+    const prior = [this.answeredQuestions, this.questionReplyUncertain, this.messages] as const;
     if (questionReply) {
       // A failed wizard reply may have arrived, so block nudges until the session outcome is known.
       this.questionReplyUncertain = true;
@@ -510,12 +506,11 @@ export class CustodianPage extends OpenClawLightDomElement {
       return "rejected";
     }
     const displayText = this.sensitive ? t("custodian.sensitiveReply") : (display ?? message);
-    // A new operator turn supersedes any abandoned-turn unknown-outcome warning.
     this.abandonedTurnOutcomeUnknown = false;
     this.answeredQuestions = retireCustodianQuestions(this.messages, this.answeredQuestions);
-    if (questionReply) {
-      this.messages = scrubAnsweredCustodianQrCodes(this.messages, this.answeredQuestions);
-    }
+    this.messages = questionReply
+      ? scrubQrCodes(this.messages, this.answeredQuestions)
+      : this.messages;
     this.messages = [
       ...this.messages,
       {
@@ -535,12 +530,10 @@ export class CustodianPage extends OpenClawLightDomElement {
     const replyEpoch = this.requestEpoch;
     const outcome = await reply;
     if (questionReply && this.requestEpoch === replyEpoch) {
-      this.questionReplyUncertain = eventNudgeState.questionUncertainty(questionState[1], outcome);
+      this.questionReplyUncertain = eventNudgeState.questionUncertainty(prior[1], outcome);
       if (outcome === "rejected") {
-        this.answeredQuestions = questionState[0];
-        if (questionMessages) {
-          this.messages = restoreCustodianQrCodes(this.messages, questionMessages);
-        }
+        this.answeredQuestions = prior[0];
+        this.messages = restoreQrCodes(this.messages, prior[2]);
       }
     }
     return outcome;
@@ -569,27 +562,23 @@ export class CustodianPage extends OpenClawLightDomElement {
       this.exitSetup();
       return;
     }
-    // Closed wizard selects accept cancel; open "other" prompts use their visible free-form reply.
     const outcome = await this.send(
       question.isOther ? t("optionCard.skip") : "cancel",
       t("optionCard.skip"),
       true,
     );
     if (outcome !== "rejected" && this.messages.includes(message)) {
-      this.dismissedQuestions = new Set(this.dismissedQuestions).add(
-        `${message.id}:${question.id}`,
-      );
+      const key = `${message.id}:${question.id}`;
+      this.dismissedQuestions = new Set(this.dismissedQuestions).add(key);
     }
   }
 
   private answerQuestion(message: CustodianMessage, label: string): void {
     const question = message.question;
-    if (!question) {
-      return;
+    if (question) {
+      const reply = question.options.find((option) => option.label === label)?.reply;
+      void this.send(reply ?? label, label, true);
     }
-    const option = question.options.find((candidate) => candidate.label === label);
-    // Show the friendly label while sending the canonical reply that the engine parses.
-    void this.send(option?.reply ?? label, label, true);
   }
 
   private hasUnresolvedQuestion(): boolean {
@@ -600,10 +589,6 @@ export class CustodianPage extends OpenClawLightDomElement {
       this.wizardInputPending,
       this.questionReplyUncertain,
     );
-  }
-
-  private exitSetup(): void {
-    this.context.navigate("chat");
   }
 
   private canRetry(): boolean {
@@ -651,7 +636,7 @@ export class CustodianPage extends OpenClawLightDomElement {
                 </button>`
               : nothing}
             ${this.onboarding
-              ? html`<button class="btn btn--ghost" type="button" @click=${() => this.exitSetup()}>
+              ? html`<button class="btn btn--ghost" type="button" @click=${this.exitSetup}>
                   ${t("custodian.exitSetup")}
                 </button>`
               : nothing}

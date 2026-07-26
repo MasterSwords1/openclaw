@@ -4,6 +4,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GatewayRequestError, type GatewayBrowserClient } from "../../api/gateway.ts";
 import { waitForFast } from "../../test-helpers/wait-for.ts";
 import { createContext, mountPage } from "./custodian-page.test-harness.ts";
+import {
+  restoreCustodianQrCodes,
+  scrubAnsweredCustodianQrCodes,
+  type CustodianMessage,
+} from "./transcript.ts";
 
 const PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
@@ -169,9 +174,6 @@ describe("custodian page", () => {
 
     const image = page.querySelector<HTMLImageElement>(".custodian__qr-code img");
     expect(image?.getAttribute("src")).toBe(`data:image/png;base64,${PNG_BASE64}`);
-    expect(page.messages.find((message) => message.qrCodePngBase64)?.qrCodePngBase64).toBe(
-      PNG_BASE64,
-    );
     expect(image?.getAttribute("alt")).toBe("Setup QR code");
     expect(page.textContent).not.toContain(PNG_BASE64);
     expect(page.querySelector(".option-card__skip")).toBeNull();
@@ -180,7 +182,6 @@ describe("custodian page", () => {
     await waitForFast(() => expect(request).toHaveBeenCalledTimes(2));
     await page.updateComplete;
     expect(page.querySelector(".custodian__qr-code")).toBeNull();
-    expect(page.messages.some((message) => message.qrCodePngBase64 !== undefined)).toBe(false);
     expect(request.mock.calls[1]?.[1]).toMatchObject({
       capabilities: { qrCodePng: true },
       message: "Continue",
@@ -215,9 +216,31 @@ describe("custodian page", () => {
     await page.updateComplete;
 
     expect(page.querySelector(".custodian__qr-code")).not.toBeNull();
-    expect(page.messages.find((message) => message.qrCodePngBase64)?.qrCodePngBase64).toBe(
-      PNG_BASE64,
-    );
+  });
+
+  it("scrubs answered QR credentials and restores them only from an unsent snapshot", () => {
+    const source: CustodianMessage[] = [
+      {
+        id: 7,
+        role: "assistant",
+        text: "Scan this code.",
+        at: 1,
+        question: {
+          id: "link-device",
+          header: "Link a device",
+          question: "Scan the QR code, then continue.",
+          presentation: "action",
+          options: [{ label: "Continue" }],
+          isOther: false,
+          allowSkip: false,
+        },
+        qrCodePngBase64: PNG_BASE64,
+      },
+    ];
+    const scrubbed = scrubAnsweredCustodianQrCodes(source, new Set(["7:link-device"]));
+
+    expect(scrubbed[0]).not.toHaveProperty("qrCodePngBase64");
+    expect(restoreCustodianQrCodes(scrubbed, source)[0]?.qrCodePngBase64).toBe(PNG_BASE64);
   });
 
   it("rejects an invalid setup QR payload instead of rendering a broken image", async () => {

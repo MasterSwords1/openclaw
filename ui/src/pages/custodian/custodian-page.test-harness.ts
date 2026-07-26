@@ -13,12 +13,10 @@ import {
   createApplicationContextProvider,
   type ApplicationContextProvider,
 } from "../../test-helpers/application-context.ts";
-import type { CustodianMessage } from "./transcript.ts";
 import "./custodian-page.ts";
 
 type TestCustodianPage = HTMLElement & {
   onboarding: boolean;
-  messages: CustodianMessage[];
   updateComplete: Promise<boolean>;
 };
 

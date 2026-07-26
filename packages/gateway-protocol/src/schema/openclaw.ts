@@ -109,6 +109,7 @@ const SystemAgentChatResultBaseProperties = {
 export const SystemAgentChatResultSchema = Type.Union([
   closedObject({
     ...SystemAgentChatResultBaseProperties,
+    qrCodePngBase64: Type.Optional(Type.Never()),
     question: Type.Optional(SystemAgentChatQuestionSchema),
   }),
   closedObject({
