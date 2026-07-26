@@ -316,7 +316,7 @@ describe("channel wizard lifecycle", () => {
         options: {
           beforePersistentEffect?: () => Promise<void>;
           onConfigured?: (accounts: Array<{ channel: string; accountId: string }>) => void;
-          onResolvedChannel?: (channel: string) => void;
+          onResolvedChannel?: (channel: string, aliases?: readonly string[]) => void;
         },
         _runtime: unknown,
       ) => {
@@ -403,12 +403,16 @@ describe("channel wizard lifecycle", () => {
       channelWizardRunner: async (
         options: {
           beforePersistentEffect?: () => Promise<void>;
-          onResolvedChannel?: (channel: string) => void;
+          onResolvedChannel?: (channel: string, aliases?: readonly string[]) => void;
         },
         _runtime: unknown,
       ) => {
         runCount();
-        options.onResolvedChannel?.(runCount.mock.calls.length === 1 ? "twitch" : "discord");
+        if (runCount.mock.calls.length === 1) {
+          options.onResolvedChannel?.("twitch", ["twitch-chat"]);
+        } else {
+          options.onResolvedChannel?.("discord");
+        }
         await options.beforePersistentEffect?.();
       },
     };
@@ -424,7 +428,7 @@ describe("channel wizard lifecycle", () => {
     const firstRespond = vi.fn();
 
     await start({
-      params: { flow: "channels", channel: "Twitch-Chat" },
+      params: { flow: "channels", channel: "twitch" },
       client: owner,
       respond: firstRespond,
       context,

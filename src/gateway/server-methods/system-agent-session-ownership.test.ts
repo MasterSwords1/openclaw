@@ -190,6 +190,19 @@ describe("openclaw.chat session ownership", () => {
     expect(sessions.get("new-session")?.engine).toBe(retained);
     expect(retained.resumeLockedHostedWizard).toHaveBeenCalledOnce();
     expect(createdEngines).toHaveLength(0);
+
+    const retry = await callChat(makeContext(sessions), { sessionId: "new-session" });
+
+    expect(retry).toMatchObject({
+      ok: true,
+      payload: {
+        sessionId: "new-session",
+        reply: "Retry validation?",
+        wizardInputPending: true,
+      },
+    });
+    expect(retained.resumeLockedHostedWizard).toHaveBeenCalledTimes(2);
+    expect(createdEngines).toHaveLength(0);
   });
 
   it("does not adopt a locked wizard owned by another caller", async () => {

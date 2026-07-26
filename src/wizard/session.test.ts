@@ -220,12 +220,12 @@ describe("WizardSession", () => {
   test("matches terminal recovery against the requested and canonical channel", async () => {
     const session = new WizardSession(
       async (_prompter, _signal, wizardSession) => {
-        wizardSession.setResolvedChannel("twitch");
+        wizardSession.setResolvedChannel("twitch", ["twitch-chat"]);
         expect(wizardSession.lockCancellation()).toBe(true);
       },
       {
         resumeKey: "owner:channel-setup",
-        requestedChannel: "Twitch-Chat",
+        requestedChannel: "twitch",
       },
     );
 

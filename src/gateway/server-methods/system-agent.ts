@@ -481,7 +481,6 @@ export const systemAgentHandlers: GatewayRequestHandlers = {
           );
           return;
         }
-        let adoptedLockedWizard = false;
         if (!boundSession) {
           const adoption = adoptLockedSystemAgentWizard({
             sessions,
@@ -507,9 +506,6 @@ export const systemAgentHandlers: GatewayRequestHandlers = {
               errorShape(ErrorCodes.INVALID_REQUEST, LOCKED_SETUP_RESET_ERROR),
             );
             return;
-          }
-          if (adoption.kind === "adopted") {
-            adoptedLockedWizard = true;
           }
         }
         if (params.reset && !(await resetSystemAgentSession({ sessions, sessionId, context }))) {
@@ -634,7 +630,7 @@ export const systemAgentHandlers: GatewayRequestHandlers = {
           }
         }
         session.lastUsedAt = Date.now();
-        if (adoptedLockedWizard && welcomeOnly) {
+        if (welcomeOnly && session.engine.hasLockedHostedWizard()) {
           const resumed = await session.engine.resumeLockedHostedWizard();
           if (resumed) {
             respond(

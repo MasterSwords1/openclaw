@@ -248,6 +248,7 @@ export class WizardSession {
   private readonly resumeKey: string | undefined;
   private readonly requestedChannel: string | undefined;
   private resolvedChannel: string | undefined;
+  private readonly resolvedChannelAliases = new Set<string>();
   private answerDeferred = new Map<
     string,
     {
@@ -328,8 +329,14 @@ export class WizardSession {
   }
 
   /** Record the canonical channel selected by the setup registry. */
-  setResolvedChannel(channel: string): void {
+  setResolvedChannel(channel: string, aliases: readonly string[] = []): void {
     this.resolvedChannel = normalizeChannelIdentity(channel);
+    for (const alias of aliases) {
+      const normalizedAlias = normalizeChannelIdentity(alias);
+      if (normalizedAlias) {
+        this.resolvedChannelAliases.add(normalizedAlias);
+      }
+    }
   }
 
   async answer(stepId: string, value: unknown): Promise<string | undefined> {
@@ -407,7 +414,8 @@ export class WizardSession {
     }
     return (
       normalizedRequestedChannel === this.requestedChannel ||
-      normalizedRequestedChannel === this.resolvedChannel
+      normalizedRequestedChannel === this.resolvedChannel ||
+      this.resolvedChannelAliases.has(normalizedRequestedChannel)
     );
   }
 
