@@ -571,6 +571,40 @@ describe("channelsAddCommand", () => {
     expect(configMocks.writeConfigFile).toHaveBeenCalledWith(configured);
   });
 
+  it("does not bind a targeted channel abandoned before another channel commits", async () => {
+    const config: OpenClawConfig = { channels: {} };
+    const configured: OpenClawConfig = {
+      channels: {
+        discord: { enabled: true },
+      },
+    };
+    const onResolvedChannel = vi.fn();
+    configMocks.readConfigFileSnapshot.mockResolvedValue({
+      ...baseConfigSnapshot,
+      sourceConfig: config,
+      config,
+    });
+    channelWizardMocks.setupChannels.mockImplementationOnce(async (...args: unknown[]) => {
+      const options = args[3] as SetupChannelsOptions;
+      options.onPendingChannelEffects?.([{ channel: "discord" }]);
+      options.onSelection?.(["discord"]);
+      return configured;
+    });
+
+    await runChannelsSetupWizard(
+      {
+        channel: "lifecycle-chat",
+        onResolvedChannel,
+        beforePersistentEffect: async () => undefined,
+      },
+      runtime,
+      channelWizardMocks.prompter,
+    );
+
+    expect(onResolvedChannel).toHaveBeenCalledOnce();
+    expect(onResolvedChannel).toHaveBeenCalledWith("discord", undefined);
+  });
+
   it("persists an accepted plugin install after setup returns to an empty selection", async () => {
     const config: OpenClawConfig = { channels: {} };
     const installedConfig: OpenClawConfig = {

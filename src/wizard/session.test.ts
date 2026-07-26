@@ -256,6 +256,23 @@ describe("WizardSession", () => {
     expect(session.canResume("owner:channel-setup", "discord")).toBe(false);
   });
 
+  test("does not match a terminal result to an abandoned requested channel", async () => {
+    const session = new WizardSession(
+      async (_prompter, _signal, wizardSession) => {
+        expect(wizardSession.lockCancellation()).toBe(true);
+        wizardSession.setResolvedChannel("discord");
+      },
+      {
+        resumeKey: "owner:channel-setup",
+        requestedChannel: "matrix",
+      },
+    );
+
+    expect((await session.next()).status).toBe("done");
+    expect(session.canResume("owner:channel-setup", "matrix")).toBe(false);
+    expect(session.canResume("owner:channel-setup", "discord")).toBe(true);
+  });
+
   test("retains every canonical channel and alias selected by browse-all", async () => {
     const session = new WizardSession(
       async (_prompter, _signal, wizardSession) => {

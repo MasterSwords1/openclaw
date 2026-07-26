@@ -424,11 +424,16 @@ export class WizardSession {
       // fresh intent. Running locked work remains recoverable after reconnect.
       return this.status === "running";
     }
-    return (
-      normalizedRequestedChannel === this.requestedChannel ||
+    if (
       this.resolvedChannels.has(normalizedRequestedChannel) ||
       this.resolvedChannelAliases.has(normalizedRequestedChannel)
-    );
+    ) {
+      return true;
+    }
+    // Before the durable boundary publishes the canonical identity, targeted
+    // running work may still recover by its request. Terminal results may not:
+    // Back can abandon that target and commit a different channel.
+    return this.status === "running" && normalizedRequestedChannel === this.requestedChannel;
   }
 
   /** Transfer authenticated ownership after shared Gateway credentials rotate. */

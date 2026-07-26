@@ -21,16 +21,11 @@ async function loadOnboardChannels(): Promise<OnboardChannelsModule> {
   return await import("../onboard-channels.js");
 }
 
-type ResolvedInitialWizardChannel = {
-  id: ChannelChoice;
-  aliases: string[];
-};
-
 /** Resolve a raw channel name/alias against the installed setup entries. */
-export async function resolveInitialWizardChannelDetails(
+export async function resolveInitialWizardChannel(
   raw: string,
   cfg: OpenClawConfig,
-): Promise<ResolvedInitialWizardChannel | undefined> {
+): Promise<ChannelChoice | undefined> {
   const normalized = normalizeOptionalLowercaseString(raw);
   if (!normalized) {
     return undefined;
@@ -44,26 +39,14 @@ export async function resolveInitialWizardChannelDetails(
     installedPlugins: listActiveChannelSetupPlugins(),
     workspaceDir: resolveAgentWorkspaceDir(cfg, resolveDefaultAgentId(cfg)),
   });
-  const entry =
+  return (
     resolved.entries.find((entry) => normalizeOptionalLowercaseString(entry.id) === normalized) ??
     resolved.entries.find((entry) =>
       (entry.meta.aliases ?? []).some(
         (alias) => normalizeOptionalLowercaseString(alias) === normalized,
       ),
-    );
-  return entry
-    ? {
-        id: entry.id,
-        aliases: [...(entry.meta.aliases ?? [])],
-      }
-    : undefined;
-}
-
-export async function resolveInitialWizardChannel(
-  raw: string,
-  cfg: OpenClawConfig,
-): Promise<ChannelChoice | undefined> {
-  return (await resolveInitialWizardChannelDetails(raw, cfg))?.id;
+    )
+  )?.id;
 }
 
 type ChannelsAddWizardFlowParams = {
@@ -89,9 +72,6 @@ type ChannelsAddWizardFlowParams = {
 /** Run the interactive channel-setup flow and persist the resulting config. */
 export async function runChannelsAddWizardFlow(params: ChannelsAddWizardFlowParams): Promise<void> {
   const { cfg, baseHash, runtime, prompter } = params;
-  if (params.initialChannel) {
-    params.onResolvedChannel?.(params.initialChannel);
-  }
   const [{ buildAgentSummaries }, onboardChannels] = await Promise.all([
     import("../agents.config.js"),
     loadOnboardChannels(),
@@ -326,13 +306,9 @@ export async function runChannelsSetupWizard(
     );
   }
   const cfg = (snapshot.sourceConfig ?? snapshot.config) as OpenClawConfig;
-  const resolvedInitialChannel = opts.channel
-    ? await resolveInitialWizardChannelDetails(opts.channel, cfg)
+  const initialChannel = opts.channel
+    ? await resolveInitialWizardChannel(opts.channel, cfg)
     : undefined;
-  const initialChannel = resolvedInitialChannel?.id;
-  if (resolvedInitialChannel) {
-    opts.onResolvedChannel?.(resolvedInitialChannel.id, resolvedInitialChannel.aliases);
-  }
   await runChannelsAddWizardFlow({
     cfg,
     ...(snapshot.hash !== undefined ? { baseHash: snapshot.hash } : {}),
