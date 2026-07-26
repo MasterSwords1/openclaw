@@ -60,9 +60,11 @@ export async function runScopedChannelStep<T>(params: ScopedChannelStepParams<T>
       params.runner(scopedPrompter, {
         ...params.options,
         beforePersistentEffect: async () => {
-          params.onPersistentEffect?.();
           scopedPrompter.disableBackNavigation?.();
           await params.options?.beforePersistentEffect?.();
+          // Publish recovery identity only after cancellation is locked; a
+          // rejected guard must leave the reversible channel choice unbound.
+          params.onPersistentEffect?.();
         },
       }),
     ),
@@ -78,6 +80,7 @@ export async function ensureChannelSetupPluginInstalledWithNavigation(params: {
   install: ChannelPluginInstallParams;
   prompter: WizardPrompter;
   options?: SetupChannelsOptions;
+  onPersistentEffect?: () => void;
 }) {
   let persistentEffectStarted = false;
   const outcome = await runScopedChannelStep({
@@ -91,6 +94,7 @@ export async function ensureChannelSetupPluginInstalledWithNavigation(params: {
       }),
     onPersistentEffect: () => {
       persistentEffectStarted = true;
+      params.onPersistentEffect?.();
     },
   });
   return { ...outcome, persistentEffectStarted };

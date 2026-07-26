@@ -385,6 +385,8 @@ type SignalSetupInput = ChannelSetupInput & { signalNumber?: string };
 type NextcloudTalkSetupInput = ChannelSetupInput & { secretFile?: string };
 type MatrixSetupInput = ChannelSetupInput & { initialSyncLimit?: number };
 type PreparedChatSetupInput = ChannelSetupInput & { workspace?: string };
+type SetupChannelsOptions =
+  import("../channels/plugins/setup-wizard-types.js").SetupChannelsOptions;
 
 function createSignalPlugin(
   afterAccountConfigWritten: SignalAfterAccountConfigWritten,
@@ -529,6 +531,44 @@ describe("channelsAddCommand", () => {
     );
 
     expect(setupOptions().abortSignal).toBe(abortController.signal);
+  });
+
+  it("binds browse-all channel aliases immediately before config commit", async () => {
+    const config: OpenClawConfig = { channels: {} };
+    const configured: OpenClawConfig = {
+      channels: {
+        twitch: { enabled: true },
+      },
+    };
+    const events: string[] = [];
+    const onResolvedChannel = vi.fn((_channel: string, _aliases?: readonly string[]) => {
+      events.push("identity");
+    });
+    const beforePersistentEffect = vi.fn(async () => {
+      events.push("guard");
+    });
+    configMocks.readConfigFileSnapshot.mockResolvedValue({
+      ...baseConfigSnapshot,
+      sourceConfig: config,
+      config,
+    });
+    channelWizardMocks.setupChannels.mockImplementationOnce(async (...args: unknown[]) => {
+      const options = args[3] as SetupChannelsOptions;
+      options.onPendingChannelEffects?.([{ channel: "twitch", aliases: ["twitch-chat"] }]);
+      options.onSelection?.(["twitch"]);
+      return configured;
+    });
+
+    await runChannelsSetupWizard(
+      { onResolvedChannel, beforePersistentEffect },
+      runtime,
+      channelWizardMocks.prompter,
+    );
+
+    expect(onResolvedChannel).toHaveBeenCalledOnce();
+    expect(onResolvedChannel).toHaveBeenCalledWith("twitch", ["twitch-chat"]);
+    expect(events).toEqual(["guard", "identity"]);
+    expect(configMocks.writeConfigFile).toHaveBeenCalledWith(configured);
   });
 
   it("persists an accepted plugin install after setup returns to an empty selection", async () => {

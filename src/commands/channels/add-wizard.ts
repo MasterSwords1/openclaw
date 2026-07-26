@@ -98,6 +98,12 @@ export async function runChannelsAddWizardFlow(params: ChannelsAddWizardFlowPara
   ]);
   const postWriteHooks = onboardChannels.createChannelOnboardingPostWriteHookCollector();
   let selection: ChannelChoice[] = [];
+  const pendingChannelEffects = new Map<string, readonly string[] | undefined>();
+  const rememberPendingChannelEffect = (channel: string, aliases?: readonly string[]) => {
+    if (aliases?.length || !pendingChannelEffects.has(channel)) {
+      pendingChannelEffects.set(channel, aliases);
+    }
+  };
   const accountIds: Partial<Record<ChannelChoice, string>> = {};
   const resolvedPlugins = new Map<ChannelChoice, ChannelSetupPlugin>();
   await prompter.intro("Channel setup");
@@ -113,8 +119,16 @@ export async function runChannelsAddWizardFlow(params: ChannelsAddWizardFlowPara
     ...(params.abortSignal ? { abortSignal: params.abortSignal } : {}),
     ...(params.deferDeviceLinkToClient ? { deferDeviceLinkToClient: true } : {}),
     ...(params.onResolvedChannel
-      ? { onChannelSelected: (channel: ChannelChoice) => params.onResolvedChannel?.(channel) }
+      ? {
+          onChannelSelected: (channel: ChannelChoice, aliases?: readonly string[]) =>
+            params.onResolvedChannel?.(channel, aliases),
+        }
       : {}),
+    onPendingChannelEffects: (channels) => {
+      for (const { channel, aliases } of channels) {
+        rememberPendingChannelEffect(channel, aliases);
+      }
+    },
     onPostWriteHook: (hook) => {
       postWriteHooks.collect(hook);
     },
@@ -123,9 +137,11 @@ export async function runChannelsAddWizardFlow(params: ChannelsAddWizardFlowPara
     skipStatusNote: true,
     onSelection: (value) => {
       selection = value;
-      const resolvedChannel = value.length === 1 ? value[0] : undefined;
-      if (resolvedChannel) {
-        params.onResolvedChannel?.(resolvedChannel);
+      for (const channel of value) {
+        const aliases =
+          resolvedPlugins.get(channel)?.meta.aliases ??
+          getLoadedChannelPlugin(channel)?.meta.aliases;
+        rememberPendingChannelEffect(channel, aliases);
       }
     },
     onAccountId: (channel, accountId) => {
@@ -137,6 +153,11 @@ export async function runChannelsAddWizardFlow(params: ChannelsAddWizardFlowPara
   });
   const commitWizardConfig = async (config: OpenClawConfig) => {
     await params.beforePersistentEffect?.();
+    // The lock and identity update stay adjacent so failed guards cannot make
+    // reversible browse-all choices look like committed channel work.
+    for (const [channel, aliases] of pendingChannelEffects) {
+      params.onResolvedChannel?.(channel, aliases);
+    }
     const committed = await commitConfigWithPendingPluginInstalls({
       nextConfig: config,
       ...(baseHash !== undefined ? { baseHash } : {}),

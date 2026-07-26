@@ -272,6 +272,10 @@ export async function setupChannels(
   };
 
   const selection: ChannelChoice[] = [];
+  const pendingChannelEffects = new Map<
+    ChannelChoice,
+    { channel: ChannelChoice; aliases?: readonly string[] }
+  >();
   let finishSetupRequested = false;
   const addSelection = (channel: ChannelChoice) => {
     if (!selection.includes(channel)) {
@@ -324,6 +328,24 @@ export async function setupChannels(
       catalogById: resolved.installableCatalogById,
       installedCatalogById: resolved.installedCatalogById,
     };
+  };
+  const resolveChannelEffectIdentity = (
+    channel: ChannelChoice,
+    aliases?: readonly string[],
+  ): { channel: ChannelChoice; aliases?: readonly string[] } => {
+    const resolvedAliases =
+      aliases ??
+      getVisibleChannelPlugin(channel)?.meta.aliases ??
+      getChannelEntries().entries.find((entry) => entry.id === channel)?.meta.aliases;
+    return resolvedAliases?.length ? { channel, aliases: resolvedAliases } : { channel };
+  };
+  const reportChannelPersistentEffect = (channel: ChannelChoice, aliases?: readonly string[]) => {
+    const identity = resolveChannelEffectIdentity(channel, aliases);
+    if (identity.aliases) {
+      options?.onChannelSelected?.(identity.channel, identity.aliases);
+    } else {
+      options?.onChannelSelected?.(identity.channel);
+    }
   };
 
   // Decorates the runtime status map with synthetic `selectionHint` entries for
@@ -614,12 +636,12 @@ export async function setupChannels(
 
   const ensureChannelSetupPluginInstalledWithNavigation = async (
     install: Parameters<typeof runPluginInstallWithNavigation>[0]["install"],
-  ) => await runPluginInstallWithNavigation({ install, prompter, options });
+    onPersistentEffect: () => void,
+  ) => await runPluginInstallWithNavigation({ install, prompter, options, onPersistentEffect });
 
-  const handleChannelChoice = async (
+  const handleChannelChoiceInner = async (
     channel: ChannelChoice,
   ): Promise<"done" | "retry_selection"> => {
-    options?.onChannelSelected?.(channel);
     const cfgBeforeChoice = next;
     let cfgOnBack = cfgBeforeChoice;
     const scopedPluginsBeforeChoice = new Map(scopedPluginsById);
@@ -718,13 +740,16 @@ export async function setupChannels(
     const installedCatalogEntry = installedCatalogById.get(channel);
     if (catalogEntry) {
       const workspaceDir = resolveWorkspaceDir();
-      const installOutcome = await ensureChannelSetupPluginInstalledWithNavigation({
-        cfg: next,
-        entry: catalogEntry,
-        runtime,
-        workspaceDir,
-        autoConfirmSingleSource: true,
-      });
+      const installOutcome = await ensureChannelSetupPluginInstalledWithNavigation(
+        {
+          cfg: next,
+          entry: catalogEntry,
+          runtime,
+          workspaceDir,
+          autoConfirmSingleSource: true,
+        },
+        () => reportChannelPersistentEffect(channel, catalogEntry.meta.aliases),
+      );
       if (installOutcome.status === "back") {
         return returnToSelection();
       }
@@ -761,13 +786,16 @@ export async function setupChannels(
           return "done";
         }
         const workspaceDir = resolveWorkspaceDir();
-        const installOutcome = await ensureChannelSetupPluginInstalledWithNavigation({
-          cfg: next,
-          entry: installedCatalogEntry,
-          runtime,
-          workspaceDir,
-          autoConfirmSingleSource: true,
-        });
+        const installOutcome = await ensureChannelSetupPluginInstalledWithNavigation(
+          {
+            cfg: next,
+            entry: installedCatalogEntry,
+            runtime,
+            workspaceDir,
+            autoConfirmSingleSource: true,
+          },
+          () => reportChannelPersistentEffect(channel, installedCatalogEntry.meta.aliases),
+        );
         if (installOutcome.status === "back") {
           return returnToSelection();
         }
@@ -822,13 +850,16 @@ export async function setupChannels(
           return "done";
         }
         const workspaceDir = resolveWorkspaceDir();
-        const installOutcome = await ensureChannelSetupPluginInstalledWithNavigation({
-          cfg: next,
-          entry: fallbackCatalogEntry,
-          runtime,
-          workspaceDir,
-          autoConfirmSingleSource: true,
-        });
+        const installOutcome = await ensureChannelSetupPluginInstalledWithNavigation(
+          {
+            cfg: next,
+            entry: fallbackCatalogEntry,
+            runtime,
+            workspaceDir,
+            autoConfirmSingleSource: true,
+          },
+          () => reportChannelPersistentEffect(channel, fallbackCatalogEntry.meta.aliases),
+        );
         if (installOutcome.status === "back") {
           return returnToSelection();
         }
@@ -870,6 +901,7 @@ export async function setupChannels(
             configured,
             label,
           }),
+        () => reportChannelPersistentEffect(channel),
       );
       if (outcome.status === "back") {
         return returnToSelection();
@@ -884,6 +916,7 @@ export async function setupChannels(
       const outcome = await runScopedChannelStep(
         async (scopedPrompter, scopedOptions) =>
           await handleConfiguredChannel(channel, label, scopedPrompter, scopedOptions),
+        () => reportChannelPersistentEffect(channel),
       );
       if (outcome.status === "back") {
         return returnToSelection();
@@ -893,11 +926,22 @@ export async function setupChannels(
     const outcome = await runScopedChannelStep(
       async (scopedPrompter, scopedOptions) =>
         await configureChannel(channel, scopedPrompter, scopedOptions),
+      () => reportChannelPersistentEffect(channel),
     );
     if (outcome.status === "back") {
       return returnToSelection();
     }
     return "done";
+  };
+  const handleChannelChoice = async (
+    channel: ChannelChoice,
+  ): Promise<"done" | "retry_selection"> => {
+    const cfgBeforeChoice = next;
+    const outcome = await handleChannelChoiceInner(channel);
+    if (outcome === "done" && next !== cfgBeforeChoice) {
+      pendingChannelEffects.set(channel, resolveChannelEffectIdentity(channel));
+    }
+    return outcome;
   };
 
   // Targeted setup finishes after success, but Back must re-enter the shared
@@ -968,6 +1012,9 @@ export async function setupChannels(
     }
   }
 
+  if (pendingChannelEffects.size > 0) {
+    options?.onPendingChannelEffects?.([...pendingChannelEffects.values()]);
+  }
   options?.onSelection?.(selection);
 
   const selectedLines = resolveChannelSelectionNoteLines({
