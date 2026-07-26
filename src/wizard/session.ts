@@ -401,7 +401,12 @@ export class WizardSession {
 
   /** Whether this locked session belongs to the owner's resumable flow. */
   matchesResumeKey(resumeKey: string): boolean {
-    return this.cancellationLocked && this.resumeKey === resumeKey;
+    return this.cancellationLocked && this.hasResumeKey(resumeKey);
+  }
+
+  /** Whether this session belongs to the owner's flow, before or after its durable lock. */
+  hasResumeKey(resumeKey: string): boolean {
+    return this.resumeKey === resumeKey;
   }
 
   /**

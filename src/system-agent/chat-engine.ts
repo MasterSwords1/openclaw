@@ -500,10 +500,16 @@ export class SystemAgentChatEngine {
       if (retainedReply) {
         return { ...retainedReply };
       }
-      return this.projectWizardReply({
+      const reply = this.projectWizardReply({
         text: await this.pumpWizardBridge(),
         action: "none",
       });
+      if (reply.text) {
+        // Recovery can be the only delivery of a terminal setup result. Record
+        // newly generated replies once; retained replays return above.
+        this.history.push({ role: "assistant", text: reply.text });
+      }
+      return reply;
     });
     this.turnQueue = turn.catch(() => undefined);
     return await turn;

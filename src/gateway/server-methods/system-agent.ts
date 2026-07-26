@@ -644,8 +644,12 @@ export const systemAgentHandlers: GatewayRequestHandlers = {
         }
         session.lastUsedAt = Date.now();
         if (welcomeOnly && session.engine.hasLockedHostedWizard()) {
+          const historyStart = session.engine.historyLength();
           const resumed = await session.engine.resumeLockedHostedWizard();
           if (resumed) {
+            // Persist before responding so a dropped recovery response cannot
+            // erase the only durable record of a completed setup.
+            persistEngineHistory(session.engine, historyStart);
             respond(
               true,
               {

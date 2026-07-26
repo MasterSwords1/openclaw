@@ -213,6 +213,39 @@ describe("openclaw.chat session ownership", () => {
     expect(retained.handle).toHaveBeenCalledWith("yes");
   });
 
+  it("persists a terminal wizard reply generated during recovery only once", async () => {
+    const retained = makeEngine();
+    const history = [
+      { role: "user" as const, text: "connect matrix" },
+      { role: "assistant" as const, text: "Applying channel setup." },
+    ];
+    retained.hasLockedHostedWizard.mockReturnValue(true);
+    retained.historyLength.mockImplementation(() => history.length);
+    retained.historySince.mockImplementation((index: number) => history.slice(index));
+    retained.resumeLockedHostedWizard.mockImplementation(async () => {
+      if (history.length === 2) {
+        history.push({ role: "assistant", text: "Done — matrix is configured." });
+      }
+      return { text: "Done — matrix is configured.", action: "none" };
+    });
+    const sessions = new Map<string, SystemAgentChatSession>([
+      ["old-session", seededSession({ engine: retained })],
+    ]);
+
+    const first = await callChat(makeContext(sessions), { sessionId: "new-session" });
+    const retry = await callChat(makeContext(sessions), { sessionId: "new-session" });
+
+    expect(first.payload).toMatchObject({ reply: "Done — matrix is configured." });
+    expect(retry.payload).toMatchObject({ reply: "Done — matrix is configured." });
+    expect(transcriptMocks.appendTranscriptTurn).toHaveBeenCalledOnce();
+    expect(transcriptMocks.appendTranscriptTurn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        role: "assistant",
+        text: "Done — matrix is configured.",
+      }),
+    );
+  });
+
   it("requires a welcome handshake before aliasing a locked wizard", async () => {
     const retained = makeEngine();
     retained.hasLockedHostedWizard.mockReturnValue(true);

@@ -304,6 +304,67 @@ describe("channel wizard lifecycle", () => {
     expect(runCount).toHaveBeenCalledOnce();
   });
 
+  it("restarts reversible shared-auth work after credential rotation", async () => {
+    const wizardSessions = new Map<string, WizardSession>();
+    const runCount = vi.fn();
+    const context = {
+      wizardSessions,
+      findRunningWizard: () =>
+        [...wizardSessions].find(([, session]) => session.getStatus() === "running")?.[0] ?? null,
+      purgeWizardSession: (id: string) => wizardSessions.delete(id),
+      channelWizardRunner: async (
+        _options: unknown,
+        _runtime: unknown,
+        prompter: { confirm: (params: { message: string }) => Promise<boolean> },
+      ) => {
+        runCount();
+        await prompter.confirm({ message: "Apply setup?" });
+      },
+    };
+    const sharedClient = (generation: string, connId: string) => ({
+      connId,
+      usesSharedGatewayAuth: true,
+      sharedGatewaySessionGeneration: generation,
+      connect: { client: { id: "openclaw-control-ui", mode: "webchat" } },
+    });
+    const start = expectDefined(
+      wizardHandlers["wizard.start"],
+      "wizardHandlers[wizard.start] test invariant",
+    );
+    const firstRespond = vi.fn();
+
+    await start({
+      params: { flow: "channels", channel: "matrix" },
+      client: sharedClient("generation-old", "connection-old"),
+      respond: firstRespond,
+      context,
+    } as never);
+
+    const firstResult = firstRespond.mock.calls[0]?.[1] as { sessionId?: string } | undefined;
+    const firstSessionId = expectDefined(
+      firstResult?.sessionId,
+      "reversible shared-auth wizard session id",
+    );
+    const firstSession = expectDefined(
+      wizardSessions.get(firstSessionId),
+      "reversible shared-auth wizard session",
+    );
+    const rotatedRespond = vi.fn();
+
+    await start({
+      params: { flow: "channels", channel: "matrix" },
+      client: sharedClient("generation-new", "connection-new"),
+      respond: rotatedRespond,
+      context,
+    } as never);
+
+    const rotatedResult = rotatedRespond.mock.calls[0]?.[1] as { sessionId?: string } | undefined;
+    expect(rotatedResult?.sessionId).not.toBe(firstSessionId);
+    expect(firstSession.signal.aborted).toBe(true);
+    expect(wizardSessions.has(firstSessionId)).toBe(false);
+    expect(runCount).toHaveBeenCalledTimes(2);
+  });
+
   it("returns an owner's retained terminal result without rerunning setup", async () => {
     const wizardSessions = new Map<string, WizardSession>();
     const runCount = vi.fn();

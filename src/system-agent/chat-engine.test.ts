@@ -822,11 +822,18 @@ describe("SystemAgentChatEngine", () => {
     expect((await engine.handle("connect matrix")).text).toContain("Retry validation?");
     expect((await engine.handle("cancel")).text).toContain("can no longer be cancelled");
     await expect(engine.dispose()).resolves.toBe(false);
+    const recoveryHistoryStart = engine.historyLength();
     expect(completed).not.toHaveBeenCalled();
     await expect(engine.resumeLockedHostedWizard()).resolves.toMatchObject({
       text: expect.stringContaining("Retry validation?"),
       wizardInputPending: true,
     });
+    expect(engine.historySince(recoveryHistoryStart)).toEqual([
+      {
+        role: "assistant",
+        text: expect.stringContaining("Retry validation?"),
+      },
+    ]);
 
     expect((await engine.handle("yes")).text).toContain("matrix is configured");
     expect(completed).toHaveBeenCalledOnce();

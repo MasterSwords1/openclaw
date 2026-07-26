@@ -127,10 +127,9 @@ export const wizardHandlers: GatewayRequestHandlers = {
     const ownerKey = owner?.key;
     const resumeKey =
       flow === "channels" ? resolveChannelWizardResumeKey(owner?.continuityKey) : undefined;
-    const running = context.findRunningWizard();
     if (resumeKey) {
       const ownerSession = [...context.wizardSessions.entries()].find(([, session]) =>
-        session.matchesResumeKey(resumeKey),
+        session.hasResumeKey(resumeKey),
       );
       if (ownerSession && ownerSession[1].canResume(resumeKey, channel)) {
         const [resumableId, resumableSession] = ownerSession;
@@ -145,11 +144,20 @@ export const wizardHandlers: GatewayRequestHandlers = {
         respond(true, { sessionId: resumableId, ...result }, undefined);
         return;
       }
-      if (ownerSession && ownerSession[1].getStatus() !== "running") {
-        // A different requested channel is an explicit fresh-start intent.
-        context.purgeWizardSession(ownerSession[0]);
+      if (ownerSession) {
+        const [staleId, staleSession] = ownerSession;
+        if (!staleSession.isCancellationLocked()) {
+          // Credential rotation can strand reversible work under the previous
+          // exact owner. Abort it before the continuity owner starts fresh.
+          staleSession.cancel();
+          context.purgeWizardSession(staleId);
+        } else if (staleSession.getStatus() !== "running") {
+          // A different requested channel is an explicit fresh-start intent.
+          context.purgeWizardSession(staleId);
+        }
       }
     }
+    const running = context.findRunningWizard();
     if (running) {
       respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, "wizard already running"));
       return;
