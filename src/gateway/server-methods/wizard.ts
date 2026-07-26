@@ -27,13 +27,8 @@ import { assertValidParams } from "./validation.js";
 
 const CHANNEL_WIZARD_TIMEOUT_MS = 25 * 60 * 1000;
 
-function resolveChannelWizardResumeKey(params: {
-  ownerKey: string | undefined;
-  channel: string | undefined;
-}): string | undefined {
-  return params.ownerKey
-    ? JSON.stringify(["gateway-channel-setup", params.ownerKey, params.channel ?? null])
-    : undefined;
+function resolveChannelWizardResumeKey(ownerKey: string | undefined): string | undefined {
+  return ownerKey ? JSON.stringify(["gateway-channel-setup", ownerKey]) : undefined;
 }
 
 export type SetupWizardRunner = (
@@ -122,8 +117,7 @@ export const wizardHandlers: GatewayRequestHandlers = {
       return;
     }
     const ownerKey = owner?.key;
-    const resumeKey =
-      flow === "channels" ? resolveChannelWizardResumeKey({ ownerKey, channel }) : undefined;
+    const resumeKey = flow === "channels" ? resolveChannelWizardResumeKey(ownerKey) : undefined;
     const running = context.findRunningWizard();
     if (running) {
       const existing = context.wizardSessions.get(running);

@@ -97,7 +97,7 @@ describe("channel wizard lifecycle", () => {
     ).rejects.toThrow("cancelled before its persistent change started");
   });
 
-  it("resumes locked work only for its authenticated owner without duplicating it", async () => {
+  it("resumes locked work for its owner after Browse all selects a channel", async () => {
     const wizardSessions = new Map<string, WizardSession>();
     const runCount = vi.fn();
     const context = {
@@ -141,7 +141,7 @@ describe("channel wizard lifecycle", () => {
     const firstRespond = vi.fn();
 
     await start({
-      params: { flow: "channels", channel: "matrix" },
+      params: { flow: "channels" },
       client: owner,
       respond: firstRespond,
       context,
