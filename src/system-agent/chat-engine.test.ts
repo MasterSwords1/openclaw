@@ -770,6 +770,88 @@ describe("SystemAgentChatEngine", () => {
     expect(acknowledged).toBe(true);
   });
 
+  it("does not let cancellation aliases bypass a QR acknowledgement", async () => {
+    let acknowledged: boolean | undefined;
+    const engine = new SystemAgentChatEngine({
+      runAgentTurn: async () => null,
+      planWithAssistant: async () => null,
+      deps: { loadOverview: fakeOverviewLoader() },
+      supportsQrCode: true,
+      runChannelSetupWizard: async (_channel: string, prompter: WizardPrompter) => {
+        acknowledged = await prompter.qrCode?.({
+          title: "Link a device",
+          message: "Scan this QR code, then continue.",
+          pngBase64: PNG_BASE64,
+        });
+      },
+    });
+
+    await engine.handle("connect telegram");
+    const rejectedCancel = await engine.handle("cancel");
+
+    expect(rejectedCancel.text).toContain("I could not match that answer.");
+    expect(rejectedCancel.qrCodePngBase64).toBe(PNG_BASE64);
+    expect(rejectedCancel.question?.options).toEqual([{ label: "Continue", recommended: true }]);
+    expect(acknowledged).toBeUndefined();
+
+    const done = await engine.handle("Continue");
+    expect(done.text).toContain("telegram is configured");
+    expect(acknowledged).toBe(true);
+  });
+
+  it("releases the acknowledged QR step before awaiting later wizard work", async () => {
+    let releaseProviderWork!: () => void;
+    const providerWork = new Promise<void>((resolve) => {
+      releaseProviderWork = resolve;
+    });
+    const engine = new SystemAgentChatEngine({
+      runAgentTurn: async () => null,
+      planWithAssistant: async () => null,
+      deps: { loadOverview: fakeOverviewLoader() },
+      supportsQrCode: true,
+      runChannelSetupWizard: async (_channel: string, prompter: WizardPrompter) => {
+        await prompter.qrCode?.({
+          title: "Link a device",
+          message: "Scan this QR code, then continue.",
+          pngBase64: PNG_BASE64,
+        });
+        await providerWork;
+      },
+    });
+
+    await engine.handle("connect telegram");
+    const completion = engine.handle("Continue");
+
+    await vi.waitFor(() => {
+      const bridge = Reflect.get(engine, "wizardBridge") as object | null;
+      expect(bridge).not.toBeNull();
+      expect(Reflect.get(bridge!, "step")).toBeNull();
+    });
+
+    releaseProviderWork();
+    const done = await completion;
+    expect(done.text).toContain("telegram is configured");
+  });
+
+  it("keeps generic one-option wizard selections prose-only", async () => {
+    const engine = new SystemAgentChatEngine({
+      runAgentTurn: async () => null,
+      planWithAssistant: async () => null,
+      deps: { loadOverview: fakeOverviewLoader() },
+      runChannelSetupWizard: async (_channel: string, prompter: WizardPrompter) => {
+        await prompter.select({
+          message: "Only one route",
+          options: [{ value: "only", label: "Only option" }],
+        });
+      },
+    });
+
+    const prompt = await engine.handle("connect telegram");
+
+    expect(prompt.text).toContain("1. Only option");
+    expect(prompt.question).toBeUndefined();
+  });
+
   it("reports hosted channel setup success when audit persistence fails", async () => {
     const appendAuditEntry = vi.fn(async () => {
       throw new Error("audit store is read-only");

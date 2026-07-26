@@ -70,7 +70,6 @@ describeControlUiE2e("Control UI system-agent QR presentation", () => {
             header: "Scan QR code",
             question: "Scan the code, then continue.",
             options: [{ label: "Continue" }],
-            isOther: false,
             allowSkip: false,
           },
           qrCodePngBase64: qrDataUrl.replace(/^data:image\/png;base64,/u, ""),

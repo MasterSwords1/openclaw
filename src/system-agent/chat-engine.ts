@@ -231,7 +231,8 @@ function wizardStepChatQuestion(step: WizardStep | null): SystemAgentChatQuestio
     return undefined;
   }
   const options = step.options ?? [];
-  if (options.length < 1 || options.length > 4) {
+  const minimumOptions = step.qrCodePngBase64 ? 1 : 2;
+  if (options.length < minimumOptions || options.length > 4) {
     return undefined;
   }
   return {
@@ -1276,12 +1277,16 @@ export class SystemAgentChatEngine {
     if (!bridge) {
       return "";
     }
-    if (/^(cancel|abort|stop|quit|exit)$/i.test(text.trim())) {
-      bridge.session.cancel();
-      return await this.pumpWizardBridge();
-    }
     const step = bridge.step;
     if (!step) {
+      // handle() serializes turns, so another reply cannot observe this
+      // transient between-step state while pumpWizardBridge awaits the provider.
+      return await this.pumpWizardBridge();
+    }
+    // QR acknowledgement is deliberately non-skippable: cancellation aliases
+    // must re-render it instead of bypassing the single declared action.
+    if (!step.qrCodePngBase64 && /^(cancel|abort|stop|quit|exit)$/i.test(text.trim())) {
+      bridge.session.cancel();
       return await this.pumpWizardBridge();
     }
     const answer = parseWizardAnswer(step, text);
@@ -1292,7 +1297,10 @@ export class SystemAgentChatEngine {
     if (validationError) {
       return [validationError, renderWizardStep(step)].join("\n\n");
     }
-    return await this.pumpWizardBridge();
+    // The session has released its step. Drop the bridge reference and return
+    // the next-step promise directly so this frame cannot retain QR credentials.
+    bridge.step = null;
+    return this.pumpWizardBridge();
   }
 }
 /* oxlint-disable max-lines -- TODO: split this grandfathered oversized file. */

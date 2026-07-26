@@ -43,16 +43,31 @@ describe("custodian typed question", () => {
   });
 
   it("accepts a single acknowledgement action without a skip affordance", () => {
-    const parsed = parseCustodianQuestion({
-      id: "link-device",
-      header: "Link a device",
-      question: "Scan the QR code, then continue.",
-      options: [{ label: "Continue" }],
-      allowSkip: false,
-    });
+    const parsed = parseCustodianQuestion(
+      {
+        id: "link-device",
+        header: "Link a device",
+        question: "Scan the QR code, then continue.",
+        options: [{ label: "Continue" }],
+        allowSkip: false,
+      },
+      true,
+    );
     expect(parsed?.options).toEqual([{ label: "Continue" }]);
     expect(parsed?.allowSkip).toBe(false);
     expect(parsed?.presentation).toBe("action");
+  });
+
+  it("rejects a single action outside the QR presentation branch", () => {
+    expect(
+      parseCustodianQuestion({
+        id: "generic-action",
+        header: "Continue",
+        question: "Continue?",
+        options: [{ label: "Continue" }],
+        allowSkip: false,
+      }),
+    ).toBeNull();
   });
 
   it("rejects malformed questions instead of rendering broken cards", () => {

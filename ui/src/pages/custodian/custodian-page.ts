@@ -11,7 +11,6 @@ import { applicationContext, type ApplicationContext } from "../../app/context.t
 import { icons } from "../../components/icons.ts";
 import { t } from "../../i18n/index.ts";
 import { isGatewayMethodAdvertised } from "../../lib/gateway-methods.ts";
-import { buildAgentMainSessionKey } from "../../lib/sessions/session-key.ts";
 import { OpenClawLightDomElement } from "../../lit/openclaw-element.ts";
 import { SubscriptionsController } from "../../lit/subscriptions-controller.ts";
 import "../../styles/chat/grouped.css";
@@ -20,23 +19,24 @@ import "../../styles/chat/text.css";
 import "../../styles/custodian.css";
 import { renderChatAvatar } from "../chat/chat-avatar.ts";
 import { requestCustodianChat } from "./chat-request.ts";
+import { applyCustodianChatAction } from "./custodian-chat-result.ts";
 import { renderCustodianChangeHistory } from "./custodian-history.ts";
-import { pathForCustodianAgentHandoff } from "./custodian-navigation.ts";
 import * as eventNudgeState from "./event-nudge.ts";
+import * as questionDeliveryState from "./question-delivery.ts";
 import {
   isCustodianSessionInvalidatedError,
   sessionVariant,
   type CustodianSessionVariant,
   welcomeVariant,
 } from "./session-lifecycle.ts";
-import { parseCustodianQuestion, type CustodianStructuredQuestion } from "./structured-question.ts";
+import { parseCustodianQuestion } from "./structured-question.ts";
 import {
+  appendCustodianAssistantMessage,
   createCustodianSessionId,
   createCustodianTranscriptMessages,
   custodianErrorMessage,
   hasUnresolvedCustodianQuestion,
   readCustodianTranscript,
-  restoreCustodianQrCodes as restoreQrCodes,
   renderCustodianTranscriptEntry,
   retireCustodianQuestions,
   scrubAnsweredCustodianQrCodes as scrubQrCodes,
@@ -64,7 +64,7 @@ export class CustodianPage extends OpenClawLightDomElement {
   @state() private questionReplyUncertain = false;
   @state() private error: string | null = null;
   @state() private dismissedQuestions = new Set<string>();
-  @state() private answeredQuestions = new Set<string>();
+  @state() private answeredQuestions: ReadonlySet<string> = new Set();
   @state() private activeClient: GatewayBrowserClient | null = null;
   @state() private chatAvailable = false;
   @state() private historyAvailable = false;
@@ -392,27 +392,10 @@ export class CustodianPage extends OpenClawLightDomElement {
     }
   }
 
-  private appendReply(
-    text: string,
-    question: CustodianStructuredQuestion | null,
-    qrCodePngBase64?: string,
-  ): void {
-    this.messages = [
-      ...this.messages,
-      {
-        id: this.nextMessageId++,
-        role: "assistant",
-        text,
-        at: Date.now(),
-        question,
-        ...(qrCodePngBase64 ? { qrCodePngBase64 } : {}),
-      },
-    ];
-  }
-
   private async requestReply(
     client: GatewayBrowserClient,
     params: SystemAgentChatParams,
+    onSent?: () => void,
   ): Promise<eventNudgeState.CustodianSendResult> {
     const epoch = ++this.requestEpoch;
     let delivery: eventNudgeState.CustodianSendDelivery = "unsent";
@@ -423,7 +406,10 @@ export class CustodianPage extends OpenClawLightDomElement {
       const result = await requestCustodianChat({
         client,
         request: params,
-        onSent: () => (delivery = "sent"),
+        onSent: () => {
+          delivery = "sent";
+          onSent?.();
+        },
         onCompatibilityRetry: () => (delivery = "unsent"),
       });
       delivery = "received";
@@ -434,37 +420,29 @@ export class CustodianPage extends OpenClawLightDomElement {
       this.sensitive = result.sensitive === true;
       this.wizardInputPending = result.wizardInputPending === true;
       this.retryParams = null;
-      const question = parseCustodianQuestion(result.question);
+      const question = parseCustodianQuestion(
+        result.question,
+        result.qrCodePngBase64 !== undefined,
+      );
       // Match regular chat: NO_REPLY is a delivery sentinel, not transcript content.
       const silentReply = SILENT_REPLY_PATTERN.test(result.reply);
       if (!silentReply || question || result.qrCodePngBase64) {
-        this.appendReply(silentReply ? "" : result.reply, question, result.qrCodePngBase64);
+        this.messages = appendCustodianAssistantMessage(this.messages, {
+          id: this.nextMessageId++,
+          text: silentReply ? "" : result.reply,
+          at: Date.now(),
+          question,
+          qrCodePngBase64: result.qrCodePngBase64,
+        });
       }
-      if (result.action === "open-agent") {
-        let sessionKey = this.context.gateway.snapshot.sessionKey?.trim();
-        if (result.agentId) {
-          const roster = await this.context.agents.refreshList();
-          if (epoch !== this.requestEpoch || client !== this.activeClient) {
-            return { outcome: "sent", delivery };
-          }
-          sessionKey = buildAgentMainSessionKey({
-            agentId: result.agentId,
-            mainKey: roster?.mainKey,
-          });
-          this.context.gateway.setSessionKey(sessionKey);
-        }
-        if (result.agentDraft === "hatch" && sessionKey) {
-          // Preserve the destination session while preloading the localized
-          // birth-sequence opener; draft-only chat routes are intentionally invalid.
-          this.context.navigate("chat", {
-            pathname: pathForCustodianAgentHandoff(this.context, sessionKey),
-            search: `?draft=${encodeURIComponent(t("custodian.hatchDraft"))}`,
-          });
-        } else {
-          this.exitSetup();
-        }
-      } else if (result.action === "exit") {
-        this.exitSetup();
+      const actionResult = applyCustodianChatAction({
+        result,
+        context: this.context,
+        isCurrent: () => epoch === this.requestEpoch && client === this.activeClient,
+        exitSetup: this.exitSetup,
+      });
+      if (typeof actionResult !== "boolean") {
+        await actionResult;
       }
       return { outcome: "sent", delivery };
     } catch (error) {
@@ -482,7 +460,7 @@ export class CustodianPage extends OpenClawLightDomElement {
       if (params.message !== undefined && this.retryParams === params) {
         this.retryParams = null;
       }
-      return { outcome: eventNudgeState.classifyCustodianSendFailure(delivery), delivery };
+      return { outcome: eventNudgeState.classifyCustodianSendFailure(error, delivery), delivery };
     } finally {
       if (epoch === this.requestEpoch) {
         this.sending = false;
@@ -498,7 +476,12 @@ export class CustodianPage extends OpenClawLightDomElement {
     // Sensitive values may carry meaningful whitespace and must reach the agent exactly.
     const message = this.sensitive ? text : text.trim();
     const client = this.activeClient;
-    const prior = [this.answeredQuestions, this.questionReplyUncertain, this.messages] as const;
+    const questionDelivery = questionDeliveryState.captureCustodianQuestionDelivery({
+      messages: this.messages,
+      answeredQuestions: this.answeredQuestions,
+      questionReplyUncertain: this.questionReplyUncertain,
+      questionReply,
+    });
     if (questionReply) {
       // A failed wizard reply may have arrived, so block nudges until the session outcome is known.
       this.questionReplyUncertain = true;
@@ -523,19 +506,34 @@ export class CustodianPage extends OpenClawLightDomElement {
       },
     ];
     this.input = "";
-    const reply = this.requestReply(client, {
-      sessionId: this.sessionId,
-      ...welcomeVariant(sessionVariant(this.onboarding, this.newAgentIntent)),
-      message,
-    });
+    const reply = this.requestReply(
+      client,
+      {
+        sessionId: this.sessionId,
+        ...welcomeVariant(sessionVariant(this.onboarding, this.newAgentIntent)),
+        message,
+      },
+      () => {
+        // Once the socket accepts the turn it may have acted, so restoration is
+        // forbidden and its retained QR credential snapshot can be released.
+        questionDeliveryState.releaseCustodianQuestionRestoration(questionDelivery);
+      },
+    );
     const replyEpoch = this.requestEpoch;
     const { outcome, delivery } = await reply;
     if (questionReply && this.requestEpoch === replyEpoch) {
-      this.questionReplyUncertain = eventNudgeState.questionUncertainty(prior[1], outcome);
-      if (outcome === "rejected" && delivery === "unsent") {
-        this.answeredQuestions = prior[0];
-        this.messages = restoreQrCodes(this.messages, prior[2]);
-      }
+      const deliveryState = questionDeliveryState.reconcileCustodianQuestionDelivery({
+        snapshot: questionDelivery,
+        messages: this.messages,
+        answeredQuestions: this.answeredQuestions,
+        outcome,
+        delivery,
+      });
+      [this.messages, this.answeredQuestions, this.questionReplyUncertain] = [
+        deliveryState.messages,
+        deliveryState.answeredQuestions,
+        deliveryState.questionReplyUncertain,
+      ];
     }
     return outcome;
   }

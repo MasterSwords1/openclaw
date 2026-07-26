@@ -1,5 +1,5 @@
 import { html } from "lit";
-import type { GatewayEventFrame } from "../../api/gateway.ts";
+import { GatewayRequestError, type GatewayEventFrame } from "../../api/gateway.ts";
 import { t } from "../../i18n/index.ts";
 
 export type CustodianEventNudge = {
@@ -17,12 +17,13 @@ export type CustodianSendResult = {
 };
 
 export function classifyCustodianSendFailure(
+  error: unknown,
   delivery: CustodianSendDelivery,
 ): CustodianSendOutcome {
   if (delivery === "received") {
     return "sent";
   }
-  if (delivery === "unsent") {
+  if (error instanceof GatewayRequestError || delivery === "unsent") {
     return "rejected";
   }
   return "unknown";

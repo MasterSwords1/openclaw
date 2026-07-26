@@ -22,6 +22,29 @@ export type CustodianMessage = {
   qrCodePngBase64?: string;
 };
 
+export function appendCustodianAssistantMessage(
+  messages: readonly CustodianMessage[],
+  params: {
+    id: number;
+    text: string;
+    at: number;
+    question: CustodianStructuredQuestion | null;
+    qrCodePngBase64?: string;
+  },
+): CustodianMessage[] {
+  return [
+    ...messages,
+    {
+      id: params.id,
+      role: "assistant",
+      text: params.text,
+      at: params.at,
+      question: params.question,
+      ...(params.qrCodePngBase64 ? { qrCodePngBase64: params.qrCodePngBase64 } : {}),
+    },
+  ];
+}
+
 export function hasUnresolvedCustodianQuestion(
   messages: readonly CustodianMessage[],
   dismissedQuestions: ReadonlySet<string>,

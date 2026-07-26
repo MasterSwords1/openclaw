@@ -23,6 +23,7 @@ function nonEmptyString(value: unknown): string | null {
  */
 export function parseCustodianQuestion(
   value: SystemAgentChatQuestion | undefined,
+  allowSingleAction = false,
 ): CustodianStructuredQuestion | null {
   if (!value || typeof value !== "object") {
     return null;
@@ -33,7 +34,11 @@ export function parseCustodianQuestion(
   if (!id || !header || !question || !Array.isArray(value.options)) {
     return null;
   }
-  if (value.options.length < 1 || value.options.length > 4) {
+  const minimumOptions = allowSingleAction ? 1 : 2;
+  if (value.options.length < minimumOptions || value.options.length > 4) {
+    return null;
+  }
+  if (value.options.length === 1 && value.allowSkip !== false) {
     return null;
   }
   const options: CustodianStructuredQuestion["options"] = [];
@@ -61,7 +66,7 @@ export function parseCustodianQuestion(
     id,
     header,
     question,
-    presentation: options.length === 1 && value.allowSkip === false ? "action" : "choices",
+    presentation: options.length === 1 ? "action" : "choices",
     options,
     isOther: value.isOther === true,
     allowSkip: value.allowSkip !== false,
