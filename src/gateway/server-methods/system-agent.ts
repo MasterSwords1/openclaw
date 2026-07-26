@@ -23,7 +23,6 @@ import { CommandLane } from "../../process/lanes.js";
 import { defaultRuntime } from "../../runtime.js";
 import { SystemAgentChatEngine } from "../../system-agent/chat-engine.js";
 import {
-  acknowledgeSystemAgentGreetingDelivery,
   buildSystemAgentGreetingQuestion,
   loadSystemAgentGreetingFacts,
   resolveSystemAgentGreeting,
@@ -45,6 +44,7 @@ import {
   listVisiblePendingApprovalRequests,
 } from "./approval-shared.js";
 import {
+  acknowledgeDeliveredSystemAgentWelcome,
   adoptLockedSystemAgentWizard,
   deleteSystemAgentSessionAliases,
   evictOldestSystemAgentSession,
@@ -90,15 +90,6 @@ function getSystemAgentSessionQueue(
     systemAgentSessionQueues.set(sessions, queue);
   }
   return queue;
-}
-
-function acknowledgeDeliveredSystemAgentWelcome(session: SystemAgentChatSession): void {
-  const auditSequence = session.welcomeAuditSequence;
-  if (auditSequence === undefined) {
-    return;
-  }
-  acknowledgeSystemAgentGreetingDelivery({ auditSequence });
-  delete session.welcomeAuditSequence;
 }
 
 async function runSystemAgentGatewayTask<T>(task: () => Promise<T>): Promise<T> {

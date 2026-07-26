@@ -1,8 +1,11 @@
 import { resolveSystemAgentDelegationKey } from "../../system-agent/delegation-session.js";
+import { acknowledgeSystemAgentGreetingDelivery } from "../../system-agent/greeting.js";
 import { resolveGatewayHostedSessionOwner } from "./hosted-session-owner.js";
 import type { GatewayClient, GatewayRequestContext } from "./types.js";
 
 type SystemAgentSessionMap = GatewayRequestContext["systemAgentSessions"];
+type SystemAgentSession =
+  SystemAgentSessionMap extends Map<string, infer Session> ? Session : never;
 
 type LockedWizardAdoption =
   | { kind: "none" }
@@ -15,13 +18,22 @@ const MAX_SYSTEM_AGENT_SESSION_ALIASES = 4;
 
 export function deleteSystemAgentSessionAliases(
   sessions: SystemAgentSessionMap,
-  target: SystemAgentSessionMap extends Map<string, infer Session> ? Session : never,
+  target: SystemAgentSession,
 ): void {
   for (const [candidateId, candidate] of sessions) {
     if (candidate === target) {
       sessions.delete(candidateId);
     }
   }
+}
+
+export function acknowledgeDeliveredSystemAgentWelcome(session: SystemAgentSession): void {
+  const auditSequence = session.welcomeAuditSequence;
+  if (auditSequence === undefined) {
+    return;
+  }
+  acknowledgeSystemAgentGreetingDelivery({ auditSequence });
+  delete session.welcomeAuditSequence;
 }
 
 function listUniqueSystemAgentSessions(sessions: SystemAgentSessionMap) {

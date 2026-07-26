@@ -48,7 +48,9 @@ type FakeEngine = {
   resolveOperatorApproval: ReturnType<typeof vi.fn>;
   dispose: ReturnType<typeof vi.fn>;
   hasLockedHostedWizard: ReturnType<typeof vi.fn>;
-  resumeLockedHostedWizard: ReturnType<typeof vi.fn>;
+  resumeLockedHostedWizard: ReturnType<
+    typeof vi.fn<SystemAgentChatSession["engine"]["resumeLockedHostedWizard"]>
+  >;
   loadOverview: ReturnType<typeof vi.fn>;
   noteAssistantMessage: ReturnType<typeof vi.fn>;
 };
@@ -63,7 +65,9 @@ function makeEngine(): FakeEngine {
     resolveOperatorApproval: vi.fn(async () => null),
     dispose: vi.fn(async () => true),
     hasLockedHostedWizard: vi.fn(() => false),
-    resumeLockedHostedWizard: vi.fn(async () => null),
+    resumeLockedHostedWizard: vi.fn<SystemAgentChatSession["engine"]["resumeLockedHostedWizard"]>(
+      async () => null,
+    ),
     loadOverview: vi.fn(async () => ({})),
     noteAssistantMessage: vi.fn(),
   };
