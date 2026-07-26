@@ -341,6 +341,7 @@ export function createBuzzSetupWizard(
             relayUrl,
             privateKey,
             ...(authTag ? { authTag } : {}),
+            ...(options?.abortSignal ? { signal: options.abortSignal } : {}),
           });
           discoveryError =
             rooms.length === 0 ? "No authorized rooms were returned for this bot." : undefined;
@@ -364,6 +365,7 @@ export function createBuzzSetupWizard(
             relayUrl,
             privateKey,
             ...(authTag ? { authTag } : {}),
+            ...(options?.abortSignal ? { signal: options.abortSignal } : {}),
           });
           progress.stop(
             discoveredRooms.length > 0
@@ -371,6 +373,9 @@ export function createBuzzSetupWizard(
               : "Buzz room access wait expired",
           );
         } catch (error) {
+          if (options?.abortSignal?.aborted) {
+            throw options.abortSignal.reason instanceof Error ? options.abortSignal.reason : error;
+          }
           progress.stop("Buzz room access check failed");
           await prompter.note(
             error instanceof Error ? error.message : String(error),

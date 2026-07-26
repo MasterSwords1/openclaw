@@ -371,11 +371,13 @@ describe("Buzz guided setup", () => {
     });
     const prompter = createPrompter();
     vi.mocked(prompter.multiselect).mockResolvedValue([ROOM_A]);
+    const abortController = new AbortController();
 
     const result = await wizard.configure({
       cfg: {} as OpenClawConfig,
       runtime: createRuntime(),
       prompter,
+      options: { abortSignal: abortController.signal },
       accountOverrides: {},
       shouldPromptAccountIds: false,
       forceAllowFrom: false,
@@ -384,10 +386,16 @@ describe("Buzz guided setup", () => {
     expect(discoverRooms).toHaveBeenCalledOnce();
     const expectedPrivateKey = nip19.nsecEncode(GENERATED_KEY);
     expect(discoverRooms).toHaveBeenCalledWith(
-      expect.objectContaining({ privateKey: expectedPrivateKey }),
+      expect.objectContaining({
+        privateKey: expectedPrivateKey,
+        signal: abortController.signal,
+      }),
     );
     expect(waitForRoomAccess).toHaveBeenCalledWith(
-      expect.objectContaining({ privateKey: expectedPrivateKey }),
+      expect.objectContaining({
+        privateKey: expectedPrivateKey,
+        signal: abortController.signal,
+      }),
     );
     expect(result.cfg.channels?.buzz?.enabled).toBe(true);
     expect(result.cfg.channels?.buzz?.defaultTo).toBe(ROOM_A);
