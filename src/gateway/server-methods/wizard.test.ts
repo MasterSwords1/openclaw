@@ -2,6 +2,7 @@
 import { expectDefined } from "@openclaw/normalization-core";
 import { describe, expect, it, vi } from "vitest";
 import { WizardSession } from "../../wizard/session.js";
+import { createWizardSessionTracker } from "../server-wizard-sessions.js";
 import type { GatewayRequestHandlerOptions } from "./types.js";
 import { wizardHandlers } from "./wizard.js";
 
@@ -97,7 +98,7 @@ describe("channel wizard lifecycle", () => {
     ).rejects.toThrow("cancelled before its persistent change started");
   });
 
-  it("resumes locked work for its owner after Browse all selects a channel", async () => {
+  it("resumes locked work through the first channel selected by Browse all", async () => {
     const wizardSessions = new Map<string, WizardSession>();
     const runCount = vi.fn();
     const context = {
@@ -115,6 +116,7 @@ describe("channel wizard lifecycle", () => {
       ) => {
         runCount();
         options.onResolvedChannel?.("matrix");
+        options.onResolvedChannel?.("twitch");
         await options.beforePersistentEffect?.();
         await prompter.confirm({ message: "Retry validation?" });
       },
@@ -241,6 +243,58 @@ describe("channel wizard lifecycle", () => {
       undefined,
     );
     expect(runCount).toHaveBeenCalledOnce();
+  });
+
+  it("reaps an expired retained result before same-owner recovery", async () => {
+    let now = 1_000;
+    const tracker = createWizardSessionTracker({ now: () => now });
+    const runCount = vi.fn();
+    const context = {
+      ...tracker,
+      channelWizardRunner: async (options: {
+        beforePersistentEffect?: () => Promise<void>;
+        onResolvedChannel?: (channel: string) => void;
+      }) => {
+        runCount();
+        options.onResolvedChannel?.("matrix");
+        await options.beforePersistentEffect?.();
+      },
+    };
+    const owner = {
+      connId: "owner-old-connection",
+      authenticatedUserId: "owner@example.com",
+      connect: { client: { id: "openclaw-control-ui", mode: "webchat" } },
+    };
+    const start = expectDefined(
+      wizardHandlers["wizard.start"],
+      "wizardHandlers[wizard.start] test invariant",
+    );
+    const firstRespond = vi.fn();
+
+    await start({
+      params: { flow: "channels", channel: "matrix" },
+      client: owner,
+      isConnectionActive: () => false,
+      respond: firstRespond,
+      context,
+    } as never);
+
+    const firstResult = firstRespond.mock.calls[0]?.[1] as { sessionId?: string } | undefined;
+    const firstSessionId = expectDefined(firstResult?.sessionId, "retained wizard session id");
+    expect(tracker.wizardSessions.has(firstSessionId)).toBe(true);
+
+    now += 5 * 60 * 1000;
+    const freshRespond = vi.fn();
+    await start({
+      params: { flow: "channels", channel: "matrix" },
+      client: { ...owner, connId: "owner-new-connection" },
+      respond: freshRespond,
+      context,
+    } as never);
+
+    const freshResult = freshRespond.mock.calls[0]?.[1] as { sessionId?: string } | undefined;
+    expect(freshResult?.sessionId).not.toBe(firstSessionId);
+    expect(runCount).toHaveBeenCalledTimes(2);
   });
 
   it("resumes locked shared-auth work after credential rotation", async () => {

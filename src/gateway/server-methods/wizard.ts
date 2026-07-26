@@ -145,6 +145,9 @@ export const wizardHandlers: GatewayRequestHandlers = {
     const ownerKey = owner?.key;
     const resumeKey =
       flow === "channels" ? resolveChannelWizardResumeKey(owner?.continuityKey) : undefined;
+    // The tracker owns terminal retention timestamps. Sweep before direct
+    // owner matching so an expired result cannot be replayed indefinitely.
+    let running = context.findRunningWizard();
     if (resumeKey) {
       const ownerSession = [...context.wizardSessions.entries()].find(([, session]) =>
         session.hasResumeKey(resumeKey),
@@ -171,13 +174,15 @@ export const wizardHandlers: GatewayRequestHandlers = {
           // exact owner. Abort it before the continuity owner starts fresh.
           staleSession.cancel();
           context.purgeWizardSession(staleId);
+          if (running === staleId) {
+            running = null;
+          }
         } else if (staleSession.getStatus() !== "running") {
           // A different requested channel is an explicit fresh-start intent.
           context.purgeWizardSession(staleId);
         }
       }
     }
-    const running = context.findRunningWizard();
     if (running) {
       respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, "wizard already running"));
       return;

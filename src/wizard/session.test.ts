@@ -256,6 +256,23 @@ describe("WizardSession", () => {
     expect(session.canResume("owner:channel-setup", "discord")).toBe(false);
   });
 
+  test("retains every canonical channel and alias selected by browse-all", async () => {
+    const session = new WizardSession(
+      async (_prompter, _signal, wizardSession) => {
+        wizardSession.setResolvedChannel("matrix", ["matrix-chat"]);
+        wizardSession.setResolvedChannel("twitch", ["twitch-chat"]);
+        expect(wizardSession.lockCancellation()).toBe(true);
+      },
+      { resumeKey: "owner:channel-setup" },
+    );
+
+    expect((await session.next()).status).toBe("done");
+    expect(session.canResume("owner:channel-setup", "matrix")).toBe(true);
+    expect(session.canResume("owner:channel-setup", "matrix-chat")).toBe(true);
+    expect(session.canResume("owner:channel-setup", "twitch")).toBe(true);
+    expect(session.canResume("owner:channel-setup", "twitch-chat")).toBe(true);
+  });
+
   test("expires an abandoned interactive session", async () => {
     vi.useFakeTimers();
     try {

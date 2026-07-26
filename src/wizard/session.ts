@@ -247,7 +247,7 @@ export class WizardSession {
   private ownerKey: string | undefined;
   private readonly resumeKey: string | undefined;
   private readonly requestedChannel: string | undefined;
-  private resolvedChannel: string | undefined;
+  private readonly resolvedChannels = new Set<string>();
   private readonly resolvedChannelAliases = new Set<string>();
   private answerDeferred = new Map<
     string,
@@ -331,10 +331,11 @@ export class WizardSession {
   /** Record the canonical channel selected by the setup registry. */
   setResolvedChannel(channel: string, aliases: readonly string[] = []): void {
     const resolvedChannel = normalizeChannelIdentity(channel);
-    if (resolvedChannel !== this.resolvedChannel) {
-      this.resolvedChannelAliases.clear();
+    if (resolvedChannel) {
+      // Browse-all can configure several channels before disconnecting. Keep
+      // every identity so recovery through the client's first selection works.
+      this.resolvedChannels.add(resolvedChannel);
     }
-    this.resolvedChannel = resolvedChannel;
     for (const alias of aliases) {
       const normalizedAlias = normalizeChannelIdentity(alias);
       if (normalizedAlias) {
@@ -425,7 +426,7 @@ export class WizardSession {
     }
     return (
       normalizedRequestedChannel === this.requestedChannel ||
-      normalizedRequestedChannel === this.resolvedChannel ||
+      this.resolvedChannels.has(normalizedRequestedChannel) ||
       this.resolvedChannelAliases.has(normalizedRequestedChannel)
     );
   }
