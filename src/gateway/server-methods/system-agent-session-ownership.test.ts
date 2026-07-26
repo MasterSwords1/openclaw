@@ -490,10 +490,7 @@ describe("openclaw.chat session responses", () => {
     const candidateEngine = makeEngine();
     const candidate = seededSession({ engine: candidateEngine });
     candidate.pendingApproval = { id: "approval-1", proposalHash: "hash-1" };
-    candidateEngine.dispose.mockImplementation(async () => {
-      await cleanupGate;
-      return true;
-    });
+    candidateEngine.dispose.mockReturnValue(cleanupGate.then(() => true));
     sessions.set("candidate", candidate);
     for (let index = 1; index < 8; index += 1) {
       const session = seededSession();
