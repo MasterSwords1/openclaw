@@ -87,12 +87,19 @@ function findWizardSessionOrRespond(params: {
   const owner = resolveGatewayHostedSessionOwner(params.client);
   const ownerKey = owner.kind === "stable" ? owner.key : undefined;
   if (!session.isAccessibleBy(ownerKey)) {
-    params.respond(
-      false,
-      undefined,
-      errorShape(ErrorCodes.INVALID_REQUEST, "wizard belongs to another caller"),
-    );
-    return null;
+    const continuityResumeKey =
+      owner.kind === "stable" ? resolveChannelWizardResumeKey(owner.continuityKey) : undefined;
+    if (!continuityResumeKey || !session.matchesResumeKey(continuityResumeKey)) {
+      params.respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_REQUEST, "wizard belongs to another caller"),
+      );
+      return null;
+    }
+    // Shared Gateway auth rotates its exact generation while preserving the
+    // continuity principal. Adopt only cancellation-locked channel work.
+    session.adoptOwner(owner.key);
   }
   return session;
 }

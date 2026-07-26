@@ -289,23 +289,6 @@ describe("channel wizard lifecycle", () => {
       | undefined;
     const sessionId = expectDefined(firstResult?.sessionId, "shared-auth wizard session id");
     const stepId = expectDefined(firstResult?.step?.id, "shared-auth wizard step id");
-    const resumedRespond = vi.fn();
-
-    await start({
-      params: { flow: "channels", channel: "matrix" },
-      client: sharedClient("generation-new", "connection-new"),
-      respond: resumedRespond,
-      context,
-    } as never);
-
-    expect(resumedRespond).toHaveBeenCalledWith(
-      true,
-      expect.objectContaining({
-        sessionId,
-        step: expect.objectContaining({ id: stepId }),
-      }),
-      undefined,
-    );
     const completedRespond = vi.fn();
     await next({
       params: { sessionId, answer: { stepId, value: true } },
