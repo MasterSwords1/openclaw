@@ -38,7 +38,13 @@ export function resolveSystemAgentSessionOwnerKey(params: {
     return delegationKey;
   }
   const owner = resolveGatewayHostedSessionOwner(params.client);
-  return owner.kind === "stable" ? owner.continuityKey : undefined;
+  // Ordinary auth-none chats are connection-scoped even though they cannot
+  // recover across reconnects. Stable owners use continuity for recovery.
+  return owner.kind === "stable"
+    ? owner.continuityKey
+    : owner.kind === "connection"
+      ? owner.key
+      : undefined;
 }
 
 /** Transfer one exact owner's retained wizard when its client rotates session ids. */

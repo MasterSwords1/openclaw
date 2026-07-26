@@ -439,6 +439,16 @@ describe("openclaw.chat session ownership", () => {
     expect(call).toMatchObject({ ok: false, error: { code: "INVALID_REQUEST" } });
   });
 
+  it("keeps device-less auth-none chats scoped to their connection", async () => {
+    const sessions = new Map<string, SystemAgentChatSession>();
+    const client = makeClient({ connId: "auth-none-connection" });
+
+    const call = await callChat(makeContext(sessions), { sessionId: "auth-none" }, client);
+
+    expect(call.ok).toBe(true);
+    expect(sessions.get("auth-none")?.ownerKey).toBe("connection:auth-none-connection");
+  });
+
   it("keeps explicit delegation authoritative across connection identities", async () => {
     const sessions = new Map<string, SystemAgentChatSession>();
     const context = makeContext(sessions);
