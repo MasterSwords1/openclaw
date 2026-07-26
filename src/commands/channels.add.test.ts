@@ -54,7 +54,9 @@ const channelWizardMocks = vi.hoisted(() => {
     confirm: vi.fn(async () => false),
     note: vi.fn(async () => undefined),
     select: vi.fn(),
+    multiselect: vi.fn(),
     text: vi.fn(),
+    progress: vi.fn(() => ({ update: vi.fn(), stop: vi.fn() })),
   };
   return {
     prompter,

@@ -238,9 +238,8 @@ export class WizardSession {
   private stepDeferred: Deferred<WizardStep | null> | null = null;
   private pendingTerminalResolution = false;
   private cancellationLocked = false;
-  private lastTerminalResultConnectionId: string | undefined;
   private pendingExternalUrl: string | undefined;
-  private readonly ownerKey: string | undefined;
+  private ownerKey: string | undefined;
   private readonly resumeKey: string | undefined;
   private answerDeferred = new Map<
     string,
@@ -377,24 +376,23 @@ export class WizardSession {
   }
 
   /**
-   * A replacement connection may reclaim locked work. Once a terminal result
-   * was attempted on a connection, another start on that same connection is
-   * treated as acknowledgement and may create fresh work.
+   * Locked work remains replayable for the same flow. A terminal result can be
+   * released only when the owner explicitly starts a different channel.
    */
-  canResume(resumeKey: string, connectionId?: string): boolean {
+  canResume(resumeKey: string, requestedChannel?: string): boolean {
     if (!this.matchesResumeKey(resumeKey)) {
       return false;
     }
-    return (
-      this.status === "running" ||
-      connectionId === undefined ||
-      this.lastTerminalResultConnectionId !== connectionId
-    );
+    if (this.status === "running" || !requestedChannel || !this.configuredAccounts) {
+      return true;
+    }
+    return this.configuredAccounts.some((entry) => entry.channel === requestedChannel);
   }
 
-  markTerminalResultDelivery(connectionId: string | undefined): void {
-    if (this.status !== "running" && connectionId) {
-      this.lastTerminalResultConnectionId = connectionId;
+  /** Transfer authenticated ownership after shared Gateway credentials rotate. */
+  adoptOwner(ownerKey: string | undefined): void {
+    if (this.cancellationLocked && ownerKey) {
+      this.ownerKey = ownerKey;
     }
   }
 

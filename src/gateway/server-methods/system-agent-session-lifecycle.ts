@@ -20,7 +20,7 @@ export function resolveSystemAgentSessionOwnerKey(params: {
     return delegationKey;
   }
   const owner = resolveGatewayHostedSessionOwner(params.client);
-  return owner.kind === "stable" ? owner.key : undefined;
+  return owner.kind === "stable" ? owner.continuityKey : undefined;
 }
 
 /** Transfer one exact owner's retained wizard when its client rotates session ids. */

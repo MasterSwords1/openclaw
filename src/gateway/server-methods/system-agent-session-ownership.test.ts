@@ -88,6 +88,7 @@ function makeClient(params: {
   connId: string;
   deviceId?: string;
   authenticatedUserId?: string;
+  sharedAuthGeneration?: string;
 }): GatewayClient {
   return {
     connId: params.connId,
@@ -96,6 +97,12 @@ function makeClient(params: {
       ...(params.deviceId ? { device: { id: params.deviceId } } : {}),
     },
     ...(params.authenticatedUserId ? { authenticatedUserId: params.authenticatedUserId } : {}),
+    ...(params.sharedAuthGeneration
+      ? {
+          usesSharedGatewayAuth: true,
+          sharedGatewaySessionGeneration: params.sharedAuthGeneration,
+        }
+      : {}),
   } as GatewayClient;
 }
 
@@ -333,6 +340,26 @@ describe("openclaw.chat session ownership", () => {
     expect(handle).toHaveBeenCalledWith("continue");
   });
 
+  it("lets shared-auth sessions resume after credential rotation", async () => {
+    const sessions = new Map<string, SystemAgentChatSession>();
+    const context = makeContext(sessions);
+    await callChat(
+      context,
+      { sessionId: "shared-auth-reconnect" },
+      makeClient({ connId: "conn-old", sharedAuthGeneration: "generation-old" }),
+    );
+    const handle = expectDefined(createdEngines[0], "created system-agent engine").handle;
+
+    const resumed = await callChat(
+      context,
+      { sessionId: "shared-auth-reconnect", message: "continue" },
+      makeClient({ connId: "conn-new", sharedAuthGeneration: "generation-new" }),
+    );
+
+    expect(resumed.ok).toBe(true);
+    expect(handle).toHaveBeenCalledWith("continue");
+  });
+
   it("rejects non-delegated chat without a server-authenticated identity", async () => {
     const call = await callChat(makeContext(new Map()), { sessionId: "anonymous" }, null);
 
@@ -460,9 +487,10 @@ describe("openclaw.chat session responses", () => {
       releaseCleanup = resolve;
     });
     const sessions = new Map<string, SystemAgentChatSession>();
-    const candidate = seededSession();
+    const candidateEngine = makeEngine();
+    const candidate = seededSession({ engine: candidateEngine });
     candidate.pendingApproval = { id: "approval-1", proposalHash: "hash-1" };
-    candidate.engine.dispose.mockImplementation(async () => {
+    candidateEngine.dispose.mockImplementation(async () => {
       await cleanupGate;
       return true;
     });

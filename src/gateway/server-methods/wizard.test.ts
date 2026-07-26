@@ -226,6 +226,84 @@ describe("channel wizard lifecycle", () => {
     expect(runCount).toHaveBeenCalledOnce();
   });
 
+  it("resumes locked shared-auth work after credential rotation", async () => {
+    const wizardSessions = new Map<string, WizardSession>();
+    const runCount = vi.fn();
+    const context = {
+      wizardSessions,
+      findRunningWizard: () =>
+        [...wizardSessions].find(([, session]) => session.getStatus() === "running")?.[0] ?? null,
+      purgeWizardSession: (id: string) => wizardSessions.delete(id),
+      channelWizardRunner: async (
+        options: { beforePersistentEffect?: () => Promise<void> },
+        _runtime: unknown,
+        prompter: { confirm: (params: { message: string }) => Promise<boolean> },
+      ) => {
+        runCount();
+        await options.beforePersistentEffect?.();
+        await prompter.confirm({ message: "Retry validation?" });
+      },
+    };
+    const sharedClient = (generation: string, connId: string) => ({
+      connId,
+      usesSharedGatewayAuth: true,
+      sharedGatewaySessionGeneration: generation,
+      connect: { client: { id: "openclaw-control-ui", mode: "webchat" } },
+    });
+    const start = expectDefined(
+      wizardHandlers["wizard.start"],
+      "wizardHandlers[wizard.start] test invariant",
+    );
+    const next = expectDefined(
+      wizardHandlers["wizard.next"],
+      "wizardHandlers[wizard.next] test invariant",
+    );
+    const firstRespond = vi.fn();
+
+    await start({
+      params: { flow: "channels", channel: "matrix" },
+      client: sharedClient("generation-old", "connection-old"),
+      respond: firstRespond,
+      context,
+    } as never);
+
+    const firstResult = firstRespond.mock.calls[0]?.[1] as
+      | { sessionId?: string; step?: { id?: string } }
+      | undefined;
+    const sessionId = expectDefined(firstResult?.sessionId, "shared-auth wizard session id");
+    const stepId = expectDefined(firstResult?.step?.id, "shared-auth wizard step id");
+    const resumedRespond = vi.fn();
+
+    await start({
+      params: { flow: "channels", channel: "matrix" },
+      client: sharedClient("generation-new", "connection-new"),
+      respond: resumedRespond,
+      context,
+    } as never);
+
+    expect(resumedRespond).toHaveBeenCalledWith(
+      true,
+      expect.objectContaining({
+        sessionId,
+        step: expect.objectContaining({ id: stepId }),
+      }),
+      undefined,
+    );
+    const completedRespond = vi.fn();
+    await next({
+      params: { sessionId, answer: { stepId, value: true } },
+      client: sharedClient("generation-new", "connection-new"),
+      respond: completedRespond,
+      context,
+    } as never);
+    expect(completedRespond).toHaveBeenCalledWith(
+      true,
+      expect.objectContaining({ done: true, status: "done" }),
+      undefined,
+    );
+    expect(runCount).toHaveBeenCalledOnce();
+  });
+
   it("returns an owner's retained terminal result without rerunning setup", async () => {
     const wizardSessions = new Map<string, WizardSession>();
     const runCount = vi.fn();
@@ -272,7 +350,11 @@ describe("channel wizard lifecycle", () => {
       undefined,
     );
 
-    for (const connId of ["owner-new-connection", "owner-retry-connection"]) {
+    for (const connId of [
+      "owner-old-connection",
+      "owner-new-connection",
+      "owner-retry-connection",
+    ]) {
       const recoveredRespond = vi.fn();
       await start({
         params: { flow: "channels", channel: "matrix" },
