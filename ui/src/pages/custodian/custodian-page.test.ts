@@ -175,6 +175,8 @@ describe("custodian page", () => {
 
     page.querySelector<HTMLButtonElement>("[data-option-value]")?.click();
     await waitForFast(() => expect(request).toHaveBeenCalledTimes(2));
+    await page.updateComplete;
+    expect(page.querySelector(".custodian__qr-code")).toBeNull();
     expect(request.mock.calls[1]?.[1]).toMatchObject({
       capabilities: { qrCodePng: true },
       message: "Continue",

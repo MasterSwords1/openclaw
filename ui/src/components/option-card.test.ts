@@ -85,6 +85,7 @@ describe("option card", () => {
       html`<openclaw-option-card
         .props=${{
           question: "Acknowledge",
+          presentation: "action",
           options: [{ value: "continue", label: "Continue" }],
         }}
       ></openclaw-option-card>`,
@@ -93,5 +94,9 @@ describe("option card", () => {
     await container.querySelector("openclaw-option-card")!.updateComplete;
 
     expect(container.querySelector(".option-card__skip")).toBeNull();
+    expect(container.querySelector(".option-card__choices")?.getAttribute("role")).toBeNull();
+    const action = container.querySelector(".option-card__choice");
+    expect(action?.getAttribute("role")).toBeNull();
+    expect(action?.getAttribute("aria-checked")).toBeNull();
   });
 });

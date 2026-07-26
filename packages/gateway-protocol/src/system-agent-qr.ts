@@ -250,13 +250,17 @@ export function isSystemAgentQrCodePngBase64(value: unknown): value is string {
   return parsePng(value) !== null;
 }
 
+export function canDecodeSystemAgentQrCodePngBase64(): boolean {
+  return typeof globalThis.DecompressionStream === "function";
+}
+
 export async function isDecodableSystemAgentQrCodePngBase64(value: unknown): Promise<boolean> {
   const png = parsePng(value);
-  if (!png) {
+  if (!png || !canDecodeSystemAgentQrCodePngBase64()) {
     return false;
   }
   try {
-    const decompressor = new DecompressionStream("deflate");
+    const decompressor = new globalThis.DecompressionStream("deflate");
     const compressedData = new Uint8Array(png.compressedData.byteLength);
     compressedData.set(png.compressedData);
     const writePromise = (async () => {

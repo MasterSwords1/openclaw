@@ -1,8 +1,32 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { GatewayRequestError, type GatewayBrowserClient } from "../../api/gateway.ts";
 import { requestCustodianChat } from "./chat-request.ts";
 
 describe("requestCustodianChat", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("does not advertise QR support without a browser decoder", async () => {
+    vi.stubGlobal("DecompressionStream", undefined);
+    const request = vi.fn().mockResolvedValue({
+      sessionId: "setup-session",
+      reply: "Continue setup.",
+      action: "none",
+    });
+    const client = { request, connectionGeneration: 1 } as unknown as GatewayBrowserClient;
+
+    await requestCustodianChat({
+      client,
+      request: { sessionId: "setup-session" },
+      onSent: vi.fn(),
+      onCompatibilityRetry: vi.fn(),
+    });
+
+    expect(request).toHaveBeenCalledOnce();
+    expect(request.mock.calls[0]?.[1]).not.toHaveProperty("capabilities");
+  });
+
   it("resets delivery state before retrying an old gateway request shape", async () => {
     const deliveryStates: string[] = [];
     const request = vi

@@ -141,6 +141,7 @@ export function renderCustodianTranscriptEntry(params: {
   message: CustodianMessage;
   boundaryAfterId: number | null;
   showQuestion: boolean;
+  showQrCode: boolean;
   questionDisabled: boolean;
   onSelect: (label: string) => void;
   onSkip: () => void;
@@ -155,7 +156,7 @@ export function renderCustodianTranscriptEntry(params: {
           assistantAvatar: "OC",
         })
       : nothing}
-    ${params.message.qrCodePngBase64
+    ${params.showQrCode && params.message.qrCodePngBase64
       ? html`<div class="custodian__qr-code">
           <img
             src=${`data:image/png;base64,${params.message.qrCodePngBase64}`}

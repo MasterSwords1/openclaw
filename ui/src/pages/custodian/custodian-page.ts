@@ -671,6 +671,7 @@ export class CustodianPage extends OpenClawLightDomElement {
               message,
               boundaryAfterId: this.earlierBoundaryAfterId,
               showQuestion,
+              showQrCode: showQuestion && !this.answeredQuestions.has(questionKey),
               questionDisabled:
                 this.sending || !this.chatAvailable || this.answeredQuestions.has(questionKey),
               onSelect: (label) => this.answerQuestion(message, label),

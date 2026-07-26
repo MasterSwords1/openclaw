@@ -20,6 +20,7 @@ describe("custodian typed question", () => {
       id: "onboarding-next-step",
       header: "Next step",
       question: "What would you like to do first?",
+      presentation: "choices",
       options: [
         { label: "Talk to my agent", reply: "talk to agent", recommended: true },
         { label: "Connect WhatsApp", reply: "connect whatsapp", description: "Chat there." },
@@ -51,6 +52,7 @@ describe("custodian typed question", () => {
     });
     expect(parsed?.options).toEqual([{ label: "Continue" }]);
     expect(parsed?.allowSkip).toBe(false);
+    expect(parsed?.presentation).toBe("action");
   });
 
   it("rejects malformed questions instead of rendering broken cards", () => {

@@ -4,6 +4,7 @@ export type CustodianStructuredQuestion = {
   id: string;
   header: string;
   question: string;
+  presentation: "choices" | "action";
   options: Array<{ label: string; description?: string; recommended?: boolean; reply?: string }>;
   isOther: boolean;
   allowSkip: boolean;
@@ -60,6 +61,7 @@ export function parseCustodianQuestion(
     id,
     header,
     question,
+    presentation: options.length === 1 && value.allowSkip === false ? "action" : "choices",
     options,
     isOther: value.isOther === true,
     allowSkip: value.allowSkip !== false,

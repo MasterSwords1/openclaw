@@ -1,4 +1,5 @@
 import {
+  canDecodeSystemAgentQrCodePngBase64,
   isDecodableSystemAgentQrCodePngBase64,
   type SystemAgentChatParams,
   type SystemAgentChatResult,
@@ -44,6 +45,11 @@ export async function requestCustodianChat(params: {
     onSent: params.onSent,
   };
   if (legacyChatClientGenerations.get(params.client) === params.client.connectionGeneration) {
+    return validateChatResult(
+      await params.client.request<SystemAgentChatResult>("openclaw.chat", params.request, options),
+    );
+  }
+  if (!canDecodeSystemAgentQrCodePngBase64()) {
     return validateChatResult(
       await params.client.request<SystemAgentChatResult>("openclaw.chat", params.request, options),
     );

@@ -13,6 +13,7 @@ export function renderCustodianQuestionCard(params: {
       .props=${{
         header: params.question.header,
         question: params.question.question,
+        presentation: params.question.presentation,
         options: params.question.options.map((option) => ({
           value: option.label,
           label: option.label,

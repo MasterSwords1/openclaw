@@ -13,6 +13,7 @@ type OptionCardOption = {
 type OptionCardProps = {
   header?: string;
   question: string;
+  presentation?: "choices" | "action";
   options: readonly OptionCardOption[];
   disabled?: boolean;
   onSelect?: (value: string) => void;
@@ -35,6 +36,7 @@ class OptionCard extends LitElement {
       ? JSON.stringify([
           props.header ?? "",
           props.question,
+          props.presentation ?? "choices",
           props.options.map((option) => [option.value, option.label, option.recommended === true]),
         ])
       : "";
@@ -43,7 +45,9 @@ class OptionCard extends LitElement {
     }
     this.requestKey = requestKey;
     this.selectedValue =
-      props?.options.slice(0, 4).find((option) => option.recommended)?.value ?? "";
+      props?.presentation === "action"
+        ? ""
+        : (props?.options.slice(0, 4).find((option) => option.recommended)?.value ?? "");
     this.focusPreselection = Boolean(this.selectedValue);
   }
 
@@ -62,7 +66,9 @@ class OptionCard extends LitElement {
     if (this.props?.disabled) {
       return;
     }
-    this.selectedValue = value;
+    if (this.props?.presentation !== "action") {
+      this.selectedValue = value;
+    }
     this.props?.onSelect?.(value);
     this.dispatchEvent(
       new CustomEvent<{ value: string }>("option-select", {
@@ -87,23 +93,26 @@ class OptionCard extends LitElement {
       return nothing;
     }
     const options = props.options.slice(0, 4);
-    const recommendedIndex = options.findIndex((option) => option.recommended === true);
+    const isAction = props.presentation === "action";
+    const recommendedIndex = isAction
+      ? -1
+      : options.findIndex((option) => option.recommended === true);
     return html`
       <section class="option-card" role="group" aria-label=${props.question}>
         ${props.header ? html`<div class="option-card__chip">${props.header}</div>` : nothing}
         <div class="option-card__question">${props.question}</div>
-        <div class="option-card__choices" role="radiogroup">
+        <div class="option-card__choices" role=${isAction ? nothing : "radiogroup"}>
           ${options.map((option, index) => {
             const recommended = index === recommendedIndex;
-            const selected = option.value === this.selectedValue;
+            const selected = !isAction && option.value === this.selectedValue;
             return html`
               <button
                 class=${`option-card__choice ${
                   recommended ? "option-card__choice--recommended" : ""
                 } ${selected ? "option-card__choice--selected" : ""}`}
                 type="button"
-                role="radio"
-                aria-checked=${selected ? "true" : "false"}
+                role=${isAction ? nothing : "radio"}
+                aria-checked=${isAction ? nothing : selected ? "true" : "false"}
                 data-option-value=${option.value}
                 ?disabled=${props.disabled}
                 @click=${() => this.select(option.value)}
