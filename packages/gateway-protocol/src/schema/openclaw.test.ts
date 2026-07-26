@@ -1,6 +1,7 @@
 import { Value } from "typebox/value";
 import { describe, expect, it } from "vitest";
 import {
+  isDecodableSystemAgentQrCodePngBase64,
   isSystemAgentQrCodePngBase64,
   SYSTEM_AGENT_QR_CODE_PNG_BASE64_MAX_LENGTH,
   validateSystemAgentChatHistoryParams,
@@ -16,7 +17,7 @@ import {
 } from "./openclaw.js";
 
 const PNG_BASE64 =
-  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZrXcAAAAASUVORK5CYII=";
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
 
 describe("OpenClaw chat params protocol", () => {
   it("accepts an additive QR rendering capability", () => {
@@ -65,7 +66,7 @@ describe("OpenClaw chat question protocol", () => {
 });
 
 describe("OpenClaw chat result protocol", () => {
-  it("accepts an additive PNG QR image", () => {
+  it("accepts an additive PNG QR image", async () => {
     expect(
       Value.Check(SystemAgentChatResultSchema, {
         sessionId: "setup-session",
@@ -75,9 +76,20 @@ describe("OpenClaw chat result protocol", () => {
       }),
     ).toBe(true);
     expect(isSystemAgentQrCodePngBase64(PNG_BASE64)).toBe(true);
+    await expect(isDecodableSystemAgentQrCodePngBase64(PNG_BASE64)).resolves.toBe(true);
     expect(isSystemAgentQrCodePngBase64("cG5n")).toBe(false);
     expect(isSystemAgentQrCodePngBase64("iVBORw0KGgo=")).toBe(false);
     expect(isSystemAgentQrCodePngBase64(PNG_BASE64.slice(0, -4))).toBe(false);
+    expect(
+      isSystemAgentQrCodePngBase64(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB/wAAAADAahcYAAAAB0lEQVRnYXJiYWdliKMwNwAAAABJRU5ErkJggg==",
+      ),
+    ).toBe(false);
+    await expect(
+      isDecodableSystemAgentQrCodePngBase64(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAB0lEQVRnYXJiYWdliKMwNwAAAABJRU5ErkJggg==",
+      ),
+    ).resolves.toBe(false);
     expect(
       isSystemAgentQrCodePngBase64(
         `iVBORw0KGgo${"A".repeat(SYSTEM_AGENT_QR_CODE_PNG_BASE64_MAX_LENGTH)}`,

@@ -1,6 +1,6 @@
 // Wizard session helpers track onboarding session ids and state.
 import { randomUUID } from "node:crypto";
-import { isSystemAgentQrCodePngBase64 } from "@openclaw/gateway-protocol";
+import { isDecodableSystemAgentQrCodePngBase64 } from "@openclaw/gateway-protocol";
 import { createDeferred, type Deferred } from "../shared/deferred.js";
 import {
   WizardCancelledError,
@@ -70,7 +70,7 @@ class WizardSessionPrompter implements WizardPrompter {
   ) {
     if (supportsQrCode) {
       this.qrCode = async (params) => {
-        if (!isSystemAgentQrCodePngBase64(params.pngBase64)) {
+        if (!(await isDecodableSystemAgentQrCodePngBase64(params.pngBase64))) {
           throw new Error("Wizard QR code must be a canonical base64-encoded PNG under 1 MB.");
         }
         const result = await this.prompt({

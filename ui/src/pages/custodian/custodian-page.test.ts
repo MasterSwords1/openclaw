@@ -6,7 +6,7 @@ import { waitForFast } from "../../test-helpers/wait-for.ts";
 import { createContext, mountPage } from "./custodian-page.test-harness.ts";
 
 const PNG_BASE64 =
-  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZrXcAAAAASUVORK5CYII=";
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
 
 describe("custodian page", () => {
   beforeEach(() => {
@@ -163,8 +163,9 @@ describe("custodian page", () => {
     const { context } = createContext(request);
     const { page } = await mountPage(context);
 
-    await waitForFast(() => expect(request).toHaveBeenCalledOnce());
-    await page.updateComplete;
+    await waitForFast(() =>
+      expect(page.querySelector<HTMLImageElement>(".custodian__qr-code img")).not.toBeNull(),
+    );
 
     const image = page.querySelector<HTMLImageElement>(".custodian__qr-code img");
     expect(image?.getAttribute("src")).toBe(`data:image/png;base64,${PNG_BASE64}`);

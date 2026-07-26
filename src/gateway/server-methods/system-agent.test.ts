@@ -524,7 +524,7 @@ describe("openclaw.chat", () => {
 
   it("returns caller-supplied QR bytes only to clients that negotiated support", async () => {
     const pngBase64 =
-      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZrXcAAAAASUVORK5CYII=";
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
     vi.spyOn(
       verifiedInferenceRuntime,
       "resolveSystemAgentVerifiedInferenceRoute",

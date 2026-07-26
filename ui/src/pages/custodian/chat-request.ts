@@ -1,5 +1,5 @@
 import {
-  isSystemAgentQrCodePngBase64,
+  isDecodableSystemAgentQrCodePngBase64,
   type SystemAgentChatParams,
   type SystemAgentChatResult,
 } from "@openclaw/gateway-protocol";
@@ -19,14 +19,18 @@ function shouldRetryWithoutCapabilities(error: unknown, params: SystemAgentChatP
   );
 }
 
-function validateChatResult(result: SystemAgentChatResult): SystemAgentChatResult {
-  if (
-    result.qrCodePngBase64 !== undefined &&
-    !isSystemAgentQrCodePngBase64(result.qrCodePngBase64)
-  ) {
-    throw new Error(t("custodian.invalidSetupQrCode"));
+function validateChatResult(
+  result: SystemAgentChatResult,
+): SystemAgentChatResult | Promise<SystemAgentChatResult> {
+  if (result.qrCodePngBase64 === undefined) {
+    return result;
   }
-  return result;
+  return isDecodableSystemAgentQrCodePngBase64(result.qrCodePngBase64).then((valid) => {
+    if (!valid) {
+      throw new Error(t("custodian.invalidSetupQrCode"));
+    }
+    return result;
+  });
 }
 
 export async function requestCustodianChat(params: {
