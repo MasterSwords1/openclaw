@@ -307,6 +307,8 @@ export type SetupChannelsOptions = {
   beforePersistentEffect?: () => Promise<void>;
   /** Cancels reversible setup work when the controlling hosted session stops. */
   abortSignal?: AbortSignal;
+  /** Reports a canonical channel as soon as the user enters its setup flow. */
+  onChannelSelected?: (channel: ChannelId) => void;
   onSelection?: (selection: ChannelId[]) => void;
   onPostWriteHook?: (hook: ChannelOnboardingPostWriteHook) => void;
   accountIds?: Partial<Record<ChannelId, string>>;

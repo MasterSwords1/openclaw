@@ -456,6 +456,7 @@ export const systemAgentHandlers: GatewayRequestHandlers = {
     await runSystemAgentGatewayTask(async () => {
       const sessions = context.systemAgentSessions;
       const sessionId = params.sessionId;
+      const welcomeOnly = params.message === undefined || !params.message.trim();
       // Initialization, resets, and turns share one per-session queue. Without
       // it, concurrent first messages can create competing engines and lose
       // conversation state when the later initializer replaces the first.
@@ -487,6 +488,7 @@ export const systemAgentHandlers: GatewayRequestHandlers = {
             sessionId,
             ownerKey,
             reset: params.reset === true,
+            allowAdoption: welcomeOnly,
           });
           if (adoption.kind === "ambiguous") {
             respond(
@@ -507,6 +509,17 @@ export const systemAgentHandlers: GatewayRequestHandlers = {
             );
             return;
           }
+          if (adoption.kind === "welcome-required") {
+            respond(
+              false,
+              undefined,
+              errorShape(
+                ErrorCodes.INVALID_REQUEST,
+                "Restart OpenClaw to recover the channel setup already in progress.",
+              ),
+            );
+            return;
+          }
         }
         if (params.reset && !(await resetSystemAgentSession({ sessions, sessionId, context }))) {
           respond(
@@ -518,7 +531,6 @@ export const systemAgentHandlers: GatewayRequestHandlers = {
         }
         let session = sessions.get(sessionId);
         let greetingAuditSequence: number | undefined;
-        const welcomeOnly = params.message === undefined || !params.message.trim();
         if (!session) {
           const inference = params.delegation
             ? await import("../../system-agent/inference-fallback.js").then(

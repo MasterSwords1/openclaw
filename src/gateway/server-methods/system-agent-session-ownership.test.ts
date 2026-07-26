@@ -186,7 +186,7 @@ describe("openclaw.chat session ownership", () => {
         wizardInputPending: true,
       },
     });
-    expect(sessions.has("old-session")).toBe(false);
+    expect(sessions.has("old-session")).toBe(true);
     expect(sessions.get("new-session")?.engine).toBe(retained);
     expect(retained.resumeLockedHostedWizard).toHaveBeenCalledOnce();
     expect(createdEngines).toHaveLength(0);
@@ -202,6 +202,33 @@ describe("openclaw.chat session ownership", () => {
       },
     });
     expect(retained.resumeLockedHostedWizard).toHaveBeenCalledTimes(2);
+    expect(createdEngines).toHaveLength(0);
+
+    const original = await callChat(makeContext(sessions), {
+      sessionId: "old-session",
+      message: "yes",
+    });
+
+    expect(original.ok).toBe(true);
+    expect(retained.handle).toHaveBeenCalledWith("yes");
+  });
+
+  it("requires a welcome handshake before aliasing a locked wizard", async () => {
+    const retained = makeEngine();
+    retained.hasLockedHostedWizard.mockReturnValue(true);
+    const sessions = new Map<string, SystemAgentChatSession>([
+      ["old-session", seededSession({ engine: retained })],
+    ]);
+
+    const call = await callChat(makeContext(sessions), {
+      sessionId: "unproven-session",
+      message: "yes",
+    });
+
+    expect(call).toMatchObject({ ok: false, error: { code: "INVALID_REQUEST" } });
+    expect(sessions.has("old-session")).toBe(true);
+    expect(sessions.has("unproven-session")).toBe(false);
+    expect(retained.handle).not.toHaveBeenCalled();
     expect(createdEngines).toHaveLength(0);
   });
 

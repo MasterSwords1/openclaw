@@ -430,6 +430,7 @@ describe("setupChannels workspace shadow exclusion", () => {
     );
     const select = vi.fn().mockResolvedValueOnce("custom-chat").mockResolvedValueOnce("__done__");
     const abortController = new AbortController();
+    const onChannelSelected = vi.fn();
 
     const next = await setupChannels(
       {} as never,
@@ -444,9 +445,11 @@ describe("setupChannels workspace shadow exclusion", () => {
         skipConfirm: true,
         skipDmPolicyPrompt: true,
         abortSignal: abortController.signal,
+        onChannelSelected,
       },
     );
 
+    expect(onChannelSelected).toHaveBeenCalledWith("custom-chat");
     expect(loadChannelSetupPluginRegistrySnapshotForChannel).not.toHaveBeenCalled();
     const configureInput = callArg<{
       cfg?: unknown;

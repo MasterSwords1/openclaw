@@ -619,6 +619,7 @@ export async function setupChannels(
   const handleChannelChoice = async (
     channel: ChannelChoice,
   ): Promise<"done" | "retry_selection"> => {
+    options?.onChannelSelected?.(channel);
     const cfgBeforeChoice = next;
     let cfgOnBack = cfgBeforeChoice;
     const scopedPluginsBeforeChoice = new Map(scopedPluginsById);

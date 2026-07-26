@@ -8,7 +8,25 @@ type LockedWizardAdoption =
   | { kind: "none" }
   | { kind: "adopted" }
   | { kind: "ambiguous" }
-  | { kind: "reset-refused" };
+  | { kind: "reset-refused" }
+  | { kind: "welcome-required" };
+
+const MAX_SYSTEM_AGENT_SESSION_ALIASES = 4;
+
+function deleteSystemAgentSessionAliases(
+  sessions: SystemAgentSessionMap,
+  target: SystemAgentSessionMap extends Map<string, infer Session> ? Session : never,
+): void {
+  for (const [candidateId, candidate] of sessions) {
+    if (candidate === target) {
+      sessions.delete(candidateId);
+    }
+  }
+}
+
+function listUniqueSystemAgentSessions(sessions: SystemAgentSessionMap) {
+  return [...new Set(sessions.values())];
+}
 
 export function resolveSystemAgentSessionOwnerKey(params: {
   delegation?: { agentId?: string; sessionKey?: string };
@@ -29,26 +47,38 @@ export function adoptLockedSystemAgentWizard(params: {
   sessionId: string;
   ownerKey: string;
   reset: boolean;
+  allowAdoption: boolean;
 }): LockedWizardAdoption {
-  const retainedEntries = [...params.sessions.entries()].filter(
-    ([candidateId, candidate]) =>
-      candidateId !== params.sessionId &&
-      candidate.ownerKey === params.ownerKey &&
-      candidate.engine.hasLockedHostedWizard(),
+  const retainedSessions = listUniqueSystemAgentSessions(params.sessions).filter(
+    (candidate) =>
+      candidate.ownerKey === params.ownerKey && candidate.engine.hasLockedHostedWizard(),
   );
-  if (retainedEntries.length > 1) {
+  if (retainedSessions.length > 1) {
     return { kind: "ambiguous" };
   }
-  const retainedEntry = retainedEntries[0];
-  if (!retainedEntry) {
+  const retainedSession = retainedSessions[0];
+  if (!retainedSession) {
     return { kind: "none" };
   }
   if (params.reset) {
     return { kind: "reset-refused" };
   }
-  const [retainedSessionId, retainedSession] = retainedEntry;
-  params.sessions.delete(retainedSessionId);
+  if (!params.allowAdoption) {
+    return { kind: "welcome-required" };
+  }
+  // A successful welcome-only request is the protocol-free recovery
+  // handshake. Keep prior ids as aliases so an original tab cannot lose its
+  // locked state merely because another same-owner surface reconnects.
   params.sessions.set(params.sessionId, retainedSession);
+  const aliases = [...params.sessions.entries()]
+    .filter(([, candidate]) => candidate === retainedSession)
+    .map(([candidateId]) => candidateId);
+  for (const staleAlias of aliases.slice(
+    0,
+    Math.max(0, aliases.length - MAX_SYSTEM_AGENT_SESSION_ALIASES),
+  )) {
+    params.sessions.delete(staleAlias);
+  }
   return { kind: "adopted" };
 }
 
@@ -62,7 +92,9 @@ export async function resetSystemAgentSession(params: {
   if (existing?.engine.hasLockedHostedWizard()) {
     return false;
   }
-  params.sessions.delete(params.sessionId);
+  if (existing) {
+    deleteSystemAgentSessionAliases(params.sessions, existing);
+  }
   if (existing?.pendingApproval) {
     params.context.systemAgentApprovalManager?.expire(existing.pendingApproval.id, "session-reset");
   }
@@ -78,19 +110,18 @@ export async function evictOldestSystemAgentSession(
   context: GatewayRequestContext,
   maxSessions: number,
 ): Promise<boolean> {
-  if (sessions.size < maxSessions) {
+  const uniqueSessions = listUniqueSystemAgentSessions(sessions);
+  if (uniqueSessions.length < maxSessions) {
     return true;
   }
-  const oldestFirst = [...sessions.entries()].toSorted(([, left], [, right]) => {
-    return left.lastUsedAt - right.lastUsedAt;
-  });
-  for (const [key, session] of oldestFirst) {
+  const oldestFirst = uniqueSessions.toSorted((left, right) => left.lastUsedAt - right.lastUsedAt);
+  for (const session of oldestFirst) {
     if (session.engine.hasLockedHostedWizard()) {
       continue;
     }
     // Remove authority before cleanup yields so a concurrent approval callback
     // cannot pass its session-identity check while this session is retiring.
-    sessions.delete(key);
+    deleteSystemAgentSessionAliases(sessions, session);
     if (session.pendingApproval) {
       context.systemAgentApprovalManager?.expire(session.pendingApproval.id, "session-evicted");
     }

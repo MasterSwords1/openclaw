@@ -106,11 +106,15 @@ describe("channel wizard lifecycle", () => {
         [...wizardSessions].find(([, session]) => session.getStatus() === "running")?.[0] ?? null,
       purgeWizardSession: (id: string) => wizardSessions.delete(id),
       channelWizardRunner: async (
-        options: { beforePersistentEffect?: () => Promise<void> },
+        options: {
+          beforePersistentEffect?: () => Promise<void>;
+          onResolvedChannel?: (channel: string) => void;
+        },
         _runtime: unknown,
         prompter: { confirm: (params: { message: string }) => Promise<boolean> },
       ) => {
         runCount();
+        options.onResolvedChannel?.("matrix");
         await options.beforePersistentEffect?.();
         await prompter.confirm({ message: "Retry validation?" });
       },
@@ -192,6 +196,19 @@ describe("channel wizard lifecycle", () => {
       false,
       undefined,
       expect.objectContaining({ code: "INVALID_REQUEST" }),
+    );
+
+    const mismatchedRespond = vi.fn();
+    await start({
+      params: { flow: "channels", channel: "discord" },
+      client: reconnectedOwner,
+      respond: mismatchedRespond,
+      context,
+    } as never);
+    expect(mismatchedRespond).toHaveBeenCalledWith(
+      false,
+      undefined,
+      expect.objectContaining({ code: "UNAVAILABLE" }),
     );
 
     const resumedRespond = vi.fn();

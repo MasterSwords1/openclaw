@@ -112,6 +112,9 @@ export async function runChannelsAddWizardFlow(params: ChannelsAddWizardFlowPara
       : {}),
     ...(params.abortSignal ? { abortSignal: params.abortSignal } : {}),
     ...(params.deferDeviceLinkToClient ? { deferDeviceLinkToClient: true } : {}),
+    ...(params.onResolvedChannel
+      ? { onChannelSelected: (channel: ChannelChoice) => params.onResolvedChannel?.(channel) }
+      : {}),
     onPostWriteHook: (hook) => {
       postWriteHooks.collect(hook);
     },

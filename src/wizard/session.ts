@@ -330,7 +330,11 @@ export class WizardSession {
 
   /** Record the canonical channel selected by the setup registry. */
   setResolvedChannel(channel: string, aliases: readonly string[] = []): void {
-    this.resolvedChannel = normalizeChannelIdentity(channel);
+    const resolvedChannel = normalizeChannelIdentity(channel);
+    if (resolvedChannel !== this.resolvedChannel) {
+      this.resolvedChannelAliases.clear();
+    }
+    this.resolvedChannel = resolvedChannel;
     for (const alias of aliases) {
       const normalizedAlias = normalizeChannelIdentity(alias);
       if (normalizedAlias) {
@@ -409,7 +413,7 @@ export class WizardSession {
       return false;
     }
     const normalizedRequestedChannel = normalizeChannelIdentity(requestedChannel);
-    if (this.status === "running" || !normalizedRequestedChannel) {
+    if (!normalizedRequestedChannel) {
       return true;
     }
     return (
