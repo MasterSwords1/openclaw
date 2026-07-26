@@ -3,6 +3,7 @@
 import { expectDefined } from "@openclaw/normalization-core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { resetCommandQueueStateForTest } from "../../process/command-queue.test-support.js";
+import { SystemAgentInferenceUnavailableError } from "../../system-agent/inference-error.js";
 import { systemAgentHandlers, type SystemAgentChatSession } from "./system-agent.js";
 import type { GatewayClient, GatewayRequestContext, RespondFn } from "./types.js";
 
@@ -45,6 +46,8 @@ type FakeEngine = {
   getPendingOperatorProposal: ReturnType<typeof vi.fn>;
   resolveOperatorApproval: ReturnType<typeof vi.fn>;
   dispose: ReturnType<typeof vi.fn>;
+  hasLockedHostedWizard: ReturnType<typeof vi.fn>;
+  resumeLockedHostedWizard: ReturnType<typeof vi.fn>;
   loadOverview: ReturnType<typeof vi.fn>;
   noteAssistantMessage: ReturnType<typeof vi.fn>;
 };
@@ -57,7 +60,9 @@ function makeEngine(): FakeEngine {
     historySince: vi.fn(() => []),
     getPendingOperatorProposal: vi.fn(() => null),
     resolveOperatorApproval: vi.fn(async () => null),
-    dispose: vi.fn(async () => undefined),
+    dispose: vi.fn(async () => true),
+    hasLockedHostedWizard: vi.fn(() => false),
+    resumeLockedHostedWizard: vi.fn(async () => null),
     loadOverview: vi.fn(async () => ({})),
     noteAssistantMessage: vi.fn(),
   };
@@ -145,6 +150,81 @@ afterEach(() => {
 });
 
 describe("openclaw.chat session ownership", () => {
+  it("adopts one locked wizard only for its exact owner after the session id changes", async () => {
+    const retained = makeEngine();
+    retained.hasLockedHostedWizard.mockReturnValue(true);
+    retained.resumeLockedHostedWizard.mockResolvedValue({
+      text: "Retry validation?",
+      action: "none",
+      wizardInputPending: true,
+    });
+    const sessions = new Map<string, SystemAgentChatSession>([
+      ["old-session", seededSession({ engine: retained })],
+    ]);
+
+    const call = await callChat(makeContext(sessions), { sessionId: "new-session" });
+
+    expect(call).toMatchObject({
+      ok: true,
+      payload: {
+        sessionId: "new-session",
+        reply: "Retry validation?",
+        wizardInputPending: true,
+      },
+    });
+    expect(sessions.has("old-session")).toBe(false);
+    expect(sessions.get("new-session")?.engine).toBe(retained);
+    expect(retained.resumeLockedHostedWizard).toHaveBeenCalledOnce();
+    expect(createdEngines).toHaveLength(0);
+  });
+
+  it("does not adopt a locked wizard owned by another caller", async () => {
+    const retained = makeEngine();
+    retained.hasLockedHostedWizard.mockReturnValue(true);
+    const sessions = new Map<string, SystemAgentChatSession>([
+      [
+        "owner-session",
+        seededSession({
+          engine: retained,
+          ownerKey: "user:owner@example.com",
+        }),
+      ],
+    ]);
+
+    const call = await callChat(
+      makeContext(sessions),
+      { sessionId: "attacker-session" },
+      makeClient({
+        connId: "attacker-connection",
+        authenticatedUserId: "attacker@example.com",
+      }),
+    );
+
+    expect(call.ok).toBe(true);
+    expect(sessions.get("owner-session")?.engine).toBe(retained);
+    expect(sessions.get("attacker-session")?.engine).not.toBe(retained);
+    expect(retained.resumeLockedHostedWizard).not.toHaveBeenCalled();
+  });
+
+  it("refuses ambiguous adoption when one owner has multiple locked wizards", async () => {
+    const first = makeEngine();
+    const second = makeEngine();
+    first.hasLockedHostedWizard.mockReturnValue(true);
+    second.hasLockedHostedWizard.mockReturnValue(true);
+    const sessions = new Map<string, SystemAgentChatSession>([
+      ["first", seededSession({ engine: first })],
+      ["second", seededSession({ engine: second })],
+    ]);
+
+    const call = await callChat(makeContext(sessions), { sessionId: "replacement" });
+
+    expect(call).toMatchObject({ ok: false, error: { code: "INVALID_REQUEST" } });
+    expect(sessions.has("first")).toBe(true);
+    expect(sessions.has("second")).toBe(true);
+    expect(sessions.has("replacement")).toBe(false);
+    expect(createdEngines).toHaveLength(0);
+  });
+
   it("binds a new non-delegated session and rejects another principal", async () => {
     const sessions = new Map<string, SystemAgentChatSession>();
     const context = makeContext(sessions);
@@ -295,6 +375,79 @@ describe("openclaw.chat session ownership", () => {
 });
 
 describe("openclaw.chat session responses", () => {
+  it("refuses reset while a hosted wizard owns locked work", async () => {
+    const engine = makeEngine();
+    engine.dispose.mockResolvedValue(false);
+    const sessions = new Map<string, SystemAgentChatSession>([
+      ["locked", seededSession({ engine })],
+    ]);
+
+    const call = await callChat(makeContext(sessions), { sessionId: "locked", reset: true });
+
+    expect(call).toMatchObject({
+      ok: false,
+      error: { code: "INVALID_REQUEST" },
+    });
+    expect(sessions.get("locked")?.engine).toBe(engine);
+    expect(engine.dispose).toHaveBeenCalledOnce();
+  });
+
+  it("evicts the oldest disposable session and keeps locked work owned", async () => {
+    const sessions = new Map<string, SystemAgentChatSession>();
+    const locked = makeEngine();
+    locked.dispose.mockResolvedValue(false);
+    sessions.set("locked-oldest", seededSession({ engine: locked }));
+    for (let index = 1; index < 8; index += 1) {
+      const engine = makeEngine();
+      sessions.set(`candidate-${index}`, seededSession({ engine, ownerKey: "device:device-test" }));
+      const session = expectDefined(sessions.get(`candidate-${index}`), "eviction candidate");
+      session.lastUsedAt = index;
+    }
+
+    const call = await callChat(makeContext(sessions), { sessionId: "replacement" });
+
+    expect(call.ok).toBe(true);
+    expect(sessions.has("locked-oldest")).toBe(true);
+    expect(sessions.has("candidate-1")).toBe(false);
+    expect(sessions.has("replacement")).toBe(true);
+    expect(sessions.size).toBe(8);
+    expect(locked.dispose).toHaveBeenCalledOnce();
+  });
+
+  it("rejects a new session when every eviction candidate owns locked work", async () => {
+    const sessions = new Map<string, SystemAgentChatSession>();
+    for (let index = 0; index < 8; index += 1) {
+      const engine = makeEngine();
+      engine.dispose.mockResolvedValue(false);
+      sessions.set(`locked-${index}`, seededSession({ engine }));
+    }
+
+    const call = await callChat(makeContext(sessions), { sessionId: "replacement" });
+
+    expect(call).toMatchObject({ ok: false, error: { code: "UNAVAILABLE" } });
+    expect(sessions.size).toBe(8);
+    expect(sessions.has("replacement")).toBe(false);
+    expect(expectDefined(createdEngines[0], "replacement engine").dispose).toHaveBeenCalledOnce();
+  });
+
+  it("retains locked work when inference failure cleanup refuses disposal", async () => {
+    const engine = makeEngine();
+    engine.handle.mockRejectedValue(new SystemAgentInferenceUnavailableError("conversation"));
+    engine.dispose.mockResolvedValue(false);
+    const sessions = new Map<string, SystemAgentChatSession>([
+      ["locked", seededSession({ engine })],
+    ]);
+
+    const call = await callChat(makeContext(sessions), {
+      sessionId: "locked",
+      message: "continue",
+    });
+
+    expect(call).toMatchObject({ ok: false, error: { code: "UNAVAILABLE" } });
+    expect(sessions.get("locked")?.engine).toBe(engine);
+    expect(engine.dispose).toHaveBeenCalledOnce();
+  });
+
   it("returns the stored welcome when no message is sent", async () => {
     const sessions = new Map<string, SystemAgentChatSession>([["s1", seededSession()]]);
     const call = await callChat(makeContext(sessions), { sessionId: "s1" });

@@ -16,8 +16,37 @@ import { defaultRuntime, type RuntimeEnv } from "../../runtime.js";
 import type { WizardPrompter } from "../../wizard/prompts.js";
 import { WizardSession } from "../../wizard/session.js";
 import { formatForLog } from "../ws-log.js";
-import type { GatewayRequestContext, GatewayRequestHandlers, RespondFn } from "./types.js";
+import type {
+  GatewayClient,
+  GatewayRequestContext,
+  GatewayRequestHandlers,
+  RespondFn,
+} from "./types.js";
 import { assertValidParams } from "./validation.js";
+
+const CHANNEL_WIZARD_TIMEOUT_MS = 25 * 60 * 1000;
+
+function resolveWizardOwnerKey(client: GatewayClient | null): string | undefined {
+  const userId = client?.authenticatedUserId?.trim();
+  if (userId) {
+    return `user:${userId}`;
+  }
+  const deviceId = client?.connect.device?.id.trim();
+  if (deviceId) {
+    return `device:${deviceId}`;
+  }
+  const connId = client?.connId?.trim();
+  return connId ? `connection:${connId}` : undefined;
+}
+
+function resolveChannelWizardResumeKey(params: {
+  ownerKey: string | undefined;
+  channel: string | undefined;
+}): string | undefined {
+  return params.ownerKey
+    ? JSON.stringify(["gateway-channel-setup", params.ownerKey, params.channel ?? null])
+    : undefined;
+}
 
 export type SetupWizardRunner = (
   opts: OnboardOptions,
@@ -30,6 +59,7 @@ export type ChannelSetupWizardRunner = (
     channel?: string;
     onConfigured?: (accounts: Array<{ channel: string; accountId: string }>) => void;
     beforePersistentEffect?: () => Promise<void>;
+    abortSignal?: AbortSignal;
   },
   runtime: RuntimeEnv,
   prompter: WizardPrompter,
@@ -55,6 +85,7 @@ function readWizardStatus(session: WizardSession) {
 /** Resolves a live wizard session or sends the public not-found error. */
 function findWizardSessionOrRespond(params: {
   context: GatewayRequestContext;
+  client: GatewayClient | null;
   respond: RespondFn;
   sessionId: string;
 }): WizardSession | null {
@@ -69,36 +100,70 @@ function findWizardSessionOrRespond(params: {
     );
     return null;
   }
+  if (!session.isAccessibleBy(resolveWizardOwnerKey(params.client))) {
+    params.respond(
+      false,
+      undefined,
+      errorShape(ErrorCodes.INVALID_REQUEST, "wizard belongs to another caller"),
+    );
+    return null;
+  }
   return session;
 }
 
 /** Gateway handlers for the interactive setup wizard session lifecycle. */
 export const wizardHandlers: GatewayRequestHandlers = {
-  "wizard.start": async ({ params, respond, context }) => {
+  "wizard.start": async ({ params, respond, context, client }) => {
     if (!assertValidParams(params, validateWizardStartParams, "wizard.start", respond)) {
       return;
     }
+    const flow = params.flow ?? "setup";
+    const channel = readStringValue(params.channel);
+    const ownerKey = flow === "channels" ? resolveWizardOwnerKey(client) : undefined;
+    const resumeKey =
+      flow === "channels" ? resolveChannelWizardResumeKey({ ownerKey, channel }) : undefined;
     const running = context.findRunningWizard();
     if (running) {
+      const existing = context.wizardSessions.get(running);
+      if (resumeKey && existing?.isCancellationLocked() && existing.canResume(resumeKey)) {
+        const result = await existing.next();
+        if (result.done) {
+          context.purgeWizardSession(running);
+        }
+        respond(true, { sessionId: running, ...result }, undefined);
+        return;
+      }
       respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, "wizard already running"));
       return;
     }
     const sessionId = randomUUID();
-    const flow = params.flow ?? "setup";
     const session =
       flow === "channels"
-        ? new WizardSession((prompter, _signal, wizardSession) =>
-            context.channelWizardRunner(
-              {
-                channel: readStringValue(params.channel),
-                onConfigured: (accounts) => wizardSession.setConfiguredAccounts(accounts),
-                // Durable effects (plugin installs, config commit) must finish
-                // even if the client cancels mid-write.
-                beforePersistentEffect: async () => wizardSession.lockCancellation(),
-              },
-              defaultRuntime,
-              prompter,
-            ),
+        ? new WizardSession(
+            (prompter, signal, wizardSession) =>
+              context.channelWizardRunner(
+                {
+                  channel,
+                  onConfigured: (accounts) => wizardSession.setConfiguredAccounts(accounts),
+                  abortSignal: signal,
+                  // Durable effects (plugin installs, config commit) must finish
+                  // even if the client cancels mid-write.
+                  beforePersistentEffect: async () => {
+                    if (!wizardSession.lockCancellation()) {
+                      throw new Error(
+                        "Channel setup was cancelled before its persistent change started.",
+                      );
+                    }
+                  },
+                },
+                defaultRuntime,
+                prompter,
+              ),
+            {
+              timeoutMs: CHANNEL_WIZARD_TIMEOUT_MS,
+              ...(ownerKey ? { ownerKey } : {}),
+              ...(resumeKey ? { resumeKey } : {}),
+            },
           )
         : new WizardSession((prompter) =>
             context.wizardRunner(
@@ -119,12 +184,12 @@ export const wizardHandlers: GatewayRequestHandlers = {
     }
     respond(true, { sessionId, ...result }, undefined);
   },
-  "wizard.next": async ({ params, respond, context }) => {
+  "wizard.next": async ({ params, respond, context, client }) => {
     if (!assertValidParams(params, validateWizardNextParams, "wizard.next", respond)) {
       return;
     }
     const sessionId = params.sessionId;
-    const session = findWizardSessionOrRespond({ context, respond, sessionId });
+    const session = findWizardSessionOrRespond({ context, client, respond, sessionId });
     if (!session) {
       return;
     }
@@ -153,12 +218,12 @@ export const wizardHandlers: GatewayRequestHandlers = {
     }
     respond(true, result, undefined);
   },
-  "wizard.cancel": ({ params, respond, context }) => {
+  "wizard.cancel": ({ params, respond, context, client }) => {
     if (!assertValidParams(params, validateWizardCancelParams, "wizard.cancel", respond)) {
       return;
     }
     const sessionId = params.sessionId;
-    const session = findWizardSessionOrRespond({ context, respond, sessionId });
+    const session = findWizardSessionOrRespond({ context, client, respond, sessionId });
     if (!session) {
       return;
     }
@@ -169,12 +234,12 @@ export const wizardHandlers: GatewayRequestHandlers = {
     }
     respond(true, status, undefined);
   },
-  "wizard.status": ({ params, respond, context }) => {
+  "wizard.status": ({ params, respond, context, client }) => {
     if (!assertValidParams(params, validateWizardStatusParams, "wizard.status", respond)) {
       return;
     }
     const sessionId = params.sessionId;
-    const session = findWizardSessionOrRespond({ context, respond, sessionId });
+    const session = findWizardSessionOrRespond({ context, client, respond, sessionId });
     if (!session) {
       return;
     }

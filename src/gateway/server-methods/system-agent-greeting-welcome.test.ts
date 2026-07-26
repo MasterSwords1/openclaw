@@ -47,6 +47,8 @@ type FakeEngine = {
   getPendingOperatorProposal: ReturnType<typeof vi.fn>;
   resolveOperatorApproval: ReturnType<typeof vi.fn>;
   dispose: ReturnType<typeof vi.fn>;
+  hasLockedHostedWizard: ReturnType<typeof vi.fn>;
+  resumeLockedHostedWizard: ReturnType<typeof vi.fn>;
   loadOverview: ReturnType<typeof vi.fn>;
   noteAssistantMessage: ReturnType<typeof vi.fn>;
   planGreeting: ReturnType<typeof vi.fn>;
@@ -63,7 +65,9 @@ function makeEngine(): FakeEngine {
     historySince: vi.fn((index: number) => history.slice(index)),
     getPendingOperatorProposal: vi.fn(() => null),
     resolveOperatorApproval: vi.fn(async () => null),
-    dispose: vi.fn(async () => undefined),
+    dispose: vi.fn(async () => true),
+    hasLockedHostedWizard: vi.fn(() => false),
+    resumeLockedHostedWizard: vi.fn(async () => null),
     loadOverview: vi.fn(async () => ({})),
     noteAssistantMessage: vi.fn((text: string) => {
       history.push({ role: "assistant", text });

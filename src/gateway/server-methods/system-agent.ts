@@ -22,7 +22,6 @@ import { enqueueCommandInLane, setCommandLaneConcurrency } from "../../process/c
 import { CommandLane } from "../../process/lanes.js";
 import { defaultRuntime } from "../../runtime.js";
 import { SystemAgentChatEngine } from "../../system-agent/chat-engine.js";
-import { resolveSystemAgentDelegationKey } from "../../system-agent/delegation-session.js";
 import {
   acknowledgeSystemAgentGreetingDelivery,
   buildSystemAgentGreetingQuestion,
@@ -45,7 +44,12 @@ import {
   handlePendingApprovalRequest,
   listVisiblePendingApprovalRequests,
 } from "./approval-shared.js";
-import type { GatewayClient, GatewayRequestContext, GatewayRequestHandlers } from "./types.js";
+import {
+  adoptLockedSystemAgentWizard,
+  evictOldestSystemAgentSession,
+  resolveSystemAgentSessionOwnerKey,
+} from "./system-agent-session-lifecycle.js";
+import type { GatewayRequestContext, GatewayRequestHandlers } from "./types.js";
 import { assertValidParams } from "./validation.js";
 
 /**
@@ -67,6 +71,8 @@ const DEFAULT_SYSTEM_AGENT_HISTORY_LIMIT = 100;
 const PROVIDER_AUTH_SESSION_TIMEOUT_MS = 25 * 60 * 1000;
 const PROVIDER_PREPARE_SESSION_TIMEOUT_MS = 2 * 60 * 60 * 1000;
 const SYSTEM_AGENT_GATEWAY_EXECUTION_KEY = "gateway";
+const LOCKED_SETUP_RESET_ERROR = "Channel setup is already applying and cannot be reset yet.";
+const LOCKED_SETUP_BUSY_ERROR = "OpenClaw is finishing channel setup. Try again shortly.";
 const systemAgentGatewayExecutionQueue = new KeyedAsyncQueue();
 const systemAgentSessionQueues = new WeakMap<
   Map<string, SystemAgentChatSession>,
@@ -105,30 +111,6 @@ async function runSystemAgentGatewayTask<T>(task: () => Promise<T>): Promise<T> 
   );
 }
 
-function resolveSystemAgentSessionOwnerKey(params: {
-  delegation?: { agentId?: string; sessionKey?: string };
-  client: GatewayClient | null;
-}): string | undefined {
-  const delegationKey = resolveSystemAgentDelegationKey(params.delegation);
-  if (delegationKey !== undefined) {
-    // Delegation is the host-only, cross-connection owner asserted by the regular-agent
-    // tool path. Keep its agent/session tuple authoritative across gateway reconnects.
-    return delegationKey;
-  }
-  // Authenticated users survive reconnects and may span paired devices. Otherwise
-  // bind to the verified device, with the server-issued connection as a last resort.
-  const userId = params.client?.authenticatedUserId?.trim();
-  if (userId) {
-    return `user:${userId}`;
-  }
-  const deviceId = params.client?.connect.device?.id.trim();
-  if (deviceId) {
-    return `device:${deviceId}`;
-  }
-  const connId = params.client?.connId?.trim();
-  return connId ? `connection:${connId}` : undefined;
-}
-
 let systemAgentSetupActivationInProgress = false;
 
 class SystemAgentSetupActivationBusyError extends Error {}
@@ -147,31 +129,6 @@ export async function runExclusiveSystemAgentSetupActivation<T>(
     return await task();
   } finally {
     systemAgentSetupActivationInProgress = false;
-  }
-}
-
-async function evictOldestSession(
-  sessions: Map<string, SystemAgentChatSession>,
-  context: GatewayRequestContext,
-): Promise<void> {
-  if (sessions.size < MAX_SYSTEM_AGENT_SESSIONS) {
-    return;
-  }
-  let oldestKey: string | undefined;
-  let oldestAt = Number.POSITIVE_INFINITY;
-  for (const [key, session] of sessions) {
-    if (session.lastUsedAt < oldestAt) {
-      oldestAt = session.lastUsedAt;
-      oldestKey = key;
-    }
-  }
-  if (oldestKey !== undefined) {
-    const oldest = sessions.get(oldestKey);
-    if (oldest?.pendingApproval) {
-      context.systemAgentApprovalManager?.expire(oldest.pendingApproval.id, "session-evicted");
-    }
-    await oldest?.engine.dispose();
-    sessions.delete(oldestKey);
   }
 }
 
@@ -523,8 +480,47 @@ export const systemAgentHandlers: GatewayRequestHandlers = {
           );
           return;
         }
+        let adoptedLockedWizard = false;
+        if (!boundSession) {
+          const adoption = adoptLockedSystemAgentWizard({
+            sessions,
+            sessionId,
+            ownerKey,
+            reset: params.reset === true,
+          });
+          if (adoption.kind === "ambiguous") {
+            respond(
+              false,
+              undefined,
+              errorShape(
+                ErrorCodes.INVALID_REQUEST,
+                "Multiple locked OpenClaw setup sessions need manual recovery.",
+              ),
+            );
+            return;
+          }
+          if (adoption.kind === "reset-refused") {
+            respond(
+              false,
+              undefined,
+              errorShape(ErrorCodes.INVALID_REQUEST, LOCKED_SETUP_RESET_ERROR),
+            );
+            return;
+          }
+          if (adoption.kind === "adopted") {
+            adoptedLockedWizard = true;
+          }
+        }
         if (params.reset) {
           const existing = sessions.get(sessionId);
+          if (existing && !(await existing.engine.dispose())) {
+            respond(
+              false,
+              undefined,
+              errorShape(ErrorCodes.INVALID_REQUEST, LOCKED_SETUP_RESET_ERROR),
+            );
+            return;
+          }
           sessions.delete(sessionId);
           if (existing?.pendingApproval) {
             context.systemAgentApprovalManager?.expire(
@@ -532,7 +528,6 @@ export const systemAgentHandlers: GatewayRequestHandlers = {
               "session-reset",
             );
           }
-          await existing?.engine.dispose();
         }
         let session = sessions.get(sessionId);
         let greetingAuditSequence: number | undefined;
@@ -614,7 +609,13 @@ export const systemAgentHandlers: GatewayRequestHandlers = {
             appendTranscriptReset();
           }
           persistEngineHistory(engine, welcomeHistoryStart);
-          await evictOldestSession(sessions, context);
+          if (
+            !(await evictOldestSystemAgentSession(sessions, context, MAX_SYSTEM_AGENT_SESSIONS))
+          ) {
+            await engine.dispose().catch(() => undefined);
+            respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, LOCKED_SETUP_BUSY_ERROR));
+            return;
+          }
           session = {
             engine,
             welcome,
@@ -642,6 +643,24 @@ export const systemAgentHandlers: GatewayRequestHandlers = {
           }
         }
         session.lastUsedAt = Date.now();
+        if (adoptedLockedWizard && welcomeOnly) {
+          const resumed = await session.engine.resumeLockedHostedWizard();
+          if (resumed) {
+            respond(
+              true,
+              {
+                sessionId,
+                reply: resumed.text || "Channel setup is still applying.",
+                action: "none",
+                ...(resumed.sensitive === true ? { sensitive: true } : {}),
+                ...(resumed.wizardInputPending === true ? { wizardInputPending: true } : {}),
+                ...(resumed.question ? { question: resumed.question } : {}),
+              },
+              undefined,
+            );
+            return;
+          }
+        }
         // Inline check (not `welcomeOnly`) so TS narrows params.message below.
         if (params.message === undefined || !params.message.trim()) {
           respond(
@@ -666,24 +685,25 @@ export const systemAgentHandlers: GatewayRequestHandlers = {
           if (!isSystemAgentInferenceUnavailableError(error)) {
             throw error;
           }
-          // A failed inference turn invalidates this conversation. Remove the
-          // exact engine before cleanup so a retry must pass the live gate and
-          // cannot resume partial proposal or CLI-session state.
-          // Initialization failures stay unmarked because no live session existed.
-          if (sessions.get(sessionId)?.engine === session.engine) {
-            sessions.delete(sessionId);
-          }
+          let retainedForWizard = false;
           try {
-            await session.engine.dispose();
+            retainedForWizard = !(await session.engine.dispose());
           } catch {
             // The inference error is authoritative; cleanup stays best-effort.
+          }
+          if (!retainedForWizard && sessions.get(sessionId)?.engine === session.engine) {
+            sessions.delete(sessionId);
           }
           respond(
             false,
             undefined,
-            errorShape(ErrorCodes.UNAVAILABLE, error.message, {
-              details: buildSystemAgentSessionInvalidatedErrorDetails(),
-            }),
+            errorShape(
+              ErrorCodes.UNAVAILABLE,
+              error.message,
+              retainedForWizard
+                ? undefined
+                : { details: buildSystemAgentSessionInvalidatedErrorDetails() },
+            ),
           );
           return;
         }

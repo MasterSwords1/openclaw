@@ -194,6 +194,15 @@ describe("WizardSession", () => {
     expect((await session.next()).status).toBe("done");
   });
 
+  test("refuses the durable lock when cancellation already won", () => {
+    const session = new WizardSession(async () => {});
+
+    expect(session.cancel()).toBe(true);
+    expect(session.lockCancellation()).toBe(false);
+    expect(session.getStatus()).toBe("cancelled");
+    expect(session.signal.aborted).toBe(true);
+  });
+
   test("expires an abandoned interactive session", async () => {
     vi.useFakeTimers();
     try {
@@ -213,6 +222,68 @@ describe("WizardSession", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  test("refreshes reversible session expiry when the owner polls", async () => {
+    vi.useFakeTimers();
+    try {
+      const session = new WizardSession(
+        async (prompter) => {
+          await prompter.text({ message: "Name" });
+        },
+        { timeoutMs: 1_000 },
+      );
+
+      const pending = await session.next();
+      await vi.advanceTimersByTimeAsync(900);
+      expect((await session.next()).step?.id).toBe(pending.step?.id);
+
+      await vi.advanceTimersByTimeAsync(999);
+      expect(session.getStatus()).toBe("running");
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect((await session.next()).status).toBe("cancelled");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("does not expire a cancellation-locked session", async () => {
+    vi.useFakeTimers();
+    try {
+      const session = new WizardSession(
+        async (prompter, _signal, wizardSession) => {
+          expect(wizardSession.lockCancellation()).toBe(true);
+          await prompter.confirm({ message: "Retry recovery?" });
+        },
+        { timeoutMs: 1_000 },
+      );
+
+      expect((await session.next()).step?.type).toBe("confirm");
+      await vi.advanceTimersByTimeAsync(10_000);
+
+      expect(session.getStatus()).toBe("running");
+      expect(session.signal.aborted).toBe(false);
+      expect(session.cancel()).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("allows resumption only with the exact host-owned key", () => {
+    const session = new WizardSession(
+      async (prompter) => {
+        await prompter.text({ message: "Token" });
+      },
+      { resumeKey: "owner:connection-1:channel-a" },
+    );
+
+    expect(session.canResume("owner:connection-1:channel-a")).toBe(true);
+    expect(session.canResume("owner:connection-2:channel-a")).toBe(false);
+    expect(session.canResume("owner:connection-1:channel-b")).toBe(false);
+
+    session.cancel();
+    expect(session.canResume("owner:connection-1:channel-a")).toBe(false);
   });
 
   test("a runner finishing after cancellation cannot overwrite cancelled state", async () => {

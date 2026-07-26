@@ -230,7 +230,8 @@ class WizardSessionPrompter implements WizardPrompter {
 
 export class WizardSession {
   private readonly abortController = new AbortController();
-  private readonly expiryTimer: ReturnType<typeof setTimeout> | undefined;
+  private readonly timeoutMs: number | undefined;
+  private expiryTimer: ReturnType<typeof setTimeout> | undefined;
   private currentStep: WizardStep | null = null;
   private progressSteps: WizardStep[] = [];
   private deliveredProgressStepIds = new Set<string>();
@@ -238,6 +239,8 @@ export class WizardSession {
   private pendingTerminalResolution = false;
   private cancellationLocked = false;
   private pendingExternalUrl: string | undefined;
+  private readonly ownerKey: string | undefined;
+  private readonly resumeKey: string | undefined;
   private answerDeferred = new Map<
     string,
     {
@@ -256,17 +259,18 @@ export class WizardSession {
       signal: AbortSignal,
       session: WizardSession,
     ) => Promise<void>,
-    options?: { timeoutMs?: number },
+    options?: { timeoutMs?: number; ownerKey?: string; resumeKey?: string },
   ) {
     const prompter = new WizardSessionPrompter(this);
-    if (options?.timeoutMs !== undefined) {
-      this.expiryTimer = setTimeout(() => this.cancel(), options.timeoutMs);
-      this.expiryTimer.unref?.();
-    }
+    this.timeoutMs = options?.timeoutMs;
+    this.ownerKey = options?.ownerKey;
+    this.resumeKey = options?.resumeKey;
+    this.refreshExpiryTimer();
     void this.run(prompter);
   }
 
   async next(): Promise<WizardNextResult> {
+    this.refreshExpiryTimer();
     const progressStep = this.progressSteps.shift();
     if (progressStep) {
       this.rememberDeliveredProgressStep(progressStep.id);
@@ -321,6 +325,7 @@ export class WizardSession {
       }
       throw new Error("wizard: no pending step");
     }
+    this.refreshExpiryTimer();
     const normalizedValue = pending.text ? normalizeTextAnswer(value) : value;
     if (pending.text && normalizedValue === undefined) {
       return "wizard: text answer must be a scalar value";
@@ -356,8 +361,27 @@ export class WizardSession {
   }
 
   /** The underlying mutation crossed its durable commit point and must finish. */
-  lockCancellation() {
+  lockCancellation(): boolean {
+    if (this.status !== "running") {
+      return false;
+    }
     this.cancellationLocked = true;
+    this.clearExpiryTimer();
+    return true;
+  }
+
+  /** A replacement host may reclaim only the flow that created this session. */
+  canResume(resumeKey: string): boolean {
+    return this.status === "running" && this.resumeKey === resumeKey;
+  }
+
+  /** Unowned legacy sessions remain bearer-token based; hosted sessions bind to their owner. */
+  isAccessibleBy(ownerKey: string | undefined): boolean {
+    return this.ownerKey === undefined || this.ownerKey === ownerKey;
+  }
+
+  isCancellationLocked(): boolean {
+    return this.status === "running" && this.cancellationLocked;
   }
 
   get signal(): AbortSignal {
@@ -432,9 +456,7 @@ export class WizardSession {
         this.error = String(err);
       }
     } finally {
-      if (this.expiryTimer) {
-        clearTimeout(this.expiryTimer);
-      }
+      this.clearExpiryTimer();
       this.resolveStep(null);
     }
   }
@@ -446,6 +468,7 @@ export class WizardSession {
     if (this.status !== "running") {
       throw new Error("wizard: session not running");
     }
+    this.refreshExpiryTimer();
     this.pushStep(step);
     const deferred = createDeferred<unknown>();
     this.answerDeferred.set(step.id, { deferred, text: step.type === "text", validate });
@@ -472,5 +495,22 @@ export class WizardSession {
 
   getError(): string | undefined {
     return this.error;
+  }
+
+  private refreshExpiryTimer(): void {
+    if (this.timeoutMs === undefined || this.status !== "running" || this.cancellationLocked) {
+      return;
+    }
+    this.clearExpiryTimer();
+    this.expiryTimer = setTimeout(() => this.cancel(), this.timeoutMs);
+    this.expiryTimer.unref?.();
+  }
+
+  private clearExpiryTimer(): void {
+    if (!this.expiryTimer) {
+      return;
+    }
+    clearTimeout(this.expiryTimer);
+    this.expiryTimer = undefined;
   }
 }

@@ -730,6 +730,156 @@ describe("SystemAgentChatEngine", () => {
     expect(wizardRuns).toEqual(["telegram", "token:123:abc", "mode:open"]);
   });
 
+  it("forwards hosted cancellation to reversible channel setup work", async () => {
+    let setupSignal: AbortSignal | undefined;
+    const engine = new SystemAgentChatEngine({
+      surface: "gateway",
+      runAgentTurn: async () => null,
+      planWithAssistant: async () => null,
+      deps: { loadOverview: fakeOverviewLoader() },
+      runChannelSetupWizard: async (_channel, prompter, _beforePersistentApply, abortSignal) => {
+        setupSignal = abortSignal;
+        await prompter.text({ message: "Access token" });
+      },
+    });
+
+    expect((await engine.handle("connect matrix")).text).toContain("Access token");
+    expect(setupSignal?.aborted).toBe(false);
+
+    expect((await engine.handle("cancel")).text).toContain("cancelled");
+    expect(setupSignal?.aborted).toBe(true);
+  });
+
+  it("keeps locked channel setup owned until recovery completes", async () => {
+    const completed = vi.fn();
+    const runChannelSetupWizard = vi.fn(
+      async (
+        _channel: string,
+        prompter: WizardPrompter,
+        beforePersistentApply: (runtime: {
+          log: () => void;
+          error: () => void;
+          exit: () => never;
+        }) => Promise<void>,
+      ) => {
+        await beforePersistentApply({
+          log: () => {},
+          error: () => {},
+          exit: (): never => {
+            throw new Error("unexpected exit");
+          },
+        });
+        await prompter.confirm({ message: "Retry validation?" });
+        completed();
+      },
+    );
+    const engine = new SystemAgentChatEngine({
+      surface: "gateway",
+      runAgentTurn: async () => null,
+      planWithAssistant: async () => null,
+      deps: { loadOverview: fakeOverviewLoader() },
+      runChannelSetupWizard,
+    });
+
+    expect((await engine.handle("connect matrix")).text).toContain("Retry validation?");
+    expect((await engine.handle("cancel")).text).toContain("can no longer be cancelled");
+    await expect(engine.dispose()).resolves.toBe(false);
+    expect(completed).not.toHaveBeenCalled();
+    await expect(engine.resumeLockedHostedWizard()).resolves.toMatchObject({
+      text: expect.stringContaining("Retry validation?"),
+      wizardInputPending: true,
+    });
+
+    expect((await engine.handle("yes")).text).toContain("matrix is configured");
+    expect(completed).toHaveBeenCalledOnce();
+    expect(runChannelSetupWizard).toHaveBeenCalledOnce();
+    await expect(engine.dispose()).resolves.toBe(true);
+  });
+
+  it("accepts locked recovery after the inference route disappears", async () => {
+    let inferenceConfig: OpenClawConfig = structuredClone(sharedVerifiedInferenceConfig);
+    const completed = vi.fn();
+    const engine = new SystemAgentChatEngine({
+      surface: "gateway",
+      runAgentTurn: async () => null,
+      planWithAssistant: async () => null,
+      deps: {
+        loadOverview: fakeOverviewLoader(),
+        readConfigFileSnapshot: vi.fn(async () => configSnapshot(inferenceConfig)) as never,
+      },
+      runChannelSetupWizard: async (_channel, prompter, beforePersistentApply) => {
+        await beforePersistentApply({
+          log: () => {},
+          error: () => {},
+          exit: (): never => {
+            throw new Error("unexpected exit");
+          },
+        });
+        await prompter.confirm({ message: "Retry validation?" });
+        completed();
+      },
+    });
+
+    expect((await engine.handle("connect matrix")).text).toContain("Retry validation?");
+    inferenceConfig = {};
+
+    const recovered = await engine.handle("yes");
+    expect(recovered.text).toContain("matrix is configured");
+    expect(completed).toHaveBeenCalledOnce();
+  });
+
+  it("retires reversible channel setup when the inference route disappears", async () => {
+    let inferenceConfig: OpenClawConfig = structuredClone(sharedVerifiedInferenceConfig);
+    let setupSignal: AbortSignal | undefined;
+    const engine = new SystemAgentChatEngine({
+      surface: "gateway",
+      runAgentTurn: async () => null,
+      planWithAssistant: async () => null,
+      deps: {
+        loadOverview: fakeOverviewLoader(),
+        readConfigFileSnapshot: vi.fn(async () => configSnapshot(inferenceConfig)) as never,
+      },
+      runChannelSetupWizard: async (_channel, prompter, _guard, abortSignal) => {
+        setupSignal = abortSignal;
+        await prompter.text({ message: "Access token" });
+      },
+    });
+
+    expect((await engine.handle("connect matrix")).text).toContain("Access token");
+    inferenceConfig = {};
+
+    await expect(engine.handle("secret")).rejects.toBeInstanceOf(
+      SystemAgentInferenceUnavailableError,
+    );
+    expect(setupSignal?.aborted).toBe(true);
+  });
+
+  it("expires an abandoned reversible Gateway channel wizard", async () => {
+    vi.useFakeTimers();
+    try {
+      let setupSignal: AbortSignal | undefined;
+      const engine = new SystemAgentChatEngine({
+        surface: "gateway",
+        runAgentTurn: async () => null,
+        planWithAssistant: async () => null,
+        deps: { loadOverview: fakeOverviewLoader() },
+        runChannelSetupWizard: async (_channel, prompter, _guard, abortSignal) => {
+          setupSignal = abortSignal;
+          await prompter.text({ message: "Access token" });
+        },
+      });
+
+      expect((await engine.handle("connect matrix")).text).toContain("Access token");
+      await vi.advanceTimersByTimeAsync(25 * 60 * 1000);
+
+      const expired = await engine.handle("stale answer");
+      expect(expired.text).toContain("cancelled");
+      expect(setupSignal?.aborted).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("reports hosted channel setup success when audit persistence fails", async () => {
     const appendAuditEntry = vi.fn(async () => {
       throw new Error("audit store is read-only");

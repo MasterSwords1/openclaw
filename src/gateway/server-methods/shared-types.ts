@@ -122,14 +122,17 @@ type SystemAgentHistoryTurn = {
   text: string;
 };
 
+type GatewaySystemAgentReply = {
+  text: string;
+  action: "none" | "exit" | "open-tui" | "open-setup";
+  sensitive?: boolean;
+  wizardInputPending?: boolean;
+  question?: SystemAgentChatQuestion;
+};
+
 type GatewaySystemAgentSession = {
   engine: {
-    handle: (message: string) => Promise<{
-      text: string;
-      action: "none" | "exit" | "open-tui" | "open-setup";
-      sensitive?: boolean;
-      question?: SystemAgentChatQuestion;
-    }>;
+    handle: (message: string) => Promise<GatewaySystemAgentReply>;
     seedHistory: (turns: readonly SystemAgentHistoryTurn[]) => void;
     historyLength: () => number;
     historySince: (index: number) => SystemAgentHistoryTurn[];
@@ -138,7 +141,10 @@ type GatewaySystemAgentSession = {
       decision: "allow-once" | "allow-always" | "deny" | null,
       proposalHash: string,
     ) => Promise<unknown>;
-    dispose: () => Promise<void>;
+    /** False while an irreversible hosted wizard still owns unfinished work. */
+    dispose: () => Promise<boolean>;
+    hasLockedHostedWizard: () => boolean;
+    resumeLockedHostedWizard: () => Promise<GatewaySystemAgentReply | null>;
   };
   welcome: string;
   welcomeQuestion?: SystemAgentChatQuestion;

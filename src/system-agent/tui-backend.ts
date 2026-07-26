@@ -292,7 +292,7 @@ class SystemAgentTuiBackend implements TuiBackend {
   }
 
   private disposeEngine(): Promise<void> {
-    this.engineDisposal ??= this.engine.dispose();
+    this.engineDisposal ??= this.engine.dispose().then(() => undefined);
     return this.engineDisposal;
   }
 
