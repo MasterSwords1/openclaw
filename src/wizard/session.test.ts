@@ -213,8 +213,29 @@ describe("WizardSession", () => {
 
     expect((await session.next()).status).toBe("done");
     expect(session.isCancellationLocked()).toBe(true);
-    expect(session.canResume("owner:channel-setup")).toBe(true);
+    expect(session.canResume("owner:channel-setup")).toBe(false);
     expect(session.cancel()).toBe(false);
+  });
+
+  test("resumes channel-less reconnects while locked work is still running", async () => {
+    let finish!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    const session = new WizardSession(
+      async (_prompter, _signal, wizardSession) => {
+        expect(wizardSession.lockCancellation()).toBe(true);
+        await gate;
+      },
+      { resumeKey: "owner:channel-setup" },
+    );
+
+    await vi.waitFor(() => expect(session.isCancellationLocked()).toBe(true));
+    expect(session.canResume("owner:channel-setup")).toBe(true);
+
+    finish();
+    expect((await session.next()).status).toBe("done");
+    expect(session.canResume("owner:channel-setup")).toBe(false);
   });
 
   test("matches terminal recovery against the requested and canonical channel", async () => {

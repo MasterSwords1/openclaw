@@ -566,6 +566,26 @@ describe("openclaw.chat session responses", () => {
     expect(engine.dispose).toHaveBeenCalledOnce();
   });
 
+  it("removes every reconnect alias after inference failure cleanup", async () => {
+    const engine = makeEngine();
+    engine.handle.mockRejectedValue(new SystemAgentInferenceUnavailableError("conversation"));
+    const session = seededSession({ engine });
+    const sessions = new Map<string, SystemAgentChatSession>([
+      ["original", session],
+      ["reconnected", session],
+    ]);
+
+    const call = await callChat(makeContext(sessions), {
+      sessionId: "reconnected",
+      message: "continue",
+    });
+
+    expect(call).toMatchObject({ ok: false, error: { code: "UNAVAILABLE" } });
+    expect(engine.dispose).toHaveBeenCalledOnce();
+    expect(sessions.has("original")).toBe(false);
+    expect(sessions.has("reconnected")).toBe(false);
+  });
+
   it("returns the stored welcome when no message is sent", async () => {
     const sessions = new Map<string, SystemAgentChatSession>([["s1", seededSession()]]);
     const call = await callChat(makeContext(sessions), { sessionId: "s1" });

@@ -46,6 +46,7 @@ import {
 } from "./approval-shared.js";
 import {
   adoptLockedSystemAgentWizard,
+  deleteSystemAgentSessionAliases,
   evictOldestSystemAgentSession,
   resetSystemAgentSession,
   resolveSystemAgentSessionOwnerKey,
@@ -691,7 +692,7 @@ export const systemAgentHandlers: GatewayRequestHandlers = {
             // The inference error is authoritative; cleanup stays best-effort.
           }
           if (!retainedForWizard && sessions.get(sessionId)?.engine === session.engine) {
-            sessions.delete(sessionId);
+            deleteSystemAgentSessionAliases(sessions, session);
           }
           respond(
             false,

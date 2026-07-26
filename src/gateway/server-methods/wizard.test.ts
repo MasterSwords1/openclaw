@@ -409,6 +409,61 @@ describe("channel wizard lifecycle", () => {
     expect(runCount).toHaveBeenCalledTimes(2);
   });
 
+  it("starts a fresh browse-all wizard after retained work is terminal", async () => {
+    const wizardSessions = new Map<string, WizardSession>();
+    const runCount = vi.fn();
+    const context = {
+      wizardSessions,
+      findRunningWizard: () =>
+        [...wizardSessions].find(([, session]) => session.getStatus() === "running")?.[0] ?? null,
+      purgeWizardSession: (id: string) => wizardSessions.delete(id),
+      channelWizardRunner: async (options: { beforePersistentEffect?: () => Promise<void> }) => {
+        runCount();
+        await options.beforePersistentEffect?.();
+      },
+    };
+    const owner = {
+      connId: "owner-old-connection",
+      authenticatedUserId: "owner@example.com",
+      connect: { client: { id: "openclaw-control-ui", mode: "webchat" } },
+    };
+    const start = expectDefined(
+      wizardHandlers["wizard.start"],
+      "wizardHandlers[wizard.start] test invariant",
+    );
+    const firstRespond = vi.fn();
+
+    await start({
+      params: { flow: "channels" },
+      client: owner,
+      respond: firstRespond,
+      context,
+    } as never);
+
+    const firstResult = firstRespond.mock.calls[0]?.[1] as { sessionId?: string } | undefined;
+    const firstSessionId = expectDefined(
+      firstResult?.sessionId,
+      "retained browse-all wizard session id",
+    );
+    expect(firstRespond).toHaveBeenCalledWith(
+      true,
+      expect.objectContaining({ sessionId: firstSessionId, done: true, status: "done" }),
+      undefined,
+    );
+
+    const freshRespond = vi.fn();
+    await start({
+      params: { flow: "channels" },
+      client: { ...owner, connId: "owner-new-connection" },
+      respond: freshRespond,
+      context,
+    } as never);
+
+    const freshResult = freshRespond.mock.calls[0]?.[1] as { sessionId?: string } | undefined;
+    expect(freshResult?.sessionId).not.toBe(firstSessionId);
+    expect(runCount).toHaveBeenCalledTimes(2);
+  });
+
   it("recovers an accountless terminal result by canonical channel identity", async () => {
     const wizardSessions = new Map<string, WizardSession>();
     const runCount = vi.fn();

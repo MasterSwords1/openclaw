@@ -13,7 +13,7 @@ type LockedWizardAdoption =
 
 const MAX_SYSTEM_AGENT_SESSION_ALIASES = 4;
 
-function deleteSystemAgentSessionAliases(
+export function deleteSystemAgentSessionAliases(
   sessions: SystemAgentSessionMap,
   target: SystemAgentSessionMap extends Map<string, infer Session> ? Session : never,
 ): void {

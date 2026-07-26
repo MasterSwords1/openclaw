@@ -405,8 +405,8 @@ export class WizardSession {
   }
 
   /**
-   * Locked work remains replayable for the same flow. A terminal result can be
-   * released only when the owner explicitly starts a different channel.
+   * Locked work remains replayable for the same flow. A terminal result needs
+   * an explicit channel identity; browse-all without one is fresh intent.
    */
   canResume(resumeKey: string, requestedChannel?: string): boolean {
     if (!this.matchesResumeKey(resumeKey)) {
@@ -414,7 +414,9 @@ export class WizardSession {
     }
     const normalizedRequestedChannel = normalizeChannelIdentity(requestedChannel);
     if (!normalizedRequestedChannel) {
-      return true;
+      // With no channel identity to match, a terminal browse-all request is
+      // fresh intent. Running locked work remains recoverable after reconnect.
+      return this.status === "running";
     }
     return (
       normalizedRequestedChannel === this.requestedChannel ||
