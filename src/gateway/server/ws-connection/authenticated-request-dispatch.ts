@@ -144,6 +144,7 @@ export function createGatewayAuthenticatedRequestDispatcher(params: {
         respond,
         client,
         isWebchatConnect: params.isWebchatConnect,
+        isConnectionActive: () => !isClosed(),
         extraHandlers,
         methodRegistry: getMethodRegistry?.(),
         context: buildRequestContext(),

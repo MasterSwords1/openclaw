@@ -317,6 +317,8 @@ export type GatewayRequestOptions = {
   req: RequestFrame;
   client: GatewayClient | null;
   isWebchatConnect: (params: ConnectParams | null | undefined) => boolean;
+  /** Reports whether the request transport can still receive its eventual response. */
+  isConnectionActive?: () => boolean;
   respond: RespondFn;
   context: GatewayRequestContext;
   methodRegistry?: GatewayMethodRegistryView;
@@ -334,6 +336,8 @@ export type GatewayRequestHandlerOptions = {
   params: Record<string, unknown>;
   client: GatewayClient | null;
   isWebchatConnect: (params: ConnectParams | null | undefined) => boolean;
+  /** Reports whether the request transport can still receive its eventual response. */
+  isConnectionActive?: () => boolean;
   respond: RespondFn;
   context: GatewayRequestContext;
   sessionMutationAuthorization?: SessionMutationAuthorization;

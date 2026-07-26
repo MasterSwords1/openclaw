@@ -365,7 +365,7 @@ describe("channel wizard lifecycle", () => {
     expect(runCount).toHaveBeenCalledTimes(2);
   });
 
-  it("returns an owner's retained terminal result without rerunning setup", async () => {
+  it("recovers a terminal result after disconnect, then allows a fresh same-channel start", async () => {
     const wizardSessions = new Map<string, WizardSession>();
     const runCount = vi.fn();
     const context = {
@@ -401,6 +401,7 @@ describe("channel wizard lifecycle", () => {
     await start({
       params: { flow: "channels", channel: "matrix" },
       client: owner,
+      isConnectionActive: () => false,
       respond: firstRespond,
       context,
     } as never);
@@ -413,36 +414,31 @@ describe("channel wizard lifecycle", () => {
       undefined,
     );
 
-    for (const connId of [
-      "owner-old-connection",
-      "owner-new-connection",
-      "owner-retry-connection",
-    ]) {
-      const recoveredRespond = vi.fn();
-      await start({
-        params: { flow: "channels", channel: "matrix" },
-        client: { ...owner, connId },
-        respond: recoveredRespond,
-        context,
-      } as never);
+    const recoveredRespond = vi.fn();
+    await start({
+      params: { flow: "channels", channel: "matrix" },
+      client: { ...owner, connId: "owner-new-connection" },
+      isConnectionActive: () => true,
+      respond: recoveredRespond,
+      context,
+    } as never);
 
-      expect(recoveredRespond).toHaveBeenCalledWith(
-        true,
-        expect.objectContaining({
-          sessionId,
-          done: true,
-          status: "done",
-          accounts: [{ channel: "matrix", accountId: "default" }],
-        }),
-        undefined,
-      );
-    }
+    expect(recoveredRespond).toHaveBeenCalledWith(
+      true,
+      expect.objectContaining({
+        sessionId,
+        done: true,
+        status: "done",
+        accounts: [{ channel: "matrix", accountId: "default" }],
+      }),
+      undefined,
+    );
     expect(runCount).toHaveBeenCalledOnce();
-    expect(wizardSessions.has(sessionId)).toBe(true);
+    expect(wizardSessions.has(sessionId)).toBe(false);
 
     const freshRespond = vi.fn();
     await start({
-      params: { flow: "channels", channel: "discord" },
+      params: { flow: "channels", channel: "matrix" },
       client: { ...owner, connId: "owner-retry-connection" },
       respond: freshRespond,
       context,
@@ -546,6 +542,7 @@ describe("channel wizard lifecycle", () => {
     await start({
       params: { flow: "channels", channel: "twitch" },
       client: owner,
+      isConnectionActive: () => false,
       respond: firstRespond,
       context,
     } as never);

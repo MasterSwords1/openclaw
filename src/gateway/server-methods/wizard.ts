@@ -66,6 +66,24 @@ function readWizardStatus(session: WizardSession) {
   };
 }
 
+function finishTerminalWizardResponse(params: {
+  context: GatewayRequestContext;
+  sessionId: string;
+  session: WizardSession;
+  isConnectionActive?: () => boolean;
+}): void {
+  if (params.session.getStatus() === "running") {
+    return;
+  }
+  if (params.session.isCancellationLocked() && params.isConnectionActive?.() === false) {
+    // The durable result could not reach its original transport. Retain one
+    // owner-bound copy so a reconnect can collect it without rerunning setup.
+    params.context.findRunningWizard();
+    return;
+  }
+  params.context.purgeWizardSession(params.sessionId);
+}
+
 /** Resolves a live wizard session or sends the public not-found error. */
 function findWizardSessionOrRespond(params: {
   context: GatewayRequestContext;
@@ -106,7 +124,7 @@ function findWizardSessionOrRespond(params: {
 
 /** Gateway handlers for the interactive setup wizard session lifecycle. */
 export const wizardHandlers: GatewayRequestHandlers = {
-  "wizard.start": async ({ params, respond, context, client }) => {
+  "wizard.start": async ({ params, respond, context, client, isConnectionActive }) => {
     if (!assertValidParams(params, validateWizardStartParams, "wizard.start", respond)) {
       return;
     }
@@ -135,13 +153,15 @@ export const wizardHandlers: GatewayRequestHandlers = {
         const [resumableId, resumableSession] = ownerSession;
         resumableSession.adoptOwner(ownerKey);
         const result = await resumableSession.next();
-        // A reconnect has no delivery acknowledgement. Keep terminal recovery
-        // replayable until the owner starts a different channel or retention
-        // expires, so response loss cannot rerun already-committed setup.
-        if (result.done) {
-          context.findRunningWizard();
-        }
         respond(true, { sessionId: resumableId, ...result }, undefined);
+        if (result.done) {
+          finishTerminalWizardResponse({
+            context,
+            sessionId: resumableId,
+            session: resumableSession,
+            isConnectionActive,
+          });
+        }
         return;
       }
       if (ownerSession) {
@@ -206,18 +226,12 @@ export const wizardHandlers: GatewayRequestHandlers = {
           );
     context.wizardSessions.set(sessionId, session);
     const result = await session.next();
-    if (result.done) {
-      if (session.isCancellationLocked()) {
-        // Keep one owner-bound recovery copy when a durable result races a
-        // dropped response. The tracker reaps it if nobody reconnects.
-        context.findRunningWizard();
-      } else {
-        context.purgeWizardSession(sessionId);
-      }
-    }
     respond(true, { sessionId, ...result }, undefined);
+    if (result.done) {
+      finishTerminalWizardResponse({ context, sessionId, session, isConnectionActive });
+    }
   },
-  "wizard.next": async ({ params, respond, context, client }) => {
+  "wizard.next": async ({ params, respond, context, client, isConnectionActive }) => {
     if (!assertValidParams(params, validateWizardNextParams, "wizard.next", respond)) {
       return;
     }
@@ -244,16 +258,12 @@ export const wizardHandlers: GatewayRequestHandlers = {
       }
     }
     const result = await session.next();
-    if (result.done) {
-      if (session.isCancellationLocked()) {
-        context.findRunningWizard();
-      } else {
-        context.purgeWizardSession(sessionId);
-      }
-    }
     respond(true, result, undefined);
+    if (result.done) {
+      finishTerminalWizardResponse({ context, sessionId, session, isConnectionActive });
+    }
   },
-  "wizard.cancel": ({ params, respond, context, client }) => {
+  "wizard.cancel": ({ params, respond, context, client, isConnectionActive }) => {
     if (!assertValidParams(params, validateWizardCancelParams, "wizard.cancel", respond)) {
       return;
     }
@@ -264,14 +274,12 @@ export const wizardHandlers: GatewayRequestHandlers = {
     }
     const cancelled = session.cancel();
     const status = readWizardStatus(session);
-    if (cancelled || (status.status !== "running" && !session.isCancellationLocked())) {
-      context.wizardSessions.delete(sessionId);
-    } else if (status.status !== "running") {
-      context.findRunningWizard();
-    }
     respond(true, status, undefined);
+    if (cancelled || status.status !== "running") {
+      finishTerminalWizardResponse({ context, sessionId, session, isConnectionActive });
+    }
   },
-  "wizard.status": ({ params, respond, context, client }) => {
+  "wizard.status": ({ params, respond, context, client, isConnectionActive }) => {
     if (!assertValidParams(params, validateWizardStatusParams, "wizard.status", respond)) {
       return;
     }
@@ -281,11 +289,9 @@ export const wizardHandlers: GatewayRequestHandlers = {
       return;
     }
     const status = readWizardStatus(session);
-    if (status.status !== "running" && !session.isCancellationLocked()) {
-      context.wizardSessions.delete(sessionId);
-    } else if (status.status !== "running") {
-      context.findRunningWizard();
-    }
     respond(true, status, undefined);
+    if (status.status !== "running") {
+      finishTerminalWizardResponse({ context, sessionId, session, isConnectionActive });
+    }
   },
 };
