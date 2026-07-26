@@ -108,6 +108,7 @@ function seededSession(params?: {
     welcome: "welcome text",
     lastUsedAt: 1,
     ownerKey: params?.ownerKey ?? "device:device-test",
+    supportsQrCode: false,
   } as unknown as SystemAgentChatSession;
 }
 
