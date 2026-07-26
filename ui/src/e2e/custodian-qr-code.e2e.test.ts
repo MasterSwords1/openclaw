@@ -85,10 +85,12 @@ describeControlUiE2e("Control UI system-agent QR presentation", () => {
 
       const request = await gateway.waitForRequest("openclaw.chat");
       expect(request.params).toMatchObject({ capabilities: { qrCodePng: true } });
-      expect(await image.getAttribute("src")).toMatch(/^data:image\/png;base64,/u);
+      expect(await image.getAttribute("src")).toBe(qrDataUrl);
+      await expect
+        .poll(() => image.evaluate((element: HTMLImageElement) => element.naturalWidth))
+        .toBeGreaterThan(0);
       expect(await page.getByRole("radio", { name: "Continue" }).isVisible()).toBe(true);
       expect(await page.getByRole("button", { name: "Skip for now" }).count()).toBe(0);
-      expect(await page.locator("body").textContent()).not.toContain(qrPayload);
 
       for (const viewport of [
         { height: 844, width: 390, name: "mobile-390x844.png" },

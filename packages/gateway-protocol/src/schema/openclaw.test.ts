@@ -1,6 +1,8 @@
 import { Value } from "typebox/value";
 import { describe, expect, it } from "vitest";
 import {
+  isSystemAgentQrCodePngBase64,
+  SYSTEM_AGENT_QR_CODE_PNG_BASE64_MAX_LENGTH,
   validateSystemAgentChatHistoryParams,
   validateSystemAgentSetupVerifyParams,
 } from "../index.js";
@@ -12,6 +14,9 @@ import {
   SystemAgentSetupDetectResultSchema,
   SystemAgentSetupVerifyResultSchema,
 } from "./openclaw.js";
+
+const PNG_BASE64 =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZrXcAAAAASUVORK5CYII=";
 
 describe("OpenClaw chat params protocol", () => {
   it("accepts an additive QR rendering capability", () => {
@@ -66,9 +71,24 @@ describe("OpenClaw chat result protocol", () => {
         sessionId: "setup-session",
         reply: "Scan this QR code, then continue.",
         action: "none",
-        qrCodePngBase64: "cG5n",
+        qrCodePngBase64: PNG_BASE64,
       }),
     ).toBe(true);
+    expect(isSystemAgentQrCodePngBase64(PNG_BASE64)).toBe(true);
+    expect(isSystemAgentQrCodePngBase64("cG5n")).toBe(false);
+    expect(
+      isSystemAgentQrCodePngBase64(
+        `iVBORw0KGgo${"A".repeat(SYSTEM_AGENT_QR_CODE_PNG_BASE64_MAX_LENGTH)}`,
+      ),
+    ).toBe(false);
+    expect(
+      Value.Check(SystemAgentChatResultSchema, {
+        sessionId: "setup-session",
+        reply: "Scan this QR code, then continue.",
+        action: "none",
+        qrCodePngBase64: "cG5n",
+      }),
+    ).toBe(false);
   });
 });
 

@@ -123,6 +123,16 @@ class WizardPromptNavigator {
           },
         }
       : {}),
+    ...(this.base.qrCode
+      ? {
+          qrCode: async (params) => {
+            if (this.shouldSuppressOutput()) {
+              return true;
+            }
+            return (await this.base.qrCode?.(params)) === true;
+          },
+        }
+      : {}),
     plain: async (message) => {
       if (!this.shouldSuppressOutput()) {
         await this.base.plain?.(message);

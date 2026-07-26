@@ -241,17 +241,29 @@ describe("runWizardWithPromptNavigationScope", () => {
 
   it("preserves optional client actions inside a navigation scope", async () => {
     const deviceCode = vi.fn(async () => undefined);
+    const qrCode = vi.fn(async () => true);
     const openUrl = vi.fn(async () => undefined);
-    const prompter = createWizardPrompter({ deviceCode, openUrl });
+    const prompter = createWizardPrompter({ deviceCode, qrCode, openUrl });
 
     const outcome = await runWizardWithPromptNavigationScope(prompter, async (scopedPrompter) => {
       await scopedPrompter.deviceCode?.({ title: "Link device", code: "ABCD" });
+      const acknowledged = await scopedPrompter.qrCode?.({
+        title: "Scan code",
+        message: "Scan this QR code, then continue.",
+        pngBase64: "iVBORw0KGgo=",
+      });
+      expect(acknowledged).toBe(true);
       await scopedPrompter.openUrl?.("https://example.com/link");
       return "completed";
     });
 
     expect(outcome).toEqual({ status: "completed", value: "completed" });
     expect(deviceCode).toHaveBeenCalledWith({ title: "Link device", code: "ABCD" });
+    expect(qrCode).toHaveBeenCalledWith({
+      title: "Scan code",
+      message: "Scan this QR code, then continue.",
+      pngBase64: "iVBORw0KGgo=",
+    });
     expect(openUrl).toHaveBeenCalledWith("https://example.com/link");
   });
 });

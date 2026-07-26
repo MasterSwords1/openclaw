@@ -1,6 +1,10 @@
 // Gateway Protocol schema module defines OpenClaw chat payloads.
 import type { Static } from "typebox";
 import { Type } from "typebox";
+import {
+  SYSTEM_AGENT_QR_CODE_PNG_BASE64_MAX_LENGTH,
+  SYSTEM_AGENT_QR_CODE_PNG_BASE64_PATTERN,
+} from "../system-agent-qr.js";
 import { closedObject } from "./closed-object.js";
 import { NonEmptyString } from "./primitives.js";
 import { WizardStartResultSchema } from "./wizard.js";
@@ -75,7 +79,13 @@ export const SystemAgentChatResultSchema = closedObject({
   /** The hosted wizard will consume the next message as its current step answer. */
   wizardInputPending: Type.Optional(Type.Boolean()),
   /** Raw PNG base64 for a hosted setup QR prompt. */
-  qrCodePngBase64: Type.Optional(NonEmptyString),
+  qrCodePngBase64: Type.Optional(
+    Type.String({
+      minLength: 1,
+      maxLength: SYSTEM_AGENT_QR_CODE_PNG_BASE64_MAX_LENGTH,
+      pattern: SYSTEM_AGENT_QR_CODE_PNG_BASE64_PATTERN,
+    }),
+  ),
   action: Type.Union([
     Type.Literal("none"),
     // The user asked to talk to their agent; clients should move to their

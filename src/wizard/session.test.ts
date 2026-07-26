@@ -2,6 +2,9 @@
 import { describe, expect, test, vi } from "vitest";
 import { WizardSession } from "./session.js";
 
+const PNG_BASE64 =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZrXcAAAAASUVORK5CYII=";
+
 function noteRunner() {
   return new WizardSession(async (prompter) => {
     await prompter.note("Welcome");
@@ -114,7 +117,7 @@ describe("WizardSession", () => {
         acknowledged = await prompter.qrCode?.({
           title: "Link a device",
           message: "Scan this QR code, then continue.",
-          pngBase64: "cG5n",
+          pngBase64: PNG_BASE64,
         });
       },
       { supportsQrCode: true },
@@ -127,7 +130,7 @@ describe("WizardSession", () => {
       message: "Scan this QR code, then continue.",
       options: [{ value: true, label: "Continue" }],
       initialValue: true,
-      qrCodePngBase64: "cG5n",
+      qrCodePngBase64: PNG_BASE64,
       executor: "client",
     });
     if (!prompt.step) {
@@ -143,6 +146,26 @@ describe("WizardSession", () => {
     });
     expect((await unsupported.next()).status).toBe("done");
     expect(unsupportedHasQr).toBe(false);
+  });
+
+  test("rejects malformed QR payloads before presenting a wizard step", async () => {
+    const session = new WizardSession(
+      async (prompter) => {
+        await prompter.qrCode?.({
+          title: "Link a device",
+          message: "Scan this QR code, then continue.",
+          pngBase64: "not-a-png",
+        });
+      },
+      { supportsQrCode: true },
+    );
+
+    const result = await session.next();
+    expect(result).toMatchObject({
+      done: true,
+      status: "error",
+      error: expect.stringContaining("canonical base64-encoded PNG"),
+    });
   });
 
   test("invalid answers throw", async () => {

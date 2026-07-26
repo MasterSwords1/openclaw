@@ -5,6 +5,9 @@ import { GatewayRequestError, type GatewayBrowserClient } from "../../api/gatewa
 import { waitForFast } from "../../test-helpers/wait-for.ts";
 import { createContext, mountPage } from "./custodian-page.test-harness.ts";
 
+const PNG_BASE64 =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZrXcAAAAASUVORK5CYII=";
+
 describe("custodian page", () => {
   beforeEach(() => {
     vi.spyOn(crypto, "randomUUID").mockReturnValue("00000000-0000-4000-8000-000000000001");
@@ -91,6 +94,11 @@ describe("custodian page", () => {
         sessionId: "control-ui-onboarding-00000000-0000-4000-8000-000000000001",
         reply: "Legacy gateway welcome.",
         action: "none",
+      })
+      .mockResolvedValueOnce({
+        sessionId: "control-ui-onboarding-00000000-0000-4000-8000-000000000001",
+        reply: "Legacy gateway reply.",
+        action: "none",
       });
     const { context } = createContext(request);
     const { page } = await mountPage(context);
@@ -102,6 +110,17 @@ describe("custodian page", () => {
     });
     expect(request.mock.calls[1]?.[1]).not.toHaveProperty("capabilities");
     await waitForFast(() => expect(page.textContent).toContain("Legacy gateway welcome."));
+
+    const composer = page.querySelector<HTMLTextAreaElement>(
+      ".agent-chat__composer-combobox textarea",
+    )!;
+    composer.value = "continue";
+    composer.dispatchEvent(new Event("input", { bubbles: true }));
+    await page.updateComplete;
+    page.querySelector<HTMLButtonElement>(".chat-send-btn")!.click();
+    await waitForFast(() => expect(request).toHaveBeenCalledTimes(3));
+    expect(request.mock.calls[2]?.[1]).toMatchObject({ message: "continue" });
+    expect(request.mock.calls[2]?.[1]).not.toHaveProperty("capabilities");
   });
 
   it("renders a setup QR image without exposing its payload text", async () => {
@@ -111,7 +130,7 @@ describe("custodian page", () => {
         sessionId: "control-ui-onboarding-00000000-0000-4000-8000-000000000001",
         reply: "Scan this code, then continue.",
         action: "none",
-        qrCodePngBase64: "cXItcG5n",
+        qrCodePngBase64: PNG_BASE64,
         question: {
           id: "link-device",
           header: "Link a device",
@@ -132,9 +151,9 @@ describe("custodian page", () => {
     await page.updateComplete;
 
     const image = page.querySelector<HTMLImageElement>(".custodian__qr-code img");
-    expect(image?.getAttribute("src")).toBe("data:image/png;base64,cXItcG5n");
+    expect(image?.getAttribute("src")).toBe(`data:image/png;base64,${PNG_BASE64}`);
     expect(image?.getAttribute("alt")).toBe("Setup QR code");
-    expect(page.textContent).not.toContain("cXItcG5n");
+    expect(page.textContent).not.toContain(PNG_BASE64);
     expect(page.querySelector(".option-card__skip")).toBeNull();
 
     page.querySelector<HTMLButtonElement>("[data-option-value]")?.click();
@@ -143,6 +162,22 @@ describe("custodian page", () => {
       capabilities: { qrCodePng: true },
       message: "Continue",
     });
+  });
+
+  it("rejects an invalid setup QR payload instead of rendering a broken image", async () => {
+    const request = vi.fn().mockResolvedValueOnce({
+      sessionId: "control-ui-onboarding-00000000-0000-4000-8000-000000000001",
+      reply: "Scan this code.",
+      action: "none",
+      qrCodePngBase64: "not-a-png",
+    });
+    const { context } = createContext(request);
+    const { page } = await mountPage(context);
+
+    await waitForFast(() =>
+      expect(page.textContent).toContain("The Gateway returned an invalid setup QR code."),
+    );
+    expect(page.querySelector(".custodian__qr-code img")).toBeNull();
   });
 
   it("renders advertised durable history before the live welcome with a divider", async () => {

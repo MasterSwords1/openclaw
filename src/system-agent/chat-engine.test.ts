@@ -30,6 +30,9 @@ import {
   type SystemAgentVerifiedInferenceDeps,
 } from "./verified-inference.js";
 
+const PNG_BASE64 =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZrXcAAAAASUVORK5CYII=";
+
 const mocks = vi.hoisted(() => ({
   readConfigFileSnapshot: vi.fn(async () => ({
     exists: true,
@@ -741,7 +744,7 @@ describe("SystemAgentChatEngine", () => {
         acknowledged = await prompter.qrCode?.({
           title: "Link a device",
           message: "Scan this QR code, then continue.",
-          pngBase64: "cG5n",
+          pngBase64: PNG_BASE64,
         });
       },
     });
@@ -751,7 +754,7 @@ describe("SystemAgentChatEngine", () => {
     expect(prompt).toMatchObject({
       text: expect.stringContaining("Scan this QR code"),
       wizardInputPending: true,
-      qrCodePngBase64: "cG5n",
+      qrCodePngBase64: PNG_BASE64,
       question: {
         id: expect.any(String),
         header: "Link a device",

@@ -1,8 +1,14 @@
-import type { SystemAgentChatParams, SystemAgentChatResult } from "@openclaw/gateway-protocol";
+import {
+  isSystemAgentQrCodePngBase64,
+  type SystemAgentChatParams,
+  type SystemAgentChatResult,
+} from "@openclaw/gateway-protocol";
 import { GatewayRequestError, type GatewayBrowserClient } from "../../api/gateway.ts";
+import { t } from "../../i18n/index.ts";
 
 const SYSTEM_AGENT_CHAT_TIMEOUT_MS = 190_000;
 const INVALID_CHAT_PARAMS_MESSAGE = "invalid openclaw.chat params";
+const legacyChatClients = new WeakSet<GatewayBrowserClient>();
 
 function shouldRetryWithoutCapabilities(error: unknown, params: SystemAgentChatParams): boolean {
   return (
@@ -13,31 +19,47 @@ function shouldRetryWithoutCapabilities(error: unknown, params: SystemAgentChatP
   );
 }
 
+function validateChatResult(result: SystemAgentChatResult): SystemAgentChatResult {
+  if (
+    result.qrCodePngBase64 !== undefined &&
+    !isSystemAgentQrCodePngBase64(result.qrCodePngBase64)
+  ) {
+    throw new Error(t("custodian.invalidSetupQrCode"));
+  }
+  return result;
+}
+
 export async function requestCustodianChat(params: {
   client: GatewayBrowserClient;
   request: SystemAgentChatParams;
   onSent: () => void;
 }): Promise<SystemAgentChatResult> {
-  const request: SystemAgentChatParams = {
-    ...params.request,
-    capabilities: { qrCodePng: true },
-  };
   const options = {
     timeoutMs: SYSTEM_AGENT_CHAT_TIMEOUT_MS,
     onSent: params.onSent,
   };
+  if (legacyChatClients.has(params.client)) {
+    return validateChatResult(
+      await params.client.request<SystemAgentChatResult>("openclaw.chat", params.request, options),
+    );
+  }
+  const request: SystemAgentChatParams = {
+    ...params.request,
+    capabilities: { qrCodePng: true },
+  };
   try {
-    return await params.client.request<SystemAgentChatResult>("openclaw.chat", request, options);
+    return validateChatResult(
+      await params.client.request<SystemAgentChatResult>("openclaw.chat", request, options),
+    );
   } catch (error) {
     if (!shouldRetryWithoutCapabilities(error, request)) {
       throw error;
     }
+    legacyChatClients.add(params.client);
     const legacyRequest = { ...request };
     delete legacyRequest.capabilities;
-    return await params.client.request<SystemAgentChatResult>(
-      "openclaw.chat",
-      legacyRequest,
-      options,
+    return validateChatResult(
+      await params.client.request<SystemAgentChatResult>("openclaw.chat", legacyRequest, options),
     );
   }
 }
