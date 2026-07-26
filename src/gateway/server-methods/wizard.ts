@@ -70,14 +70,14 @@ function finishTerminalWizardResponse(params: {
   context: GatewayRequestContext;
   sessionId: string;
   session: WizardSession;
-  isConnectionActive?: () => boolean;
+  collectLockedTerminal: boolean;
 }): void {
   if (params.session.getStatus() === "running") {
     return;
   }
-  if (params.session.isCancellationLocked() && params.isConnectionActive?.() === false) {
-    // The durable result could not reach its original transport. Retain one
-    // owner-bound copy so a reconnect can collect it without rerunning setup.
+  if (params.session.isCancellationLocked() && !params.collectLockedTerminal) {
+    // An open transport does not prove a caller accepted a late response.
+    // Retain the first result until a later owner-bound request collects it.
     params.context.findRunningWizard();
     return;
   }
@@ -124,7 +124,7 @@ function findWizardSessionOrRespond(params: {
 
 /** Gateway handlers for the interactive setup wizard session lifecycle. */
 export const wizardHandlers: GatewayRequestHandlers = {
-  "wizard.start": async ({ params, respond, context, client, isConnectionActive }) => {
+  "wizard.start": async ({ params, respond, context, client }) => {
     if (!assertValidParams(params, validateWizardStartParams, "wizard.start", respond)) {
       return;
     }
@@ -162,7 +162,7 @@ export const wizardHandlers: GatewayRequestHandlers = {
             context,
             sessionId: resumableId,
             session: resumableSession,
-            isConnectionActive,
+            collectLockedTerminal: true,
           });
         }
         return;
@@ -233,10 +233,15 @@ export const wizardHandlers: GatewayRequestHandlers = {
     const result = await session.next();
     respond(true, { sessionId, ...result }, undefined);
     if (result.done) {
-      finishTerminalWizardResponse({ context, sessionId, session, isConnectionActive });
+      finishTerminalWizardResponse({
+        context,
+        sessionId,
+        session,
+        collectLockedTerminal: false,
+      });
     }
   },
-  "wizard.next": async ({ params, respond, context, client, isConnectionActive }) => {
+  "wizard.next": async ({ params, respond, context, client }) => {
     if (!assertValidParams(params, validateWizardNextParams, "wizard.next", respond)) {
       return;
     }
@@ -245,6 +250,7 @@ export const wizardHandlers: GatewayRequestHandlers = {
     if (!session) {
       return;
     }
+    const collectingTerminal = session.getStatus() !== "running";
     const answer = params.answer as { stepId?: string; value?: unknown } | undefined;
     if (answer) {
       if (session.getStatus() !== "running") {
@@ -265,10 +271,15 @@ export const wizardHandlers: GatewayRequestHandlers = {
     const result = await session.next();
     respond(true, result, undefined);
     if (result.done) {
-      finishTerminalWizardResponse({ context, sessionId, session, isConnectionActive });
+      finishTerminalWizardResponse({
+        context,
+        sessionId,
+        session,
+        collectLockedTerminal: collectingTerminal,
+      });
     }
   },
-  "wizard.cancel": ({ params, respond, context, client, isConnectionActive }) => {
+  "wizard.cancel": ({ params, respond, context, client }) => {
     if (!assertValidParams(params, validateWizardCancelParams, "wizard.cancel", respond)) {
       return;
     }
@@ -281,10 +292,15 @@ export const wizardHandlers: GatewayRequestHandlers = {
     const status = readWizardStatus(session);
     respond(true, status, undefined);
     if (cancelled || status.status !== "running") {
-      finishTerminalWizardResponse({ context, sessionId, session, isConnectionActive });
+      finishTerminalWizardResponse({
+        context,
+        sessionId,
+        session,
+        collectLockedTerminal: true,
+      });
     }
   },
-  "wizard.status": ({ params, respond, context, client, isConnectionActive }) => {
+  "wizard.status": ({ params, respond, context, client }) => {
     if (!assertValidParams(params, validateWizardStatusParams, "wizard.status", respond)) {
       return;
     }
@@ -296,7 +312,12 @@ export const wizardHandlers: GatewayRequestHandlers = {
     const status = readWizardStatus(session);
     respond(true, status, undefined);
     if (status.status !== "running") {
-      finishTerminalWizardResponse({ context, sessionId, session, isConnectionActive });
+      finishTerminalWizardResponse({
+        context,
+        sessionId,
+        session,
+        collectLockedTerminal: true,
+      });
     }
   },
 };

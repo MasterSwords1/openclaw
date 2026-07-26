@@ -274,7 +274,6 @@ describe("channel wizard lifecycle", () => {
     await start({
       params: { flow: "channels", channel: "matrix" },
       client: owner,
-      isConnectionActive: () => false,
       respond: firstRespond,
       context,
     } as never);
@@ -419,7 +418,7 @@ describe("channel wizard lifecycle", () => {
     expect(runCount).toHaveBeenCalledTimes(2);
   });
 
-  it("recovers a terminal result after disconnect, then allows a fresh same-channel start", async () => {
+  it("retains a terminal result until recovery collects it, then allows a fresh start", async () => {
     const wizardSessions = new Map<string, WizardSession>();
     const runCount = vi.fn();
     const context = {
@@ -455,7 +454,6 @@ describe("channel wizard lifecycle", () => {
     await start({
       params: { flow: "channels", channel: "matrix" },
       client: owner,
-      isConnectionActive: () => false,
       respond: firstRespond,
       context,
     } as never);
@@ -467,12 +465,12 @@ describe("channel wizard lifecycle", () => {
       expect.objectContaining({ sessionId, done: true, status: "done" }),
       undefined,
     );
+    expect(wizardSessions.has(sessionId)).toBe(true);
 
     const recoveredRespond = vi.fn();
     await start({
       params: { flow: "channels", channel: "matrix" },
       client: { ...owner, connId: "owner-new-connection" },
-      isConnectionActive: () => true,
       respond: recoveredRespond,
       context,
     } as never);
@@ -596,7 +594,6 @@ describe("channel wizard lifecycle", () => {
     await start({
       params: { flow: "channels", channel: "twitch" },
       client: owner,
-      isConnectionActive: () => false,
       respond: firstRespond,
       context,
     } as never);
