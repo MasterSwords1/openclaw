@@ -132,7 +132,7 @@
   width: min(280px, calc(100% - 62px));
   margin: -10px 16px 18px 46px;
   padding: 10px;
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: #fff;
 }

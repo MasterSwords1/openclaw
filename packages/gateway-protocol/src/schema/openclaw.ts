@@ -71,36 +71,42 @@ export const SystemAgentChatQuestionSchema = closedObject({
 });
 
 /** One OpenClaw reply; `action` tells clients about conversation handoffs. */
-export const SystemAgentChatResultSchema = closedObject({
-  sessionId: NonEmptyString,
-  reply: NonEmptyString,
-  /** The next reply is a hosted-wizard secret and clients must mask its input/echo. */
-  sensitive: Type.Optional(Type.Boolean()),
-  /** The hosted wizard will consume the next message as its current step answer. */
-  wizardInputPending: Type.Optional(Type.Boolean()),
-  /** Raw PNG base64 for a hosted setup QR prompt. */
-  qrCodePngBase64: Type.Optional(
-    Type.String({
-      minLength: 1,
-      maxLength: SYSTEM_AGENT_QR_CODE_PNG_BASE64_MAX_LENGTH,
-      pattern: SYSTEM_AGENT_QR_CODE_PNG_BASE64_PATTERN,
-    }),
-  ),
-  action: Type.Union([
-    Type.Literal("none"),
-    // The user asked to talk to their agent; clients should move to their
-    // normal agent chat surface.
-    Type.Literal("open-agent"),
-    Type.Literal("exit"),
-  ]),
-  /** Optional localized-draft intent for an `open-agent` handoff. */
-  agentDraft: Type.Optional(Type.Literal("hatch")),
-  /** Destination agent for a specific `open-agent` handoff. */
-  agentId: Type.Optional(NonEmptyString),
-  needsApproval: Type.Optional(Type.Boolean()),
-  proposalId: Type.Optional(NonEmptyString),
-  question: Type.Optional(SystemAgentChatQuestionSchema),
-});
+export const SystemAgentChatResultSchema = Type.Object(
+  {
+    sessionId: NonEmptyString,
+    reply: NonEmptyString,
+    /** The next reply is a hosted-wizard secret and clients must mask its input/echo. */
+    sensitive: Type.Optional(Type.Boolean()),
+    /** The hosted wizard will consume the next message as its current step answer. */
+    wizardInputPending: Type.Optional(Type.Boolean()),
+    /** Raw PNG base64 for a hosted setup QR prompt. */
+    qrCodePngBase64: Type.Optional(
+      Type.String({
+        minLength: 1,
+        maxLength: SYSTEM_AGENT_QR_CODE_PNG_BASE64_MAX_LENGTH,
+        pattern: SYSTEM_AGENT_QR_CODE_PNG_BASE64_PATTERN,
+      }),
+    ),
+    action: Type.Union([
+      Type.Literal("none"),
+      // The user asked to talk to their agent; clients should move to their
+      // normal agent chat surface.
+      Type.Literal("open-agent"),
+      Type.Literal("exit"),
+    ]),
+    /** Optional localized-draft intent for an `open-agent` handoff. */
+    agentDraft: Type.Optional(Type.Literal("hatch")),
+    /** Destination agent for a specific `open-agent` handoff. */
+    agentId: Type.Optional(NonEmptyString),
+    needsApproval: Type.Optional(Type.Boolean()),
+    proposalId: Type.Optional(NonEmptyString),
+    question: Type.Optional(SystemAgentChatQuestionSchema),
+  },
+  {
+    additionalProperties: false,
+    dependencies: { qrCodePngBase64: ["question"] },
+  },
+);
 
 export const SystemAgentChatHistoryParamsSchema = closedObject({
   limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 500, default: 100 })),

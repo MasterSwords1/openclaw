@@ -18,6 +18,8 @@ import {
 
 const PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+const ANIMATED_PNG_BASE64 =
+  "iVBORw0KGgoAAAANSUhEUgAAABUAAAAVCAIAAAAmdTLBAAAACXBIWXMAAAAAAAAAAQCEeRdzAAAACGFjVEwAAAACAAAAAPONk3AAAAAaZmNUTAAAAAAAAAAVAAAAFQAAAAAAAAAAAAEAAgAAYFitrAAAAB5JREFUeJxj/P//PwMFgIUSzaP6R/WP6h/VP4T1AwCHtgNPl4qCogAAABpmY1RMAAAAAQAAABUAAAAVAAAAAAAAAAAAAQACAAD7K0d4AAAALmZkQVQAAAACeJxjZGRkZCAF/P//H5nLQpJmTDCqf1T/qP4B1I+Wn+lu/xDXDwC+cwZPQOmjYAAAAABJRU5ErkJggg==";
 
 function pngChunkCrc32(bytes: Uint8Array, start: number, end: number): number {
   let crc = 0xffffffff;
@@ -93,6 +95,13 @@ describe("OpenClaw chat result protocol", () => {
         reply: "Scan this QR code, then continue.",
         action: "none",
         qrCodePngBase64: PNG_BASE64,
+        question: {
+          id: "setup-qr",
+          header: "Scan QR code",
+          question: "Scan the code, then continue.",
+          options: [{ label: "Continue" }],
+          allowSkip: false,
+        },
       }),
     ).toBe(true);
     expect(isSystemAgentQrCodePngBase64(PNG_BASE64)).toBe(true);
@@ -100,6 +109,8 @@ describe("OpenClaw chat result protocol", () => {
     expect(isSystemAgentQrCodePngBase64("cG5n")).toBe(false);
     expect(isSystemAgentQrCodePngBase64("iVBORw0KGgo=")).toBe(false);
     expect(isSystemAgentQrCodePngBase64(PNG_BASE64.slice(0, -4))).toBe(false);
+    expect(isSystemAgentQrCodePngBase64(ANIMATED_PNG_BASE64)).toBe(false);
+    await expect(isDecodableSystemAgentQrCodePngBase64(ANIMATED_PNG_BASE64)).resolves.toBe(false);
     expect(isSystemAgentQrCodePngBase64(withPngDimensions(PNG_BASE64, 2, 1))).toBe(false);
     expect(isSystemAgentQrCodePngBase64(withPngDimensions(PNG_BASE64, 4097, 4097))).toBe(false);
     expect(
@@ -123,6 +134,14 @@ describe("OpenClaw chat result protocol", () => {
         reply: "Scan this QR code, then continue.",
         action: "none",
         qrCodePngBase64: "cG5n",
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(SystemAgentChatResultSchema, {
+        sessionId: "setup-session",
+        reply: "Scan this QR code, then continue.",
+        action: "none",
+        qrCodePngBase64: PNG_BASE64,
       }),
     ).toBe(false);
   });

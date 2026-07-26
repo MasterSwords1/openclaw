@@ -12,6 +12,7 @@ const PNG_SIGNATURE = Uint8Array.of(137, 80, 78, 71, 13, 10, 26, 10);
 const PNG_IHDR_LENGTH = 13;
 const PNG_MAX_QR_DIMENSION = 4096;
 const PNG_MAX_DECODED_BYTES = 16 * 1024 * 1024;
+const PNG_ANIMATION_CHUNKS = new Set(["acTL", "fcTL", "fdAT"]);
 
 type PngScanlineLayout = {
   rowBytes: number;
@@ -236,7 +237,7 @@ function parsePng(value: unknown): ParsedPng | null {
         : null;
     } else {
       imageDataEnded = sawImageData;
-      if (/^[A-Z]/u.test(type)) {
+      if (/^[A-Z]/u.test(type) || PNG_ANIMATION_CHUNKS.has(type)) {
         return null;
       }
     }
