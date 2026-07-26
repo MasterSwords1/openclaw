@@ -316,10 +316,12 @@ describe("channel wizard lifecycle", () => {
         options: {
           beforePersistentEffect?: () => Promise<void>;
           onConfigured?: (accounts: Array<{ channel: string; accountId: string }>) => void;
+          onResolvedChannel?: (channel: string) => void;
         },
         _runtime: unknown,
       ) => {
         runCount();
+        options.onResolvedChannel?.("matrix");
         await options.beforePersistentEffect?.();
         options.onConfigured?.([{ channel: "matrix", accountId: "default" }]);
       },
@@ -336,7 +338,7 @@ describe("channel wizard lifecycle", () => {
     const firstRespond = vi.fn();
 
     await start({
-      params: { flow: "channels" },
+      params: { flow: "channels", channel: "matrix" },
       client: owner,
       respond: firstRespond,
       context,
@@ -387,6 +389,77 @@ describe("channel wizard lifecycle", () => {
 
     const freshResult = freshRespond.mock.calls[0]?.[1] as { sessionId?: string } | undefined;
     expect(freshResult?.sessionId).not.toBe(sessionId);
+    expect(runCount).toHaveBeenCalledTimes(2);
+  });
+
+  it("recovers an accountless terminal result by canonical channel identity", async () => {
+    const wizardSessions = new Map<string, WizardSession>();
+    const runCount = vi.fn();
+    const context = {
+      wizardSessions,
+      findRunningWizard: () =>
+        [...wizardSessions].find(([, session]) => session.getStatus() === "running")?.[0] ?? null,
+      purgeWizardSession: (id: string) => wizardSessions.delete(id),
+      channelWizardRunner: async (
+        options: {
+          beforePersistentEffect?: () => Promise<void>;
+          onResolvedChannel?: (channel: string) => void;
+        },
+        _runtime: unknown,
+      ) => {
+        runCount();
+        options.onResolvedChannel?.(runCount.mock.calls.length === 1 ? "twitch" : "discord");
+        await options.beforePersistentEffect?.();
+      },
+    };
+    const owner = {
+      connId: "owner-old-connection",
+      authenticatedUserId: "owner@example.com",
+      connect: { client: { id: "openclaw-control-ui", mode: "webchat" } },
+    };
+    const start = expectDefined(
+      wizardHandlers["wizard.start"],
+      "wizardHandlers[wizard.start] test invariant",
+    );
+    const firstRespond = vi.fn();
+
+    await start({
+      params: { flow: "channels", channel: "Twitch-Chat" },
+      client: owner,
+      respond: firstRespond,
+      context,
+    } as never);
+
+    const firstResult = firstRespond.mock.calls[0]?.[1] as { sessionId?: string } | undefined;
+    const sessionId = expectDefined(firstResult?.sessionId, "retained alias wizard session id");
+    const recoveredRespond = vi.fn();
+    await start({
+      params: { flow: "channels", channel: "twitch-chat" },
+      client: { ...owner, connId: "owner-new-connection" },
+      respond: recoveredRespond,
+      context,
+    } as never);
+
+    expect(recoveredRespond).toHaveBeenCalledWith(
+      true,
+      expect.objectContaining({ sessionId, done: true, status: "done" }),
+      undefined,
+    );
+    expect(runCount).toHaveBeenCalledOnce();
+
+    const freshRespond = vi.fn();
+    await start({
+      params: { flow: "channels", channel: "discord" },
+      client: { ...owner, connId: "owner-new-connection" },
+      respond: freshRespond,
+      context,
+    } as never);
+
+    expect(freshRespond).toHaveBeenCalledWith(
+      true,
+      expect.objectContaining({ done: true, status: "done" }),
+      undefined,
+    );
     expect(runCount).toHaveBeenCalledTimes(2);
   });
 

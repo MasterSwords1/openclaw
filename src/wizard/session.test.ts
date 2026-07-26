@@ -217,6 +217,24 @@ describe("WizardSession", () => {
     expect(session.cancel()).toBe(false);
   });
 
+  test("matches terminal recovery against the requested and canonical channel", async () => {
+    const session = new WizardSession(
+      async (_prompter, _signal, wizardSession) => {
+        wizardSession.setResolvedChannel("twitch");
+        expect(wizardSession.lockCancellation()).toBe(true);
+      },
+      {
+        resumeKey: "owner:channel-setup",
+        requestedChannel: "Twitch-Chat",
+      },
+    );
+
+    expect((await session.next()).status).toBe("done");
+    expect(session.canResume("owner:channel-setup", "twitch-chat")).toBe(true);
+    expect(session.canResume("owner:channel-setup", "twitch")).toBe(true);
+    expect(session.canResume("owner:channel-setup", "discord")).toBe(false);
+  });
+
   test("expires an abandoned interactive session", async () => {
     vi.useFakeTimers();
     try {

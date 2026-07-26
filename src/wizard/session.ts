@@ -41,6 +41,11 @@ type WizardNextResult = {
   accounts?: Array<{ channel: string; accountId: string }>;
 };
 
+function normalizeChannelIdentity(value: string | undefined): string | undefined {
+  const normalized = value?.trim().toLowerCase();
+  return normalized || undefined;
+}
+
 function normalizeTextAnswer(value: unknown): string | undefined {
   if (value === null || value === undefined) {
     return "";
@@ -241,6 +246,8 @@ export class WizardSession {
   private pendingExternalUrl: string | undefined;
   private ownerKey: string | undefined;
   private readonly resumeKey: string | undefined;
+  private readonly requestedChannel: string | undefined;
+  private resolvedChannel: string | undefined;
   private answerDeferred = new Map<
     string,
     {
@@ -259,12 +266,18 @@ export class WizardSession {
       signal: AbortSignal,
       session: WizardSession,
     ) => Promise<void>,
-    options?: { timeoutMs?: number; ownerKey?: string; resumeKey?: string },
+    options?: {
+      timeoutMs?: number;
+      ownerKey?: string;
+      resumeKey?: string;
+      requestedChannel?: string;
+    },
   ) {
     const prompter = new WizardSessionPrompter(this);
     this.timeoutMs = options?.timeoutMs;
     this.ownerKey = options?.ownerKey;
     this.resumeKey = options?.resumeKey;
+    this.requestedChannel = normalizeChannelIdentity(options?.requestedChannel);
     this.refreshExpiryTimer();
     void this.run(prompter);
   }
@@ -312,6 +325,11 @@ export class WizardSession {
   /** Record what the channels flow actually configured (channels flow only). */
   setConfiguredAccounts(accounts: ReadonlyArray<{ channel: string; accountId: string }>) {
     this.configuredAccounts = accounts.map((entry) => ({ ...entry }));
+  }
+
+  /** Record the canonical channel selected by the setup registry. */
+  setResolvedChannel(channel: string): void {
+    this.resolvedChannel = normalizeChannelIdentity(channel);
   }
 
   async answer(stepId: string, value: unknown): Promise<string | undefined> {
@@ -383,10 +401,14 @@ export class WizardSession {
     if (!this.matchesResumeKey(resumeKey)) {
       return false;
     }
-    if (this.status === "running" || !requestedChannel || !this.configuredAccounts) {
+    const normalizedRequestedChannel = normalizeChannelIdentity(requestedChannel);
+    if (this.status === "running" || !normalizedRequestedChannel) {
       return true;
     }
-    return this.configuredAccounts.some((entry) => entry.channel === requestedChannel);
+    return (
+      normalizedRequestedChannel === this.requestedChannel ||
+      normalizedRequestedChannel === this.resolvedChannel
+    );
   }
 
   /** Transfer authenticated ownership after shared Gateway credentials rotate. */

@@ -65,11 +65,16 @@ type ChannelsAddWizardFlowParams = {
   deferDeviceLinkToClient?: boolean;
   /** Reports the channel accounts actually configured, after config commit. */
   onConfigured?: (accounts: Array<{ channel: string; accountId: string }>) => void;
+  /** Reports the canonical single channel selected for this setup operation. */
+  onResolvedChannel?: (channel: string) => void;
 };
 
 /** Run the interactive channel-setup flow and persist the resulting config. */
 export async function runChannelsAddWizardFlow(params: ChannelsAddWizardFlowParams): Promise<void> {
   const { cfg, baseHash, runtime, prompter } = params;
+  if (params.initialChannel) {
+    params.onResolvedChannel?.(params.initialChannel);
+  }
   const [{ buildAgentSummaries }, onboardChannels] = await Promise.all([
     import("../agents.config.js"),
     loadOnboardChannels(),
@@ -98,6 +103,10 @@ export async function runChannelsAddWizardFlow(params: ChannelsAddWizardFlowPara
     skipStatusNote: true,
     onSelection: (value) => {
       selection = value;
+      const resolvedChannel = value.length === 1 ? value[0] : undefined;
+      if (resolvedChannel) {
+        params.onResolvedChannel?.(resolvedChannel);
+      }
     },
     onAccountId: (channel, accountId) => {
       accountIds[channel] = accountId;
@@ -260,6 +269,7 @@ export async function runChannelsSetupWizard(
   opts: {
     channel?: string;
     onConfigured?: (accounts: Array<{ channel: string; accountId: string }>) => void;
+    onResolvedChannel?: (channel: string) => void;
     /** Revalidate/lock cancellation immediately before durable effects. */
     beforePersistentEffect?: () => Promise<void>;
     /** Cancels reversible setup work when the remote wizard stops. */
@@ -286,6 +296,7 @@ export async function runChannelsSetupWizard(
     ...(initialChannel ? { initialChannel } : {}),
     deferDeviceLinkToClient: true,
     ...(opts.onConfigured ? { onConfigured: opts.onConfigured } : {}),
+    ...(opts.onResolvedChannel ? { onResolvedChannel: opts.onResolvedChannel } : {}),
     ...(opts.beforePersistentEffect ? { beforePersistentEffect: opts.beforePersistentEffect } : {}),
     ...(opts.abortSignal ? { abortSignal: opts.abortSignal } : {}),
   });

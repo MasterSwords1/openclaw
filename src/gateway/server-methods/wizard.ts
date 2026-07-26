@@ -41,6 +41,7 @@ export type ChannelSetupWizardRunner = (
   opts: {
     channel?: string;
     onConfigured?: (accounts: Array<{ channel: string; accountId: string }>) => void;
+    onResolvedChannel?: (channel: string) => void;
     beforePersistentEffect?: () => Promise<void>;
     abortSignal?: AbortSignal;
   },
@@ -155,6 +156,8 @@ export const wizardHandlers: GatewayRequestHandlers = {
                 {
                   channel,
                   onConfigured: (accounts) => wizardSession.setConfiguredAccounts(accounts),
+                  onResolvedChannel: (resolvedChannel) =>
+                    wizardSession.setResolvedChannel(resolvedChannel),
                   abortSignal: signal,
                   // Durable effects (plugin installs, config commit) must finish
                   // even if the client cancels mid-write.
@@ -173,6 +176,7 @@ export const wizardHandlers: GatewayRequestHandlers = {
               timeoutMs: CHANNEL_WIZARD_TIMEOUT_MS,
               ...(ownerKey ? { ownerKey } : {}),
               ...(resumeKey ? { resumeKey } : {}),
+              ...(channel ? { requestedChannel: channel } : {}),
             },
           )
         : new WizardSession((prompter) =>
