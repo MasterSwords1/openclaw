@@ -118,7 +118,7 @@ export const wizardHandlers: GatewayRequestHandlers = {
     }
     const ownerKey = owner?.key;
     const resumeKey = flow === "channels" ? resolveChannelWizardResumeKey(ownerKey) : undefined;
-    const connectionId = client?.connId.trim() || undefined;
+    const connectionId = client?.connId?.trim() || undefined;
     const running = context.findRunningWizard();
     if (resumeKey) {
       const ownerSession = [...context.wizardSessions.entries()].find(([, session]) =>
@@ -229,7 +229,7 @@ export const wizardHandlers: GatewayRequestHandlers = {
     const result = await session.next();
     if (result.done) {
       if (session.isCancellationLocked()) {
-        session.markTerminalResultDelivery(client?.connId.trim() || undefined);
+        session.markTerminalResultDelivery(client?.connId?.trim() || undefined);
         context.findRunningWizard();
       } else {
         context.purgeWizardSession(sessionId);
