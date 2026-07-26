@@ -423,6 +423,7 @@ export class CustodianPage extends OpenClawLightDomElement {
         client,
         request: params,
         onSent: () => (delivery = "sent"),
+        onCompatibilityRetry: () => (delivery = "unsent"),
       });
       delivery = "received";
       if (epoch !== this.requestEpoch || client !== this.activeClient) {

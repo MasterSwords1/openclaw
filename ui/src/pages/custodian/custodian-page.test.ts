@@ -99,8 +99,13 @@ describe("custodian page", () => {
         sessionId: "control-ui-onboarding-00000000-0000-4000-8000-000000000001",
         reply: "Legacy gateway reply.",
         action: "none",
+      })
+      .mockResolvedValueOnce({
+        sessionId: "control-ui-onboarding-00000000-0000-4000-8000-000000000001",
+        reply: "Upgraded gateway reply.",
+        action: "none",
       });
-    const { context } = createContext(request);
+    const { context, client } = createContext(request);
     const { page } = await mountPage(context);
 
     await waitForFast(() => expect(request).toHaveBeenCalledTimes(2));
@@ -121,6 +126,17 @@ describe("custodian page", () => {
     await waitForFast(() => expect(request).toHaveBeenCalledTimes(3));
     expect(request.mock.calls[2]?.[1]).toMatchObject({ message: "continue" });
     expect(request.mock.calls[2]?.[1]).not.toHaveProperty("capabilities");
+
+    client.connectionGeneration += 1;
+    composer.value = "after reconnect";
+    composer.dispatchEvent(new Event("input", { bubbles: true }));
+    await page.updateComplete;
+    page.querySelector<HTMLButtonElement>(".chat-send-btn")!.click();
+    await waitForFast(() => expect(request).toHaveBeenCalledTimes(4));
+    expect(request.mock.calls[3]?.[1]).toMatchObject({
+      capabilities: { qrCodePng: true },
+      message: "after reconnect",
+    });
   });
 
   it("renders a setup QR image without exposing its payload text", async () => {

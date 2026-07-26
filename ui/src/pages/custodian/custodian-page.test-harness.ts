@@ -22,6 +22,7 @@ type TestCustodianPage = HTMLElement & {
 
 type ContextHarness = {
   context: ApplicationContext;
+  client: GatewayBrowserClient;
   setGatewaySnapshot: (patch: Partial<ApplicationGatewaySnapshot>) => void;
   setGatewayToken: (token: string) => void;
   emitGatewayEvent: (event: Pick<GatewayEventFrame, "event" | "payload">) => void;
@@ -31,7 +32,7 @@ export function createContext(
   request: ReturnType<typeof vi.fn>,
   methods: string[] = ["openclaw.chat"],
 ): ContextHarness {
-  const client = { request } as unknown as GatewayBrowserClient;
+  const client = { request, connectionGeneration: 1 } as unknown as GatewayBrowserClient;
   let snapshot: ApplicationGatewaySnapshot = {
     client,
     phase: "connected",
@@ -82,6 +83,7 @@ export function createContext(
   } as unknown as ApplicationContext;
   return {
     context,
+    client,
     setGatewaySnapshot: (patch) => {
       snapshot = { ...snapshot, ...patch };
       for (const listener of listeners) {

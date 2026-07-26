@@ -299,6 +299,7 @@ async function buildGatewayConnectDevice(params: {
 export class GatewayBrowserClient {
   private readonly client: GatewayProtocolClient<ConnectPlan>;
   inboundActivitySeq = 0;
+  connectionGeneration = 0;
   private pendingDeviceTokenRetry = false;
   private deviceTokenRetryBudgetUsed = false;
   private readonly recoveryScopeTracker = new GatewayRecoveryScopeTracker();
@@ -318,7 +319,10 @@ export class GatewayBrowserClient {
       buildConnectPlan: ({ nonce, generation }) => this.buildConnectPlan(nonce, generation),
       buildConnectParams: (plan) => plan.params,
       onConnectHello: (hello, context) => this.handleConnectHello(hello, context.plan),
-      onHello: (hello) => this.opts.onHello?.(hello),
+      onHello: (hello) => {
+        this.connectionGeneration += 1;
+        this.opts.onHello?.(hello);
+      },
       onConnectFailure: (error, context) => {
         this.client.recordTiming("failed", context.generation, context.plan, {
           errorCode: error.code,

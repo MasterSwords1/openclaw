@@ -76,6 +76,8 @@ describe("OpenClaw chat result protocol", () => {
     ).toBe(true);
     expect(isSystemAgentQrCodePngBase64(PNG_BASE64)).toBe(true);
     expect(isSystemAgentQrCodePngBase64("cG5n")).toBe(false);
+    expect(isSystemAgentQrCodePngBase64("iVBORw0KGgo=")).toBe(false);
+    expect(isSystemAgentQrCodePngBase64(PNG_BASE64.slice(0, -4))).toBe(false);
     expect(
       isSystemAgentQrCodePngBase64(
         `iVBORw0KGgo${"A".repeat(SYSTEM_AGENT_QR_CODE_PNG_BASE64_MAX_LENGTH)}`,
