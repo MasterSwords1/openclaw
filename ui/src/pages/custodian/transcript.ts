@@ -54,6 +54,38 @@ export function retireCustodianQuestions(
   return answered;
 }
 
+export function scrubAnsweredCustodianQrCodes(
+  messages: readonly CustodianMessage[],
+  answeredQuestions: ReadonlySet<string>,
+): CustodianMessage[] {
+  return messages.map((message) => {
+    if (
+      !message.qrCodePngBase64 ||
+      !message.question ||
+      !answeredQuestions.has(`${message.id}:${message.question.id}`)
+    ) {
+      return message;
+    }
+    const { qrCodePngBase64: _qrCodePngBase64, ...scrubbed } = message;
+    return scrubbed;
+  });
+}
+
+export function restoreCustodianQrCodes(
+  messages: readonly CustodianMessage[],
+  source: readonly CustodianMessage[],
+): CustodianMessage[] {
+  const qrCodeByMessageId = new Map(
+    source.flatMap((message) =>
+      message.qrCodePngBase64 ? [[message.id, message.qrCodePngBase64] as const] : [],
+    ),
+  );
+  return messages.map((message) => {
+    const qrCodePngBase64 = qrCodeByMessageId.get(message.id);
+    return qrCodePngBase64 && !message.qrCodePngBase64 ? { ...message, qrCodePngBase64 } : message;
+  });
+}
+
 export function createCustodianSessionId(): string {
   if (typeof crypto.randomUUID === "function") {
     return `control-ui-onboarding-${crypto.randomUUID()}`;

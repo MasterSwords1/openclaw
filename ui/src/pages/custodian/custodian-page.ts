@@ -36,8 +36,10 @@ import {
   custodianErrorMessage,
   hasUnresolvedCustodianQuestion,
   readCustodianTranscript,
+  restoreCustodianQrCodes,
   renderCustodianTranscriptEntry,
   retireCustodianQuestions,
+  scrubAnsweredCustodianQrCodes,
   type CustodianMessage,
 } from "./transcript.ts";
 
@@ -499,6 +501,7 @@ export class CustodianPage extends OpenClawLightDomElement {
     const message = this.sensitive ? text : text.trim();
     const client = this.activeClient;
     const questionState = [this.answeredQuestions, this.questionReplyUncertain] as const;
+    const questionMessages = questionReply ? this.messages : null;
     if (questionReply) {
       // A failed wizard reply may have arrived, so block nudges until the session outcome is known.
       this.questionReplyUncertain = true;
@@ -510,6 +513,9 @@ export class CustodianPage extends OpenClawLightDomElement {
     // A new operator turn supersedes any abandoned-turn unknown-outcome warning.
     this.abandonedTurnOutcomeUnknown = false;
     this.answeredQuestions = retireCustodianQuestions(this.messages, this.answeredQuestions);
+    if (questionReply) {
+      this.messages = scrubAnsweredCustodianQrCodes(this.messages, this.answeredQuestions);
+    }
     this.messages = [
       ...this.messages,
       {
@@ -532,6 +538,9 @@ export class CustodianPage extends OpenClawLightDomElement {
       this.questionReplyUncertain = eventNudgeState.questionUncertainty(questionState[1], outcome);
       if (outcome === "rejected") {
         this.answeredQuestions = questionState[0];
+        if (questionMessages) {
+          this.messages = restoreCustodianQrCodes(this.messages, questionMessages);
+        }
       }
     }
     return outcome;

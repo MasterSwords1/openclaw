@@ -169,6 +169,9 @@ describe("custodian page", () => {
 
     const image = page.querySelector<HTMLImageElement>(".custodian__qr-code img");
     expect(image?.getAttribute("src")).toBe(`data:image/png;base64,${PNG_BASE64}`);
+    expect(page.messages.find((message) => message.qrCodePngBase64)?.qrCodePngBase64).toBe(
+      PNG_BASE64,
+    );
     expect(image?.getAttribute("alt")).toBe("Setup QR code");
     expect(page.textContent).not.toContain(PNG_BASE64);
     expect(page.querySelector(".option-card__skip")).toBeNull();
@@ -177,10 +180,44 @@ describe("custodian page", () => {
     await waitForFast(() => expect(request).toHaveBeenCalledTimes(2));
     await page.updateComplete;
     expect(page.querySelector(".custodian__qr-code")).toBeNull();
+    expect(page.messages.some((message) => message.qrCodePngBase64 !== undefined)).toBe(false);
     expect(request.mock.calls[1]?.[1]).toMatchObject({
       capabilities: { qrCodePng: true },
       message: "Continue",
     });
+  });
+
+  it("restores QR bytes only when acknowledgement delivery is rejected", async () => {
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce({
+        sessionId: "control-ui-onboarding-00000000-0000-4000-8000-000000000001",
+        reply: "Scan this code, then continue.",
+        action: "none",
+        qrCodePngBase64: PNG_BASE64,
+        question: {
+          id: "link-device",
+          header: "Link a device",
+          question: "Scan the QR code, then continue.",
+          options: [{ label: "Continue" }],
+          allowSkip: false,
+        },
+      })
+      .mockRejectedValueOnce(
+        new GatewayRequestError({ code: "INVALID_REQUEST", message: "Request failed" }),
+      );
+    const { context } = createContext(request);
+    const { page } = await mountPage(context);
+    await waitForFast(() => expect(page.querySelector(".custodian__qr-code")).not.toBeNull());
+
+    page.querySelector<HTMLButtonElement>("[data-option-value]")?.click();
+    await waitForFast(() => expect(page.querySelector('[role="alert"]')).not.toBeNull());
+    await page.updateComplete;
+
+    expect(page.querySelector(".custodian__qr-code")).not.toBeNull();
+    expect(page.messages.find((message) => message.qrCodePngBase64)?.qrCodePngBase64).toBe(
+      PNG_BASE64,
+    );
   });
 
   it("rejects an invalid setup QR payload instead of rendering a broken image", async () => {

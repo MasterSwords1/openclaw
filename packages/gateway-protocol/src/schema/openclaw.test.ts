@@ -1,3 +1,4 @@
+import { deflateSync } from "node:zlib";
 import { Value } from "typebox/value";
 import { describe, expect, it } from "vitest";
 import {
@@ -41,6 +42,26 @@ function withPngDimensions(value: string, width: number, height: number): string
   return globalThis.btoa(String.fromCharCode(...bytes));
 }
 
+function withPngChunk(value: string, type: string, data: Uint8Array): string {
+  const source = Buffer.from(value, "base64");
+  const typeBytes = Buffer.from(type, "ascii");
+  const chunk = Buffer.alloc(12 + data.byteLength);
+  chunk.writeUInt32BE(data.byteLength, 0);
+  typeBytes.copy(chunk, 4);
+  chunk.set(data, 8);
+  chunk.writeUInt32BE(pngChunkCrc32(chunk, 4, 8 + data.byteLength), 8 + data.byteLength);
+  return Buffer.concat([source.subarray(0, 33), chunk, source.subarray(33)]).toString("base64");
+}
+
+function buildCompressedProfilePng(): string {
+  const compressedProfile = deflateSync(new Uint8Array(17 * 1024 * 1024), { level: 9 });
+  return withPngChunk(
+    PNG_BASE64,
+    "iCCP",
+    Buffer.concat([Buffer.from("qr-profile\0", "binary"), Buffer.from([0]), compressedProfile]),
+  );
+}
+
 describe("OpenClaw chat params protocol", () => {
   it("accepts an additive QR rendering capability", () => {
     expect(
@@ -76,14 +97,14 @@ describe("OpenClaw chat question protocol", () => {
     );
   });
 
-  it("accepts a single acknowledgement action without a skip affordance", () => {
+  it("reserves single acknowledgement actions for QR results", () => {
     expect(
       Value.Check(SystemAgentChatQuestionSchema, {
         ...question,
         options: [{ label: "Continue" }],
         allowSkip: false,
       }),
-    ).toBe(true);
+    ).toBe(false);
   });
 });
 
@@ -111,6 +132,10 @@ describe("OpenClaw chat result protocol", () => {
     expect(isSystemAgentQrCodePngBase64(PNG_BASE64.slice(0, -4))).toBe(false);
     expect(isSystemAgentQrCodePngBase64(ANIMATED_PNG_BASE64)).toBe(false);
     await expect(isDecodableSystemAgentQrCodePngBase64(ANIMATED_PNG_BASE64)).resolves.toBe(false);
+    const compressedProfilePng = buildCompressedProfilePng();
+    expect(compressedProfilePng.length).toBeLessThan(SYSTEM_AGENT_QR_CODE_PNG_BASE64_MAX_LENGTH);
+    expect(isSystemAgentQrCodePngBase64(compressedProfilePng)).toBe(false);
+    await expect(isDecodableSystemAgentQrCodePngBase64(compressedProfilePng)).resolves.toBe(false);
     expect(isSystemAgentQrCodePngBase64(withPngDimensions(PNG_BASE64, 2, 1))).toBe(false);
     expect(isSystemAgentQrCodePngBase64(withPngDimensions(PNG_BASE64, 4097, 4097))).toBe(false);
     expect(
@@ -144,6 +169,39 @@ describe("OpenClaw chat result protocol", () => {
         qrCodePngBase64: PNG_BASE64,
       }),
     ).toBe(false);
+    for (const question of [
+      {
+        id: "setup-qr",
+        header: "Scan QR code",
+        question: "Scan the code, then continue.",
+        options: [{ label: "Continue" }],
+      },
+      {
+        id: "setup-qr",
+        header: "Scan QR code",
+        question: "Scan the code, then continue.",
+        options: [{ label: "Continue" }, { label: "Cancel" }],
+        allowSkip: false,
+      },
+      {
+        id: "setup-qr",
+        header: "Scan QR code",
+        question: "Scan the code, then continue.",
+        options: [{ label: "Continue" }],
+        allowSkip: false,
+        skipAction: "exit",
+      },
+    ]) {
+      expect(
+        Value.Check(SystemAgentChatResultSchema, {
+          sessionId: "setup-session",
+          reply: "Scan this QR code, then continue.",
+          action: "none",
+          qrCodePngBase64: PNG_BASE64,
+          question,
+        }),
+      ).toBe(false);
+    }
   });
 });
 

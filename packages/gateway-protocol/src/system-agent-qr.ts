@@ -13,6 +13,7 @@ const PNG_IHDR_LENGTH = 13;
 const PNG_MAX_QR_DIMENSION = 4096;
 const PNG_MAX_DECODED_BYTES = 16 * 1024 * 1024;
 const PNG_ANIMATION_CHUNKS = new Set(["acTL", "fcTL", "fdAT"]);
+const PNG_COMPRESSED_METADATA_CHUNKS = new Set(["iCCP", "iTXt", "zTXt"]);
 
 type PngScanlineLayout = {
   rowBytes: number;
@@ -237,7 +238,11 @@ function parsePng(value: unknown): ParsedPng | null {
         : null;
     } else {
       imageDataEnded = sawImageData;
-      if (/^[A-Z]/u.test(type) || PNG_ANIMATION_CHUNKS.has(type)) {
+      if (
+        /^[A-Z]/u.test(type) ||
+        PNG_ANIMATION_CHUNKS.has(type) ||
+        PNG_COMPRESSED_METADATA_CHUNKS.has(type)
+      ) {
         return null;
       }
     }
