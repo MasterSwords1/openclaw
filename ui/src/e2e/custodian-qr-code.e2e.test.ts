@@ -89,7 +89,10 @@ describeControlUiE2e("Control UI system-agent QR presentation", () => {
       await expect
         .poll(() => image.evaluate((element: HTMLImageElement) => element.naturalWidth))
         .toBeGreaterThan(0);
-      expect(await page.getByRole("radio", { name: "Continue" }).isVisible()).toBe(true);
+      const continueButton = page.getByRole("button", { name: "Continue" });
+      expect(await continueButton.isVisible()).toBe(true);
+      expect(await continueButton.getAttribute("role")).toBeNull();
+      expect(await continueButton.getAttribute("aria-checked")).toBeNull();
       expect(await page.getByRole("button", { name: "Skip for now" }).count()).toBe(0);
 
       for (const viewport of [
