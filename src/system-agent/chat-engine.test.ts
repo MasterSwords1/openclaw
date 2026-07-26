@@ -730,6 +730,43 @@ describe("SystemAgentChatEngine", () => {
     expect(wizardRuns).toEqual(["telegram", "token:123:abc", "mode:open"]);
   });
 
+  it("projects a negotiated QR wizard step as a typed acknowledgement", async () => {
+    let acknowledged: boolean | undefined;
+    const engine = new SystemAgentChatEngine({
+      runAgentTurn: async () => null,
+      planWithAssistant: async () => null,
+      deps: { loadOverview: fakeOverviewLoader() },
+      supportsQrCode: true,
+      runChannelSetupWizard: async (_channel: string, prompter: WizardPrompter) => {
+        acknowledged = await prompter.qrCode?.({
+          title: "Link a device",
+          message: "Scan this QR code, then continue.",
+          pngBase64: "cG5n",
+        });
+      },
+    });
+
+    const prompt = await engine.handle("connect telegram");
+
+    expect(prompt).toMatchObject({
+      text: expect.stringContaining("Scan this QR code"),
+      wizardInputPending: true,
+      qrCodePngBase64: "cG5n",
+      question: {
+        id: expect.any(String),
+        header: "Link a device",
+        question: "Scan this QR code, then continue.",
+        options: [{ label: "Continue", recommended: true }],
+        allowSkip: false,
+      },
+    });
+
+    const done = await engine.handle("Continue");
+    expect(done.text).toContain("telegram is configured");
+    expect(done.qrCodePngBase64).toBeUndefined();
+    expect(acknowledged).toBe(true);
+  });
+
   it("reports hosted channel setup success when audit persistence fails", async () => {
     const appendAuditEntry = vi.fn(async () => {
       throw new Error("audit store is read-only");

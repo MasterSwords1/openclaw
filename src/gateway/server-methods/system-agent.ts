@@ -523,6 +523,18 @@ export const systemAgentHandlers: GatewayRequestHandlers = {
           );
           return;
         }
+        const supportsQrCode = params.capabilities?.qrCodePng === true;
+        if (boundSession && !params.reset && boundSession.supportsQrCode !== supportsQrCode) {
+          respond(
+            false,
+            undefined,
+            errorShape(
+              ErrorCodes.INVALID_REQUEST,
+              "OpenClaw chat capabilities changed; retry with reset=true.",
+            ),
+          );
+          return;
+        }
         if (params.reset) {
           const existing = sessions.get(sessionId);
           sessions.delete(sessionId);
@@ -565,6 +577,7 @@ export const systemAgentHandlers: GatewayRequestHandlers = {
           // engine's setup path honors this via surface: "gateway".
           const engine = new SystemAgentChatEngine({
             surface: "gateway",
+            supportsQrCode,
             verifiedInference: inference.binding,
             operatorApprovalOnly: params.delegation !== undefined,
           });
@@ -624,6 +637,7 @@ export const systemAgentHandlers: GatewayRequestHandlers = {
               : {}),
             lastUsedAt: Date.now(),
             ownerKey,
+            supportsQrCode,
           };
           sessions.set(sessionId, session);
           if (welcomeOnly) {
@@ -731,6 +745,9 @@ export const systemAgentHandlers: GatewayRequestHandlers = {
               : {}),
             ...(reply.sensitive === true ? { sensitive: true } : {}),
             ...(reply.wizardInputPending === true ? { wizardInputPending: true } : {}),
+            ...(session.supportsQrCode && reply.qrCodePngBase64
+              ? { qrCodePngBase64: reply.qrCodePngBase64 }
+              : {}),
             ...(reply.question ? { question: reply.question } : {}),
             ...(proposalId ? { needsApproval: true, proposalId } : {}),
           },

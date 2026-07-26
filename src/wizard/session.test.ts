@@ -107,6 +107,44 @@ describe("WizardSession", () => {
     });
   });
 
+  test("projects a caller-supplied QR image only for capable hosts", async () => {
+    let acknowledged: boolean | undefined;
+    const supported = new WizardSession(
+      async (prompter) => {
+        acknowledged = await prompter.qrCode?.({
+          title: "Link a device",
+          message: "Scan this QR code, then continue.",
+          pngBase64: "cG5n",
+        });
+      },
+      { supportsQrCode: true },
+    );
+
+    const prompt = await supported.next();
+    expect(prompt.step).toMatchObject({
+      type: "select",
+      title: "Link a device",
+      message: "Scan this QR code, then continue.",
+      options: [{ value: true, label: "Continue" }],
+      initialValue: true,
+      qrCodePngBase64: "cG5n",
+      executor: "client",
+    });
+    if (!prompt.step) {
+      throw new Error("expected QR acknowledgement step");
+    }
+    await supported.answer(prompt.step.id, true);
+    expect((await supported.next()).status).toBe("done");
+    expect(acknowledged).toBe(true);
+
+    let unsupportedHasQr = true;
+    const unsupported = new WizardSession(async (prompter) => {
+      unsupportedHasQr = typeof prompter.qrCode === "function";
+    });
+    expect((await unsupported.next()).status).toBe("done");
+    expect(unsupportedHasQr).toBe(false);
+  });
+
   test("invalid answers throw", async () => {
     const session = noteRunner();
     const first = await session.next();

@@ -1,7 +1,12 @@
 // Wizard session helpers track onboarding session ids and state.
 import { randomUUID } from "node:crypto";
 import { createDeferred, type Deferred } from "../shared/deferred.js";
-import { WizardCancelledError, type WizardProgress, type WizardPrompter } from "./prompts.js";
+import {
+  WizardCancelledError,
+  type WizardProgress,
+  type WizardPrompter,
+  type WizardQrCodeParams,
+} from "./prompts.js";
 
 // WizardSession exposes interactive setup as a step/answer protocol for remote
 // clients while reusing the same WizardPrompter contract as the local CLI.
@@ -28,6 +33,7 @@ export type WizardStep = {
     expiresInMinutes?: number;
     message?: string;
   };
+  qrCodePngBase64?: string;
 };
 
 type WizardSessionStatus = "running" | "done" | "cancelled" | "error";
@@ -55,7 +61,27 @@ function normalizeTextAnswer(value: unknown): string | undefined {
 }
 
 class WizardSessionPrompter implements WizardPrompter {
-  constructor(private session: WizardSession) {}
+  readonly qrCode?: (params: WizardQrCodeParams) => Promise<boolean>;
+
+  constructor(
+    private session: WizardSession,
+    supportsQrCode: boolean,
+  ) {
+    if (supportsQrCode) {
+      this.qrCode = async (params) => {
+        const result = await this.prompt({
+          type: "select",
+          title: params.title,
+          message: params.message,
+          options: [{ value: true, label: "Continue" }],
+          initialValue: true,
+          qrCodePngBase64: params.pngBase64,
+          executor: "client",
+        });
+        return Boolean(result);
+      };
+    }
+  }
 
   async intro(title: string): Promise<void> {
     await this.prompt({
@@ -256,9 +282,9 @@ export class WizardSession {
       signal: AbortSignal,
       session: WizardSession,
     ) => Promise<void>,
-    options?: { timeoutMs?: number },
+    options?: { timeoutMs?: number; supportsQrCode?: boolean },
   ) {
-    const prompter = new WizardSessionPrompter(this);
+    const prompter = new WizardSessionPrompter(this, options?.supportsQrCode === true);
     if (options?.timeoutMs !== undefined) {
       this.expiryTimer = setTimeout(() => this.cancel(), options.timeoutMs);
       this.expiryTimer.unref?.();

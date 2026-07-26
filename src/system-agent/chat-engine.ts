@@ -76,6 +76,8 @@ export type SystemAgentChatEngineOptions = {
   appendAuditEntry?: typeof import("./audit.js").appendSystemAgentAuditEntry;
   /** Where side effects run; the gateway surface never manages its own daemon. */
   surface?: "cli" | "gateway";
+  /** The current chat client can render raw PNG QR payloads. */
+  supportsQrCode?: boolean;
   /** Test seam for the channel-setup wizard hosted by the chat bridge. */
   runChannelSetupWizard?: (
     channel: string,
@@ -102,6 +104,8 @@ type SystemAgentChatReply = {
   handoff?: SystemAgentOperation;
   /** Structured choice mirroring the awaited wizard step for card-capable clients. */
   question?: SystemAgentChatQuestion;
+  /** Raw PNG base64 for a hosted wizard QR prompt. */
+  qrCodePngBase64?: string;
 };
 
 type WizardPrompterLike = import("../wizard/prompts.js").WizardPrompter;
@@ -227,13 +231,14 @@ function wizardStepChatQuestion(step: WizardStep | null): SystemAgentChatQuestio
     return undefined;
   }
   const options = step.options ?? [];
-  if (options.length < 2 || options.length > 4) {
+  if (options.length < 1 || options.length > 4) {
     return undefined;
   }
   return {
     id: step.id,
     header: step.title ?? "Choose one",
     question: step.message ?? "Choose one.",
+    ...(step.qrCodePngBase64 ? { allowSkip: false } : {}),
     options: options.map((option) => {
       const mapped: SystemAgentChatQuestion["options"][number] = { label: option.label };
       if (option.hint) {
@@ -274,7 +279,9 @@ function renderWizardStep(step: WizardStep): string {
     default:
       break;
   }
-  lines.push("Say `cancel` to stop this setup.");
+  if (!step.qrCodePngBase64) {
+    lines.push("Say `cancel` to stop this setup.");
+  }
   return lines.filter(Boolean).join("\n");
 }
 
@@ -495,6 +502,9 @@ export class SystemAgentChatEngine {
       ...(this.wizardBridge?.step?.sensitive === true ? { sensitive: true } : {}),
       ...(this.wizardBridge ? { wizardInputPending: true } : {}),
       ...(question ? { question } : {}),
+      ...(this.wizardBridge?.step?.qrCodePngBase64
+        ? { qrCodePngBase64: this.wizardBridge.step.qrCodePngBase64 }
+        : {}),
     };
   }
 
@@ -1141,8 +1151,9 @@ export class SystemAgentChatEngine {
       this.opts.runChannelSetupWizard ??
       ((ch: string, prompter: WizardPrompterLike, guard: (runtime: RuntimeEnv) => Promise<void>) =>
         defaultChannelSetupWizardRunner(ch, guard)(prompter));
-    const session = new WizardSession((prompter) =>
-      runWizard(channel, prompter, beforePersistentApply),
+    const session = new WizardSession(
+      (prompter) => runWizard(channel, prompter, beforePersistentApply),
+      { supportsQrCode: this.opts.supportsQrCode === true },
     );
     this.wizardBridge = {
       session,

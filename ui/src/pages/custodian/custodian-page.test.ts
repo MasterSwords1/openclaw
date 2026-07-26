@@ -1,7 +1,7 @@
 /* @vitest-environment jsdom */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { GatewayBrowserClient } from "../../api/gateway.ts";
+import { GatewayRequestError, type GatewayBrowserClient } from "../../api/gateway.ts";
 import { waitForFast } from "../../test-helpers/wait-for.ts";
 import { createContext, mountPage } from "./custodian-page.test-harness.ts";
 
@@ -63,15 +63,86 @@ describe("custodian page", () => {
     await waitForFast(() => expect(request).toHaveBeenCalledTimes(2));
     await page.updateComplete;
     expect(request.mock.calls[0]?.[0]).toBe("openclaw.chat");
-    expect(request.mock.calls[0]?.[1]).toMatchObject({ welcomeVariant: "onboarding" });
+    expect(request.mock.calls[0]?.[1]).toMatchObject({
+      capabilities: { qrCodePng: true },
+      welcomeVariant: "onboarding",
+    });
     // The engine receives the parseable reply text; the transcript shows the label.
     expect(request.mock.calls[1]?.[1]).toMatchObject({
+      capabilities: { qrCodePng: true },
       welcomeVariant: "onboarding",
       message: "connect whatsapp",
     });
     const userGroup = page.querySelector<HTMLElement>(".chat-group.user")!;
     expect(userGroup.textContent).toContain("Connect WhatsApp");
     expect(connectOption.disabled).toBe(true);
+  });
+
+  it("retries without QR capabilities when an older gateway rejects the request shape", async () => {
+    const request = vi
+      .fn()
+      .mockRejectedValueOnce(
+        new GatewayRequestError({
+          code: "INVALID_REQUEST",
+          message: "invalid openclaw.chat params",
+        }),
+      )
+      .mockResolvedValueOnce({
+        sessionId: "control-ui-onboarding-00000000-0000-4000-8000-000000000001",
+        reply: "Legacy gateway welcome.",
+        action: "none",
+      });
+    const { context } = createContext(request);
+    const { page } = await mountPage(context);
+
+    await waitForFast(() => expect(request).toHaveBeenCalledTimes(2));
+
+    expect(request.mock.calls[0]?.[1]).toMatchObject({
+      capabilities: { qrCodePng: true },
+    });
+    expect(request.mock.calls[1]?.[1]).not.toHaveProperty("capabilities");
+    await waitForFast(() => expect(page.textContent).toContain("Legacy gateway welcome."));
+  });
+
+  it("renders a setup QR image without exposing its payload text", async () => {
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce({
+        sessionId: "control-ui-onboarding-00000000-0000-4000-8000-000000000001",
+        reply: "Scan this code, then continue.",
+        action: "none",
+        qrCodePngBase64: "cXItcG5n",
+        question: {
+          id: "link-device",
+          header: "Link a device",
+          question: "Scan the QR code, then continue.",
+          options: [{ label: "Continue" }],
+          allowSkip: false,
+        },
+      })
+      .mockResolvedValueOnce({
+        sessionId: "control-ui-onboarding-00000000-0000-4000-8000-000000000001",
+        reply: "Device linked.",
+        action: "none",
+      });
+    const { context } = createContext(request);
+    const { page } = await mountPage(context);
+
+    await waitForFast(() => expect(request).toHaveBeenCalledOnce());
+    await page.updateComplete;
+
+    const image = page.querySelector<HTMLImageElement>(".custodian__qr-code img");
+    expect(image?.getAttribute("src")).toBe("data:image/png;base64,cXItcG5n");
+    expect(image?.getAttribute("alt")).toBe("Setup QR code");
+    expect(page.textContent).not.toContain("cXItcG5n");
+    expect(page.querySelector(".option-card__skip")).toBeNull();
+
+    page.querySelector<HTMLButtonElement>("[data-option-value]")?.click();
+    await waitForFast(() => expect(request).toHaveBeenCalledTimes(2));
+    expect(request.mock.calls[1]?.[1]).toMatchObject({
+      capabilities: { qrCodePng: true },
+      message: "Continue",
+    });
   });
 
   it("renders advertised durable history before the live welcome with a divider", async () => {
