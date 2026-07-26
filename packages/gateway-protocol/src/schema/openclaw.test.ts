@@ -19,6 +19,26 @@ import {
 const PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
 
+function pngChunkCrc32(bytes: Uint8Array, start: number, end: number): number {
+  let crc = 0xffffffff;
+  for (let index = start; index < end; index += 1) {
+    crc ^= bytes[index] as number;
+    for (let bit = 0; bit < 8; bit += 1) {
+      crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0);
+    }
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function withPngDimensions(value: string, width: number, height: number): string {
+  const bytes = Uint8Array.from(globalThis.atob(value), (character) => character.charCodeAt(0));
+  const view = new DataView(bytes.buffer);
+  view.setUint32(16, width);
+  view.setUint32(20, height);
+  view.setUint32(29, pngChunkCrc32(bytes, 12, 29));
+  return globalThis.btoa(String.fromCharCode(...bytes));
+}
+
 describe("OpenClaw chat params protocol", () => {
   it("accepts an additive QR rendering capability", () => {
     expect(
@@ -80,6 +100,8 @@ describe("OpenClaw chat result protocol", () => {
     expect(isSystemAgentQrCodePngBase64("cG5n")).toBe(false);
     expect(isSystemAgentQrCodePngBase64("iVBORw0KGgo=")).toBe(false);
     expect(isSystemAgentQrCodePngBase64(PNG_BASE64.slice(0, -4))).toBe(false);
+    expect(isSystemAgentQrCodePngBase64(withPngDimensions(PNG_BASE64, 2, 1))).toBe(false);
+    expect(isSystemAgentQrCodePngBase64(withPngDimensions(PNG_BASE64, 4097, 4097))).toBe(false);
     expect(
       isSystemAgentQrCodePngBase64(
         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB/wAAAADAahcYAAAAB0lEQVRnYXJiYWdliKMwNwAAAABJRU5ErkJggg==",

@@ -10,6 +10,7 @@ const SYSTEM_AGENT_QR_CODE_PNG_BASE64_REGEX = new RegExp(
 
 const PNG_SIGNATURE = Uint8Array.of(137, 80, 78, 71, 13, 10, 26, 10);
 const PNG_IHDR_LENGTH = 13;
+const PNG_MAX_QR_DIMENSION = 4096;
 const PNG_MAX_DECODED_BYTES = 16 * 1024 * 1024;
 
 type PngScanlineLayout = {
@@ -184,6 +185,8 @@ function parsePng(value: unknown): ParsedPng | null {
         chunkIndex !== 0 ||
         width === 0 ||
         height === 0 ||
+        width !== height ||
+        width > PNG_MAX_QR_DIMENSION ||
         bitsPerPixel === null ||
         bytes[dataOffset + 10] !== 0 ||
         bytes[dataOffset + 11] !== 0 ||
