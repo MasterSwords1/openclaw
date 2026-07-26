@@ -64,6 +64,7 @@ describeControlUiE2e("Control UI system-agent QR presentation", () => {
           sessionId: "e2e-system-agent-qr",
           reply: "Scan this code to continue setup.",
           action: "none",
+          wizardInputPending: true,
           question: {
             id: "setup-qr",
             header: "Scan QR code",

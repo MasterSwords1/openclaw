@@ -114,6 +114,13 @@ export const SystemAgentChatResultSchema = Type.Union([
   }),
   closedObject({
     ...SystemAgentChatResultBaseProperties,
+    sensitive: Type.Optional(Type.Never()),
+    wizardInputPending: Type.Literal(true),
+    action: Type.Literal("none"),
+    agentDraft: Type.Optional(Type.Never()),
+    agentId: Type.Optional(Type.Never()),
+    needsApproval: Type.Optional(Type.Never()),
+    proposalId: Type.Optional(Type.Never()),
     /** Static PNG base64 paired with exactly one non-skippable acknowledgement action. */
     qrCodePngBase64: SystemAgentChatQrCodePngBase64Schema,
     question: SystemAgentChatQrQuestionSchema,

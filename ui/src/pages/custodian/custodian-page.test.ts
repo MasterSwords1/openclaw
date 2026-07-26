@@ -13,6 +13,10 @@ import {
 const PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
 
+function readPageMessages(page: HTMLElement): readonly CustodianMessage[] {
+  return Reflect.get(page, "messages") as readonly CustodianMessage[];
+}
+
 describe("custodian page", () => {
   beforeEach(() => {
     vi.spyOn(crypto, "randomUUID").mockReturnValue("00000000-0000-4000-8000-000000000001");
@@ -151,6 +155,7 @@ describe("custodian page", () => {
         sessionId: "control-ui-onboarding-00000000-0000-4000-8000-000000000001",
         reply: "Scan this code, then continue.",
         action: "none",
+        wizardInputPending: true,
         qrCodePngBase64: PNG_BASE64,
         question: {
           id: "link-device",
@@ -188,13 +193,14 @@ describe("custodian page", () => {
     });
   });
 
-  it("restores QR bytes only when acknowledgement delivery is rejected", async () => {
+  it("restores QR bytes only when acknowledgement delivery is conclusively unsent", async () => {
     const request = vi
       .fn()
       .mockResolvedValueOnce({
         sessionId: "control-ui-onboarding-00000000-0000-4000-8000-000000000001",
         reply: "Scan this code, then continue.",
         action: "none",
+        wizardInputPending: true,
         qrCodePngBase64: PNG_BASE64,
         question: {
           id: "link-device",
@@ -216,6 +222,39 @@ describe("custodian page", () => {
     await page.updateComplete;
 
     expect(page.querySelector(".custodian__qr-code")).not.toBeNull();
+  });
+
+  it("does not restore QR bytes after a sent acknowledgement receives an error", async () => {
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce({
+        sessionId: "control-ui-onboarding-00000000-0000-4000-8000-000000000001",
+        reply: "Scan this code, then continue.",
+        action: "none",
+        wizardInputPending: true,
+        qrCodePngBase64: PNG_BASE64,
+        question: {
+          id: "link-device",
+          header: "Link a device",
+          question: "Scan the QR code, then continue.",
+          options: [{ label: "Continue" }],
+          allowSkip: false,
+        },
+      })
+      .mockImplementationOnce((_method, _params, options?: { onSent?: () => void }) => {
+        options?.onSent?.();
+        throw new GatewayRequestError({ code: "INVALID_REQUEST", message: "Request failed" });
+      });
+    const { context } = createContext(request);
+    const { page } = await mountPage(context);
+    await waitForFast(() => expect(page.querySelector(".custodian__qr-code")).not.toBeNull());
+
+    page.querySelector<HTMLButtonElement>("[data-option-value]")?.click();
+    await waitForFast(() => expect(page.querySelector('[role="alert"]')).not.toBeNull());
+    await page.updateComplete;
+
+    expect(page.querySelector(".custodian__qr-code")).toBeNull();
+    expect(readPageMessages(page).some((message) => message.qrCodePngBase64)).toBe(false);
   });
 
   it("scrubs answered QR credentials and restores them only from an unsent snapshot", () => {
@@ -361,6 +400,42 @@ describe("custodian page", () => {
     });
     expect(page.textContent).toContain("Earlier state");
     expect(page.textContent).toContain("Fresh session welcome");
+  });
+
+  it("scrubs retained QR credentials during a same-owner client replacement", async () => {
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce({
+        sessionId: "control-ui-onboarding-00000000-0000-4000-8000-000000000001",
+        reply: "Scan this code, then continue.",
+        action: "none",
+        wizardInputPending: true,
+        qrCodePngBase64: PNG_BASE64,
+        question: {
+          id: "link-device",
+          header: "Link a device",
+          question: "Scan the QR code, then continue.",
+          options: [{ label: "Continue" }],
+          allowSkip: false,
+        },
+      })
+      .mockResolvedValueOnce({
+        sessionId: "fresh-session",
+        reply: "Fresh session welcome.",
+        action: "none",
+      });
+    const { context, setGatewaySnapshot } = createContext(request);
+    const { page } = await mountPage(context);
+    await waitForFast(() => expect(page.querySelector(".custodian__qr-code")).not.toBeNull());
+
+    setGatewaySnapshot({
+      client: { request, connectionGeneration: 2 } as unknown as GatewayBrowserClient,
+    });
+    await waitForFast(() => expect(page.textContent).toContain("Fresh session welcome."));
+    await page.updateComplete;
+
+    expect(page.querySelector(".custodian__qr-code")).toBeNull();
+    expect(readPageMessages(page).some((message) => message.qrCodePngBase64)).toBe(false);
   });
 
   it("does not rotate against a replacement gateway without chat support", async () => {

@@ -115,6 +115,7 @@ describe("OpenClaw chat result protocol", () => {
         sessionId: "setup-session",
         reply: "Scan this QR code, then continue.",
         action: "none",
+        wizardInputPending: true,
         qrCodePngBase64: PNG_BASE64,
         question: {
           id: "setup-qr",
@@ -127,6 +128,10 @@ describe("OpenClaw chat result protocol", () => {
     ).toBe(true);
     expect(isSystemAgentQrCodePngBase64(PNG_BASE64)).toBe(true);
     await expect(isDecodableSystemAgentQrCodePngBase64(PNG_BASE64)).resolves.toBe(true);
+    const noncanonicalPadding = `${PNG_BASE64.slice(0, -2)}J=`;
+    expect(Buffer.from(noncanonicalPadding, "base64")).toEqual(Buffer.from(PNG_BASE64, "base64"));
+    expect(isSystemAgentQrCodePngBase64(noncanonicalPadding)).toBe(false);
+    await expect(isDecodableSystemAgentQrCodePngBase64(noncanonicalPadding)).resolves.toBe(false);
     expect(isSystemAgentQrCodePngBase64("cG5n")).toBe(false);
     expect(isSystemAgentQrCodePngBase64("iVBORw0KGgo=")).toBe(false);
     expect(isSystemAgentQrCodePngBase64(PNG_BASE64.slice(0, -4))).toBe(false);
@@ -158,6 +163,7 @@ describe("OpenClaw chat result protocol", () => {
         sessionId: "setup-session",
         reply: "Scan this QR code, then continue.",
         action: "none",
+        wizardInputPending: true,
         qrCodePngBase64: "cG5n",
       }),
     ).toBe(false);
@@ -166,6 +172,7 @@ describe("OpenClaw chat result protocol", () => {
         sessionId: "setup-session",
         reply: "Scan this QR code, then continue.",
         action: "none",
+        wizardInputPending: true,
         qrCodePngBase64: PNG_BASE64,
       }),
     ).toBe(false);
@@ -197,8 +204,40 @@ describe("OpenClaw chat result protocol", () => {
           sessionId: "setup-session",
           reply: "Scan this QR code, then continue.",
           action: "none",
+          wizardInputPending: true,
           qrCodePngBase64: PNG_BASE64,
           question,
+        }),
+      ).toBe(false);
+    }
+  });
+
+  it("requires QR results to remain in a pending wizard acknowledgement", () => {
+    const question = {
+      id: "setup-qr",
+      header: "Scan QR code",
+      question: "Scan the code, then continue.",
+      options: [{ label: "Continue" }],
+      allowSkip: false,
+    };
+    for (const incompatible of [
+      { action: "none" },
+      { action: "none", wizardInputPending: false },
+      { action: "exit", wizardInputPending: true },
+      { action: "open-agent", wizardInputPending: true },
+      { action: "none", wizardInputPending: true, sensitive: true },
+      { action: "none", wizardInputPending: true, agentDraft: "hatch" },
+      { action: "none", wizardInputPending: true, agentId: "main" },
+      { action: "none", wizardInputPending: true, needsApproval: true },
+      { action: "none", wizardInputPending: true, proposalId: "proposal-1" },
+    ]) {
+      expect(
+        Value.Check(SystemAgentChatResultSchema, {
+          sessionId: "setup-session",
+          reply: "Scan this QR code, then continue.",
+          qrCodePngBase64: PNG_BASE64,
+          question,
+          ...incompatible,
         }),
       ).toBe(false);
     }

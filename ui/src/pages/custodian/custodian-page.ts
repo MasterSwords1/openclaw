@@ -177,6 +177,7 @@ export class CustodianPage extends OpenClawLightDomElement {
     variant: CustodianSessionVariant,
   ): void {
     this.answeredQuestions = retireCustodianQuestions(this.messages, this.answeredQuestions);
+    this.messages = scrubQrCodes(this.messages, this.answeredQuestions);
     this.retryParams = null;
     this.input = "";
     this.sensitive = this.wizardInputPending = this.questionReplyUncertain = false;
@@ -412,7 +413,7 @@ export class CustodianPage extends OpenClawLightDomElement {
   private async requestReply(
     client: GatewayBrowserClient,
     params: SystemAgentChatParams,
-  ): Promise<eventNudgeState.CustodianSendOutcome> {
+  ): Promise<eventNudgeState.CustodianSendResult> {
     const epoch = ++this.requestEpoch;
     let delivery: eventNudgeState.CustodianSendDelivery = "unsent";
     this.sending = true;
@@ -427,7 +428,7 @@ export class CustodianPage extends OpenClawLightDomElement {
       });
       delivery = "received";
       if (epoch !== this.requestEpoch || client !== this.activeClient) {
-        return "sent";
+        return { outcome: "sent", delivery };
       }
       this.sessionId = result.sessionId;
       this.sensitive = result.sensitive === true;
@@ -444,7 +445,7 @@ export class CustodianPage extends OpenClawLightDomElement {
         if (result.agentId) {
           const roster = await this.context.agents.refreshList();
           if (epoch !== this.requestEpoch || client !== this.activeClient) {
-            return "sent";
+            return { outcome: "sent", delivery };
           }
           sessionKey = buildAgentMainSessionKey({
             agentId: result.agentId,
@@ -465,7 +466,7 @@ export class CustodianPage extends OpenClawLightDomElement {
       } else if (result.action === "exit") {
         this.exitSetup();
       }
-      return "sent";
+      return { outcome: "sent", delivery };
     } catch (error) {
       if (epoch === this.requestEpoch && client === this.activeClient) {
         this.error = custodianErrorMessage(error);
@@ -481,7 +482,7 @@ export class CustodianPage extends OpenClawLightDomElement {
       if (params.message !== undefined && this.retryParams === params) {
         this.retryParams = null;
       }
-      return eventNudgeState.classifyCustodianSendFailure(error, delivery);
+      return { outcome: eventNudgeState.classifyCustodianSendFailure(delivery), delivery };
     } finally {
       if (epoch === this.requestEpoch) {
         this.sending = false;
@@ -528,10 +529,10 @@ export class CustodianPage extends OpenClawLightDomElement {
       message,
     });
     const replyEpoch = this.requestEpoch;
-    const outcome = await reply;
+    const { outcome, delivery } = await reply;
     if (questionReply && this.requestEpoch === replyEpoch) {
       this.questionReplyUncertain = eventNudgeState.questionUncertainty(prior[1], outcome);
-      if (outcome === "rejected") {
+      if (outcome === "rejected" && delivery === "unsent") {
         this.answeredQuestions = prior[0];
         this.messages = restoreQrCodes(this.messages, prior[2]);
       }
