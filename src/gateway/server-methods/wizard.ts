@@ -126,8 +126,11 @@ export const wizardHandlers: GatewayRequestHandlers = {
       if (resumable) {
         const [resumableId, resumableSession] = resumable;
         const result = await resumableSession.next();
+        // A reconnect has no delivery acknowledgement. Keep terminal recovery
+        // replayable until the tracker expires it so repeated response loss
+        // cannot rerun an already-committed setup.
         if (result.done) {
-          context.purgeWizardSession(resumableId);
+          context.findRunningWizard();
         }
         respond(true, { sessionId: resumableId, ...result }, undefined);
         return;

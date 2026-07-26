@@ -272,26 +272,28 @@ describe("channel wizard lifecycle", () => {
       undefined,
     );
 
-    const recoveredRespond = vi.fn();
-    await start({
-      params: { flow: "channels", channel: "matrix" },
-      client: { ...owner, connId: "owner-new-connection" },
-      respond: recoveredRespond,
-      context,
-    } as never);
+    for (const connId of ["owner-new-connection", "owner-retry-connection"]) {
+      const recoveredRespond = vi.fn();
+      await start({
+        params: { flow: "channels", channel: "matrix" },
+        client: { ...owner, connId },
+        respond: recoveredRespond,
+        context,
+      } as never);
 
-    expect(recoveredRespond).toHaveBeenCalledWith(
-      true,
-      expect.objectContaining({
-        sessionId,
-        done: true,
-        status: "done",
-        accounts: [{ channel: "matrix", accountId: "default" }],
-      }),
-      undefined,
-    );
+      expect(recoveredRespond).toHaveBeenCalledWith(
+        true,
+        expect.objectContaining({
+          sessionId,
+          done: true,
+          status: "done",
+          accounts: [{ channel: "matrix", accountId: "default" }],
+        }),
+        undefined,
+      );
+    }
     expect(runCount).toHaveBeenCalledOnce();
-    expect(wizardSessions.has(sessionId)).toBe(false);
+    expect(wizardSessions.has(sessionId)).toBe(true);
   });
 
   it("rejects hosted channel setup without a reconnect-safe owner", async () => {
