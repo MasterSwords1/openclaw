@@ -831,6 +831,43 @@ describe("SystemAgentChatEngine", () => {
     expect((await engine.handle("yes")).text).toContain("matrix is configured");
     expect(completed).toHaveBeenCalledOnce();
     expect(runChannelSetupWizard).toHaveBeenCalledOnce();
+    await expect(engine.dispose()).resolves.toBe(false);
+    await expect(engine.handle("status")).rejects.toBeInstanceOf(
+      SystemAgentInferenceUnavailableError,
+    );
+    await expect(engine.dispose()).resolves.toBe(true);
+  });
+
+  it("retains a completed locked channel setup until recovery collects it", async () => {
+    const engine = new SystemAgentChatEngine({
+      surface: "gateway",
+      runAgentTurn: async () => null,
+      planWithAssistant: async () => null,
+      deps: { loadOverview: fakeOverviewLoader() },
+      runChannelSetupWizard: async (_channel, prompter, beforePersistentApply) => {
+        await beforePersistentApply({
+          log: () => {},
+          error: () => {},
+          exit: (): never => {
+            throw new Error("unexpected exit");
+          },
+        });
+        await prompter.outro("Applied");
+      },
+    });
+
+    expect((await engine.handle("connect matrix")).text).toContain("matrix is configured");
+    expect(engine.hasLockedHostedWizard()).toBe(true);
+
+    await expect(engine.dispose()).resolves.toBe(false);
+    await expect(engine.resumeLockedHostedWizard()).resolves.toMatchObject({
+      text: expect.stringContaining("matrix is configured"),
+    });
+    expect(engine.hasLockedHostedWizard()).toBe(true);
+    await expect(engine.handle("status")).rejects.toBeInstanceOf(
+      SystemAgentInferenceUnavailableError,
+    );
+    expect(engine.hasLockedHostedWizard()).toBe(false);
     await expect(engine.dispose()).resolves.toBe(true);
   });
 

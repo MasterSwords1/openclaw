@@ -372,7 +372,7 @@ export class WizardSession {
 
   /** A replacement host may reclaim only the flow that created this session. */
   canResume(resumeKey: string): boolean {
-    return this.status === "running" && this.resumeKey === resumeKey;
+    return this.cancellationLocked && this.resumeKey === resumeKey;
   }
 
   /** Unowned legacy sessions remain bearer-token based; hosted sessions bind to their owner. */
@@ -381,7 +381,7 @@ export class WizardSession {
   }
 
   isCancellationLocked(): boolean {
-    return this.status === "running" && this.cancellationLocked;
+    return this.cancellationLocked;
   }
 
   get signal(): AbortSignal {

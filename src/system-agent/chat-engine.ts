@@ -393,6 +393,7 @@ export class SystemAgentChatEngine {
   private readonly history: SystemAgentAssistantTurn[] = [];
   private readonly agentSession: SystemAgentSession;
   private verifiedInference: SystemAgentVerifiedInferenceBinding;
+  private retainedTerminalWizardReply: SystemAgentChatReply | null = null;
   /** Turns run strictly one at a time; interleaved handles corrupt wizard/pending state. */
   private turnQueue: Promise<unknown> = Promise.resolve();
 
@@ -465,9 +466,10 @@ export class SystemAgentChatEngine {
 
   async dispose(): Promise<boolean> {
     const wizardSession = this.wizardBridge?.session;
-    if (wizardSession && !wizardSession.cancel() && wizardSession.getStatus() === "running") {
+    if (this.retainedTerminalWizardReply || wizardSession?.isCancellationLocked()) {
       return false;
     }
+    wizardSession?.cancel();
     this.wizardBridge = null;
     this.lastSensitiveChannel = undefined;
     this.awaitingSetupChannel = false;
@@ -476,13 +478,19 @@ export class SystemAgentChatEngine {
   }
 
   hasLockedHostedWizard(): boolean {
-    return this.wizardBridge?.session.isCancellationLocked() === true;
+    return (
+      this.retainedTerminalWizardReply !== null ||
+      this.wizardBridge?.session.isCancellationLocked() === true
+    );
   }
 
   async resumeLockedHostedWizard(): Promise<SystemAgentChatReply | null> {
     const turn = this.turnQueue.then(async () => {
       if (!this.hasLockedHostedWizard()) {
         return null;
+      }
+      if (this.retainedTerminalWizardReply) {
+        return { ...this.retainedTerminalWizardReply };
       }
       return this.projectWizardReply({
         text: await this.pumpWizardBridge(),
@@ -501,6 +509,11 @@ export class SystemAgentChatEngine {
   }
 
   private async handleSerialized(text: string): Promise<SystemAgentChatReply> {
+    if (!this.wizardBridge) {
+      // A same-session follow-up acknowledges the previously returned
+      // terminal wizard reply; cross-session recovery reads it first.
+      this.retainedTerminalWizardReply = null;
+    }
     // Hosted wizard replies are deterministic, and a locked flow may be the
     // only recovery path after its durable effect changes the inference route.
     if (!this.wizardBridge?.session.isCancellationLocked()) {
@@ -1247,6 +1260,7 @@ export class SystemAgentChatEngine {
     if (result.done) {
       this.wizardBridge = null;
       const label = bridge.label;
+      let terminalText: string;
       if (result.status === "done") {
         try {
           const appendAuditEntry =
@@ -1262,18 +1276,22 @@ export class SystemAgentChatEngine {
           log.warn(`channel setup completed without audit entry: ${formatErrorMessage(error)}`);
         }
         const verify = await this.verifyConfigAfterWrite();
-        return [
+        terminalText = [
           `Done — ${label} is configured.`,
           "Say `restart gateway` to apply channel changes, or `channels` to review.",
           verify ?? "",
         ]
           .filter(Boolean)
           .join("\n");
+      } else if (result.status === "cancelled") {
+        terminalText = "Channel setup cancelled. Nothing was changed beyond completed steps.";
+      } else {
+        terminalText = `Channel setup stopped: ${result.error ?? "unknown error"}`;
       }
-      if (result.status === "cancelled") {
-        return "Channel setup cancelled. Nothing was changed beyond completed steps.";
+      if (bridge.session.isCancellationLocked()) {
+        this.retainedTerminalWizardReply = { text: terminalText, action: "none" };
       }
-      return `Channel setup stopped: ${result.error ?? "unknown error"}`;
+      return terminalText;
     }
     bridge.step = result.step ?? null;
     if (bridge.step) {

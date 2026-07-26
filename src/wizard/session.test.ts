@@ -203,6 +203,20 @@ describe("WizardSession", () => {
     expect(session.signal.aborted).toBe(true);
   });
 
+  test("keeps the durable lock through an uncollected terminal result", async () => {
+    const session = new WizardSession(
+      async (_prompter, _signal, wizardSession) => {
+        expect(wizardSession.lockCancellation()).toBe(true);
+      },
+      { resumeKey: "owner:channel-setup" },
+    );
+
+    expect((await session.next()).status).toBe("done");
+    expect(session.isCancellationLocked()).toBe(true);
+    expect(session.canResume("owner:channel-setup")).toBe(true);
+    expect(session.cancel()).toBe(false);
+  });
+
   test("expires an abandoned interactive session", async () => {
     vi.useFakeTimers();
     try {
@@ -270,7 +284,7 @@ describe("WizardSession", () => {
     }
   });
 
-  test("allows resumption only with the exact host-owned key", () => {
+  test("allows locked resumption only with the exact host-owned key", () => {
     const session = new WizardSession(
       async (prompter) => {
         await prompter.text({ message: "Token" });
@@ -278,12 +292,10 @@ describe("WizardSession", () => {
       { resumeKey: "owner:connection-1:channel-a" },
     );
 
+    expect(session.lockCancellation()).toBe(true);
     expect(session.canResume("owner:connection-1:channel-a")).toBe(true);
     expect(session.canResume("owner:connection-2:channel-a")).toBe(false);
     expect(session.canResume("owner:connection-1:channel-b")).toBe(false);
-
-    session.cancel();
-    expect(session.canResume("owner:connection-1:channel-a")).toBe(false);
   });
 
   test("a runner finishing after cancellation cannot overwrite cancelled state", async () => {

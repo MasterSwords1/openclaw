@@ -119,16 +119,21 @@ export const wizardHandlers: GatewayRequestHandlers = {
     const ownerKey = owner?.key;
     const resumeKey = flow === "channels" ? resolveChannelWizardResumeKey(ownerKey) : undefined;
     const running = context.findRunningWizard();
-    if (running) {
-      const existing = context.wizardSessions.get(running);
-      if (resumeKey && existing?.isCancellationLocked() && existing.canResume(resumeKey)) {
-        const result = await existing.next();
+    if (resumeKey) {
+      const resumable = [...context.wizardSessions.entries()].find(([, session]) =>
+        session.canResume(resumeKey),
+      );
+      if (resumable) {
+        const [resumableId, resumableSession] = resumable;
+        const result = await resumableSession.next();
         if (result.done) {
-          context.purgeWizardSession(running);
+          context.purgeWizardSession(resumableId);
         }
-        respond(true, { sessionId: running, ...result }, undefined);
+        respond(true, { sessionId: resumableId, ...result }, undefined);
         return;
       }
+    }
+    if (running) {
       respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, "wizard already running"));
       return;
     }
@@ -174,9 +179,13 @@ export const wizardHandlers: GatewayRequestHandlers = {
     context.wizardSessions.set(sessionId, session);
     const result = await session.next();
     if (result.done) {
-      // Completed sessions cannot accept later answers; purge immediately so
-      // clients get a clean not-found response for stale session ids.
-      context.purgeWizardSession(sessionId);
+      if (session.isCancellationLocked()) {
+        // Keep one owner-bound recovery copy when a durable result races a
+        // dropped response. The tracker reaps it if nobody reconnects.
+        context.findRunningWizard();
+      } else {
+        context.purgeWizardSession(sessionId);
+      }
     }
     respond(true, { sessionId, ...result }, undefined);
   },
@@ -208,9 +217,11 @@ export const wizardHandlers: GatewayRequestHandlers = {
     }
     const result = await session.next();
     if (result.done) {
-      // The final step may be reached after an answer, so cleanup mirrors
-      // wizard.start's immediate-completion path.
-      context.purgeWizardSession(sessionId);
+      if (session.isCancellationLocked()) {
+        context.findRunningWizard();
+      } else {
+        context.purgeWizardSession(sessionId);
+      }
     }
     respond(true, result, undefined);
   },
@@ -225,8 +236,10 @@ export const wizardHandlers: GatewayRequestHandlers = {
     }
     const cancelled = session.cancel();
     const status = readWizardStatus(session);
-    if (cancelled || status.status !== "running") {
+    if (cancelled || (status.status !== "running" && !session.isCancellationLocked())) {
       context.wizardSessions.delete(sessionId);
+    } else if (status.status !== "running") {
+      context.findRunningWizard();
     }
     respond(true, status, undefined);
   },
@@ -240,8 +253,10 @@ export const wizardHandlers: GatewayRequestHandlers = {
       return;
     }
     const status = readWizardStatus(session);
-    if (status.status !== "running") {
+    if (status.status !== "running" && !session.isCancellationLocked()) {
       context.wizardSessions.delete(sessionId);
+    } else if (status.status !== "running") {
+      context.findRunningWizard();
     }
     respond(true, status, undefined);
   },
