@@ -66,6 +66,9 @@ export type GatewayClient = {
   /** Client id verified against the server-approved device pairing record. */
   pairedClientId?: string;
   authenticatedUserId?: string;
+  /** Shared-auth identity survives reconnects until the Gateway credential rotates. */
+  usesSharedGatewayAuth?: boolean;
+  sharedGatewaySessionGeneration?: string;
   authenticatedUserProfile?: {
     profileId: string;
     displayName: string | null;

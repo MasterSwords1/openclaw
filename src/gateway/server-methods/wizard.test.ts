@@ -74,7 +74,12 @@ describe("channel wizard lifecycle", () => {
         params: { flow: "channels", channel: "matrix" },
       },
       params: { flow: "channels", channel: "matrix" },
-      client: null,
+      client: {
+        connId: "shared-auth-old-connection",
+        usesSharedGatewayAuth: true,
+        sharedGatewaySessionGeneration: "shared-auth-generation",
+        connect: { client: { id: "openclaw-control-ui", mode: "webchat" } },
+      },
       isWebchatConnect: () => false,
       respond,
       context,
@@ -148,6 +153,20 @@ describe("channel wizard lifecycle", () => {
     const sessionId = expectDefined(firstResult?.sessionId, "channel wizard session id");
     const stepId = expectDefined(firstResult?.step?.id, "channel wizard step id");
 
+    const lockedCancel = vi.fn();
+    await cancel({
+      params: { sessionId },
+      client: reconnectedOwner,
+      respond: lockedCancel,
+      context,
+    } as never);
+    expect(lockedCancel).toHaveBeenCalledWith(
+      true,
+      expect.objectContaining({ status: "running" }),
+      undefined,
+    );
+    expect(wizardSessions.has(sessionId)).toBe(true);
+
     const deniedCancel = vi.fn();
     await cancel({
       params: { sessionId },
@@ -205,5 +224,35 @@ describe("channel wizard lifecycle", () => {
       undefined,
     );
     expect(runCount).toHaveBeenCalledOnce();
+  });
+
+  it("rejects hosted channel setup without a reconnect-safe owner", async () => {
+    const respond = vi.fn();
+    const start = expectDefined(
+      wizardHandlers["wizard.start"],
+      "wizardHandlers[wizard.start] test invariant",
+    );
+
+    await start({
+      params: { flow: "channels", channel: "matrix" },
+      client: {
+        connId: "connection-only",
+        connect: { client: { id: "test-client", mode: "cli" } },
+      },
+      respond,
+      context: {
+        wizardSessions: new Map(),
+        findRunningWizard: () => null,
+      },
+    } as never);
+
+    expect(respond).toHaveBeenCalledWith(
+      false,
+      undefined,
+      expect.objectContaining({
+        code: "INVALID_REQUEST",
+        message: expect.stringContaining("survive reconnects"),
+      }),
+    );
   });
 });

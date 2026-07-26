@@ -23,6 +23,7 @@ import {
 import { baseConfigSnapshot, createTestRuntime } from "./test-runtime-config-helpers.js";
 
 let channelsAddCommand: typeof import("./channels/add.js").channelsAddCommand;
+let runChannelsSetupWizard: typeof import("./channels/add-wizard.js").runChannelsSetupWizard;
 
 const catalogMocks = vi.hoisted(() => ({
   getChannelPluginCatalogEntry: vi.fn(),
@@ -428,6 +429,7 @@ async function runSignalAddCommand(
 describe("channelsAddCommand", () => {
   beforeAll(async () => {
     ({ channelsAddCommand } = await import("./channels/add.js"));
+    ({ runChannelsSetupWizard } = await import("./channels/add-wizard.js"));
   });
 
   beforeEach(async () => {
@@ -507,6 +509,24 @@ describe("channelsAddCommand", () => {
     expect(setupOptions().promptAccountIds).toBe(true);
     expect(configMocks.writeConfigFile).not.toHaveBeenCalled();
     expect(channelWizardMocks.prompter.outro).toHaveBeenCalledWith("No channel changes made.");
+  });
+
+  it("forwards the hosted cancellation signal through the default Gateway runner", async () => {
+    const abortController = new AbortController();
+    const config: OpenClawConfig = { channels: {} };
+    configMocks.readConfigFileSnapshot.mockResolvedValue({
+      ...baseConfigSnapshot,
+      sourceConfig: config,
+      config,
+    });
+
+    await runChannelsSetupWizard(
+      { abortSignal: abortController.signal },
+      runtime,
+      channelWizardMocks.prompter,
+    );
+
+    expect(setupOptions().abortSignal).toBe(abortController.signal);
   });
 
   it("persists an accepted plugin install after setup returns to an empty selection", async () => {

@@ -47,6 +47,7 @@ import {
 import {
   adoptLockedSystemAgentWizard,
   evictOldestSystemAgentSession,
+  resetSystemAgentSession,
   resolveSystemAgentSessionOwnerKey,
 } from "./system-agent-session-lifecycle.js";
 import type { GatewayRequestContext, GatewayRequestHandlers } from "./types.js";
@@ -511,23 +512,13 @@ export const systemAgentHandlers: GatewayRequestHandlers = {
             adoptedLockedWizard = true;
           }
         }
-        if (params.reset) {
-          const existing = sessions.get(sessionId);
-          if (existing && !(await existing.engine.dispose())) {
-            respond(
-              false,
-              undefined,
-              errorShape(ErrorCodes.INVALID_REQUEST, LOCKED_SETUP_RESET_ERROR),
-            );
-            return;
-          }
-          sessions.delete(sessionId);
-          if (existing?.pendingApproval) {
-            context.systemAgentApprovalManager?.expire(
-              existing.pendingApproval.id,
-              "session-reset",
-            );
-          }
+        if (params.reset && !(await resetSystemAgentSession({ sessions, sessionId, context }))) {
+          respond(
+            false,
+            undefined,
+            errorShape(ErrorCodes.INVALID_REQUEST, LOCKED_SETUP_RESET_ERROR),
+          );
+          return;
         }
         let session = sessions.get(sessionId);
         let greetingAuditSequence: number | undefined;
@@ -605,10 +596,6 @@ export const systemAgentHandlers: GatewayRequestHandlers = {
             respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, error.message));
             return;
           }
-          if (params.reset) {
-            appendTranscriptReset();
-          }
-          persistEngineHistory(engine, welcomeHistoryStart);
           if (
             !(await evictOldestSystemAgentSession(sessions, context, MAX_SYSTEM_AGENT_SESSIONS))
           ) {
@@ -616,6 +603,10 @@ export const systemAgentHandlers: GatewayRequestHandlers = {
             respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, LOCKED_SETUP_BUSY_ERROR));
             return;
           }
+          if (params.reset) {
+            appendTranscriptReset();
+          }
+          persistEngineHistory(engine, welcomeHistoryStart);
           session = {
             engine,
             welcome,

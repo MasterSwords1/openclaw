@@ -750,6 +750,44 @@ describe("SystemAgentChatEngine", () => {
     expect(setupSignal?.aborted).toBe(true);
   });
 
+  it("forwards cancellation through the shipped hosted channel runner", async () => {
+    useTempStateDir();
+    mocks.readSetupConfigFileSnapshot.mockResolvedValue({
+      exists: true,
+      valid: true,
+      path: "/tmp/openclaw.json",
+      hash: "base-hash",
+      config: {},
+      sourceConfig: {},
+      issues: [],
+    });
+    let receivedSignal: AbortSignal | undefined;
+    mocks.setupChannels.mockImplementation(
+      async (
+        config: OpenClawConfig,
+        _runtime: unknown,
+        prompter: WizardPrompter,
+        options?: { abortSignal?: AbortSignal },
+      ) => {
+        receivedSignal = options?.abortSignal;
+        await prompter.text({ message: "Bot token" });
+        return config;
+      },
+    );
+    const engine = new SystemAgentChatEngine({
+      surface: "gateway",
+      runAgentTurn: async () => null,
+      planWithAssistant: async () => null,
+      deps: { loadOverview: fakeOverviewLoader() },
+    });
+
+    expect((await engine.handle("connect telegram")).text).toContain("Bot token");
+    expect(receivedSignal?.aborted).toBe(false);
+
+    expect((await engine.handle("cancel")).text).toContain("cancelled");
+    expect(receivedSignal?.aborted).toBe(true);
+  });
+
   it("keeps locked channel setup owned until recovery completes", async () => {
     const completed = vi.fn();
     const runChannelSetupWizard = vi.fn(

@@ -1,4 +1,5 @@
 import { resolveSystemAgentDelegationKey } from "../../system-agent/delegation-session.js";
+import { resolveGatewayHostedSessionOwner } from "./hosted-session-owner.js";
 import type { GatewayClient, GatewayRequestContext } from "./types.js";
 
 type SystemAgentSessionMap = GatewayRequestContext["systemAgentSessions"];
@@ -18,17 +19,8 @@ export function resolveSystemAgentSessionOwnerKey(params: {
     // Host-asserted delegation owns its agent/session tuple across reconnects.
     return delegationKey;
   }
-  // Prefer stable authenticated principals, then verified device and connection identity.
-  const userId = params.client?.authenticatedUserId?.trim();
-  if (userId) {
-    return `user:${userId}`;
-  }
-  const deviceId = params.client?.connect.device?.id.trim();
-  if (deviceId) {
-    return `device:${deviceId}`;
-  }
-  const connId = params.client?.connId?.trim();
-  return connId ? `connection:${connId}` : undefined;
+  const owner = resolveGatewayHostedSessionOwner(params.client);
+  return owner.kind === "stable" ? owner.key : undefined;
 }
 
 /** Transfer one exact owner's retained wizard when its client rotates session ids. */
@@ -60,6 +52,26 @@ export function adoptLockedSystemAgentWizard(params: {
   return { kind: "adopted" };
 }
 
+/** Retire a resettable session only after synchronously excluding locked work. */
+export async function resetSystemAgentSession(params: {
+  sessions: SystemAgentSessionMap;
+  sessionId: string;
+  context: GatewayRequestContext;
+}): Promise<boolean> {
+  const existing = params.sessions.get(params.sessionId);
+  if (existing?.engine.hasLockedHostedWizard()) {
+    return false;
+  }
+  params.sessions.delete(params.sessionId);
+  if (existing?.pendingApproval) {
+    params.context.systemAgentApprovalManager?.expire(existing.pendingApproval.id, "session-reset");
+  }
+  if (existing && !(await existing.engine.dispose())) {
+    throw new Error("Disposable OpenClaw session became cancellation-locked during reset.");
+  }
+  return true;
+}
+
 /** Evict the oldest disposable session while preserving every locked wizard owner. */
 export async function evictOldestSystemAgentSession(
   sessions: SystemAgentSessionMap,
@@ -73,13 +85,18 @@ export async function evictOldestSystemAgentSession(
     return left.lastUsedAt - right.lastUsedAt;
   });
   for (const [key, session] of oldestFirst) {
-    if (!(await session.engine.dispose())) {
+    if (session.engine.hasLockedHostedWizard()) {
       continue;
     }
+    // Remove authority before cleanup yields so a concurrent approval callback
+    // cannot pass its session-identity check while this session is retiring.
+    sessions.delete(key);
     if (session.pendingApproval) {
       context.systemAgentApprovalManager?.expire(session.pendingApproval.id, "session-evicted");
     }
-    sessions.delete(key);
+    if (!(await session.engine.dispose())) {
+      throw new Error("Disposable OpenClaw session became cancellation-locked during eviction.");
+    }
     return true;
   }
   return false;

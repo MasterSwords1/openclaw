@@ -11,6 +11,11 @@ const setupInferenceMocks = vi.hoisted(() => ({ verifySetupInference: vi.fn() })
 const delegatedInferenceMocks = vi.hoisted(() => ({
   verifySystemAgentInferenceWithFallback: vi.fn(),
 }));
+const transcriptMocks = vi.hoisted(() => ({
+  appendTranscriptReset: vi.fn(),
+  appendTranscriptTurn: vi.fn(),
+  readTranscriptTail: vi.fn(() => []),
+}));
 
 vi.mock("../../system-agent/setup-inference.js", () => ({
   verifySetupInference: setupInferenceMocks.verifySetupInference,
@@ -19,11 +24,7 @@ vi.mock("../../system-agent/inference-fallback.js", () => ({
   verifySystemAgentInferenceWithFallback:
     delegatedInferenceMocks.verifySystemAgentInferenceWithFallback,
 }));
-vi.mock("../../system-agent/transcript-store.js", () => ({
-  appendTranscriptReset: vi.fn(),
-  appendTranscriptTurn: vi.fn(),
-  readTranscriptTail: vi.fn(() => []),
-}));
+vi.mock("../../system-agent/transcript-store.js", () => transcriptMocks);
 // Ownership tests exercise fresh-session creation; keep the caretaker greeting
 // deterministic so identity behavior is the only variable under test.
 vi.mock("../../system-agent/greeting.js", () => ({
@@ -100,8 +101,14 @@ function makeClient(params: {
 
 const defaultClient = makeClient({ connId: "conn-test", deviceId: "device-test" });
 
-function makeContext(sessions: Map<string, SystemAgentChatSession>): GatewayRequestContext {
-  return { systemAgentSessions: sessions } as unknown as GatewayRequestContext;
+function makeContext(
+  sessions: Map<string, SystemAgentChatSession>,
+  systemAgentApprovalManager?: { expire: ReturnType<typeof vi.fn> },
+): GatewayRequestContext {
+  return {
+    systemAgentSessions: sessions,
+    ...(systemAgentApprovalManager ? { systemAgentApprovalManager } : {}),
+  } as unknown as GatewayRequestContext;
 }
 
 function seededSession(params?: {
@@ -378,6 +385,7 @@ describe("openclaw.chat session responses", () => {
   it("refuses reset while a hosted wizard owns locked work", async () => {
     const engine = makeEngine();
     engine.dispose.mockResolvedValue(false);
+    engine.hasLockedHostedWizard.mockReturnValue(true);
     const sessions = new Map<string, SystemAgentChatSession>([
       ["locked", seededSession({ engine })],
     ]);
@@ -389,14 +397,18 @@ describe("openclaw.chat session responses", () => {
       error: { code: "INVALID_REQUEST" },
     });
     expect(sessions.get("locked")?.engine).toBe(engine);
-    expect(engine.dispose).toHaveBeenCalledOnce();
+    expect(engine.dispose).not.toHaveBeenCalled();
   });
 
   it("evicts the oldest disposable session and keeps locked work owned", async () => {
     const sessions = new Map<string, SystemAgentChatSession>();
     const locked = makeEngine();
     locked.dispose.mockResolvedValue(false);
-    sessions.set("locked-oldest", seededSession({ engine: locked }));
+    locked.hasLockedHostedWizard.mockReturnValue(true);
+    sessions.set(
+      "locked-oldest",
+      seededSession({ engine: locked, ownerKey: "device:other-device" }),
+    );
     for (let index = 1; index < 8; index += 1) {
       const engine = makeEngine();
       sessions.set(`candidate-${index}`, seededSession({ engine, ownerKey: "device:device-test" }));
@@ -411,7 +423,7 @@ describe("openclaw.chat session responses", () => {
     expect(sessions.has("candidate-1")).toBe(false);
     expect(sessions.has("replacement")).toBe(true);
     expect(sessions.size).toBe(8);
-    expect(locked.dispose).toHaveBeenCalledOnce();
+    expect(locked.dispose).not.toHaveBeenCalled();
   });
 
   it("rejects a new session when every eviction candidate owns locked work", async () => {
@@ -419,15 +431,56 @@ describe("openclaw.chat session responses", () => {
     for (let index = 0; index < 8; index += 1) {
       const engine = makeEngine();
       engine.dispose.mockResolvedValue(false);
-      sessions.set(`locked-${index}`, seededSession({ engine }));
+      engine.hasLockedHostedWizard.mockReturnValue(true);
+      sessions.set(
+        `locked-${index}`,
+        seededSession({ engine, ownerKey: `device:locked-device-${index}` }),
+      );
     }
+    transcriptMocks.appendTranscriptTurn.mockClear();
+    const replacementHistory = [{ role: "assistant" as const, text: "welcome text" }];
 
-    const call = await callChat(makeContext(sessions), { sessionId: "replacement" });
+    const callPromise = callChat(makeContext(sessions), { sessionId: "replacement" });
+    await vi.waitFor(() => expect(createdEngines).toHaveLength(1));
+    expectDefined(createdEngines[0], "replacement engine").historySince.mockReturnValue(
+      replacementHistory,
+    );
+    const call = await callPromise;
 
     expect(call).toMatchObject({ ok: false, error: { code: "UNAVAILABLE" } });
     expect(sessions.size).toBe(8);
     expect(sessions.has("replacement")).toBe(false);
     expect(expectDefined(createdEngines[0], "replacement engine").dispose).toHaveBeenCalledOnce();
+    expect(transcriptMocks.appendTranscriptTurn).not.toHaveBeenCalled();
+  });
+
+  it("revokes an evicted session before asynchronous cleanup yields", async () => {
+    let releaseCleanup!: () => void;
+    const cleanupGate = new Promise<void>((resolve) => {
+      releaseCleanup = resolve;
+    });
+    const sessions = new Map<string, SystemAgentChatSession>();
+    const candidate = seededSession();
+    candidate.pendingApproval = { id: "approval-1", proposalHash: "hash-1" };
+    candidate.engine.dispose.mockImplementation(async () => {
+      await cleanupGate;
+      return true;
+    });
+    sessions.set("candidate", candidate);
+    for (let index = 1; index < 8; index += 1) {
+      const session = seededSession();
+      session.lastUsedAt = index;
+      sessions.set(`existing-${index}`, session);
+    }
+    const expire = vi.fn();
+
+    const call = callChat(makeContext(sessions, { expire }), { sessionId: "replacement" });
+    await vi.waitFor(() => expect(candidate.engine.dispose).toHaveBeenCalledOnce());
+
+    expect(sessions.has("candidate")).toBe(false);
+    expect(expire).toHaveBeenCalledWith("approval-1", "session-evicted");
+    releaseCleanup();
+    expect((await call).ok).toBe(true);
   });
 
   it("retains locked work when inference failure cleanup refuses disposal", async () => {

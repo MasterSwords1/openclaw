@@ -16,6 +16,7 @@ import { defaultRuntime, type RuntimeEnv } from "../../runtime.js";
 import type { WizardPrompter } from "../../wizard/prompts.js";
 import { WizardSession } from "../../wizard/session.js";
 import { formatForLog } from "../ws-log.js";
+import { resolveGatewayHostedSessionOwner } from "./hosted-session-owner.js";
 import type {
   GatewayClient,
   GatewayRequestContext,
@@ -25,19 +26,6 @@ import type {
 import { assertValidParams } from "./validation.js";
 
 const CHANNEL_WIZARD_TIMEOUT_MS = 25 * 60 * 1000;
-
-function resolveWizardOwnerKey(client: GatewayClient | null): string | undefined {
-  const userId = client?.authenticatedUserId?.trim();
-  if (userId) {
-    return `user:${userId}`;
-  }
-  const deviceId = client?.connect.device?.id.trim();
-  if (deviceId) {
-    return `device:${deviceId}`;
-  }
-  const connId = client?.connId?.trim();
-  return connId ? `connection:${connId}` : undefined;
-}
 
 function resolveChannelWizardResumeKey(params: {
   ownerKey: string | undefined;
@@ -100,7 +88,9 @@ function findWizardSessionOrRespond(params: {
     );
     return null;
   }
-  if (!session.isAccessibleBy(resolveWizardOwnerKey(params.client))) {
+  const owner = resolveGatewayHostedSessionOwner(params.client);
+  const ownerKey = owner.kind === "stable" ? owner.key : undefined;
+  if (!session.isAccessibleBy(ownerKey)) {
     params.respond(
       false,
       undefined,
@@ -119,7 +109,19 @@ export const wizardHandlers: GatewayRequestHandlers = {
     }
     const flow = params.flow ?? "setup";
     const channel = readStringValue(params.channel);
-    const ownerKey = flow === "channels" ? resolveWizardOwnerKey(client) : undefined;
+    const owner = flow === "channels" ? resolveGatewayHostedSessionOwner(client) : undefined;
+    if (owner && owner.kind !== "stable") {
+      respond(
+        false,
+        undefined,
+        errorShape(
+          ErrorCodes.INVALID_REQUEST,
+          "Channel setup requires an identity that can survive reconnects.",
+        ),
+      );
+      return;
+    }
+    const ownerKey = owner?.key;
     const resumeKey =
       flow === "channels" ? resolveChannelWizardResumeKey({ ownerKey, channel }) : undefined;
     const running = context.findRunningWizard();
