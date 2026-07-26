@@ -238,6 +238,7 @@ export class WizardSession {
   private stepDeferred: Deferred<WizardStep | null> | null = null;
   private pendingTerminalResolution = false;
   private cancellationLocked = false;
+  private lastTerminalResultConnectionId: string | undefined;
   private pendingExternalUrl: string | undefined;
   private readonly ownerKey: string | undefined;
   private readonly resumeKey: string | undefined;
@@ -370,9 +371,31 @@ export class WizardSession {
     return true;
   }
 
-  /** A replacement host may reclaim only the flow that created this session. */
-  canResume(resumeKey: string): boolean {
+  /** Whether this locked session belongs to the owner's resumable flow. */
+  matchesResumeKey(resumeKey: string): boolean {
     return this.cancellationLocked && this.resumeKey === resumeKey;
+  }
+
+  /**
+   * A replacement connection may reclaim locked work. Once a terminal result
+   * was attempted on a connection, another start on that same connection is
+   * treated as acknowledgement and may create fresh work.
+   */
+  canResume(resumeKey: string, connectionId?: string): boolean {
+    if (!this.matchesResumeKey(resumeKey)) {
+      return false;
+    }
+    return (
+      this.status === "running" ||
+      connectionId === undefined ||
+      this.lastTerminalResultConnectionId !== connectionId
+    );
+  }
+
+  markTerminalResultDelivery(connectionId: string | undefined): void {
+    if (this.status !== "running" && connectionId) {
+      this.lastTerminalResultConnectionId = connectionId;
+    }
   }
 
   /** Unowned legacy sessions remain bearer-token based; hosted sessions bind to their owner. */

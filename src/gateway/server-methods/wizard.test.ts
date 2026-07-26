@@ -294,6 +294,18 @@ describe("channel wizard lifecycle", () => {
     }
     expect(runCount).toHaveBeenCalledOnce();
     expect(wizardSessions.has(sessionId)).toBe(true);
+
+    const freshRespond = vi.fn();
+    await start({
+      params: { flow: "channels", channel: "discord" },
+      client: { ...owner, connId: "owner-retry-connection" },
+      respond: freshRespond,
+      context,
+    } as never);
+
+    const freshResult = freshRespond.mock.calls[0]?.[1] as { sessionId?: string } | undefined;
+    expect(freshResult?.sessionId).not.toBe(sessionId);
+    expect(runCount).toHaveBeenCalledTimes(2);
   });
 
   it("rejects hosted channel setup without a reconnect-safe owner", async () => {

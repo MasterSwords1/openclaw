@@ -118,22 +118,29 @@ export const wizardHandlers: GatewayRequestHandlers = {
     }
     const ownerKey = owner?.key;
     const resumeKey = flow === "channels" ? resolveChannelWizardResumeKey(ownerKey) : undefined;
+    const connectionId = client?.connId.trim() || undefined;
     const running = context.findRunningWizard();
     if (resumeKey) {
-      const resumable = [...context.wizardSessions.entries()].find(([, session]) =>
-        session.canResume(resumeKey),
+      const ownerSession = [...context.wizardSessions.entries()].find(([, session]) =>
+        session.matchesResumeKey(resumeKey),
       );
-      if (resumable) {
-        const [resumableId, resumableSession] = resumable;
+      if (ownerSession && ownerSession[1].canResume(resumeKey, connectionId)) {
+        const [resumableId, resumableSession] = ownerSession;
         const result = await resumableSession.next();
         // A reconnect has no delivery acknowledgement. Keep terminal recovery
         // replayable until the tracker expires it so repeated response loss
         // cannot rerun an already-committed setup.
         if (result.done) {
+          resumableSession.markTerminalResultDelivery(connectionId);
           context.findRunningWizard();
         }
         respond(true, { sessionId: resumableId, ...result }, undefined);
         return;
+      }
+      if (ownerSession && ownerSession[1].getStatus() !== "running") {
+        // Starting again on the connection that just received this terminal
+        // result acknowledges it and releases the owner to begin fresh work.
+        context.purgeWizardSession(ownerSession[0]);
       }
     }
     if (running) {
@@ -183,6 +190,7 @@ export const wizardHandlers: GatewayRequestHandlers = {
     const result = await session.next();
     if (result.done) {
       if (session.isCancellationLocked()) {
+        session.markTerminalResultDelivery(connectionId);
         // Keep one owner-bound recovery copy when a durable result races a
         // dropped response. The tracker reaps it if nobody reconnects.
         context.findRunningWizard();
@@ -221,6 +229,7 @@ export const wizardHandlers: GatewayRequestHandlers = {
     const result = await session.next();
     if (result.done) {
       if (session.isCancellationLocked()) {
+        session.markTerminalResultDelivery(client?.connId.trim() || undefined);
         context.findRunningWizard();
       } else {
         context.purgeWizardSession(sessionId);

@@ -871,6 +871,37 @@ describe("SystemAgentChatEngine", () => {
     await expect(engine.dispose()).resolves.toBe(true);
   });
 
+  it("expires an uncollected terminal channel setup reply", async () => {
+    const now = vi.spyOn(Date, "now").mockReturnValue(1_000);
+    try {
+      const engine = new SystemAgentChatEngine({
+        surface: "gateway",
+        runAgentTurn: async () => null,
+        planWithAssistant: async () => null,
+        deps: { loadOverview: fakeOverviewLoader() },
+        runChannelSetupWizard: async (_channel, prompter, beforePersistentApply) => {
+          await beforePersistentApply({
+            log: () => {},
+            error: () => {},
+            exit: (): never => {
+              throw new Error("unexpected exit");
+            },
+          });
+          await prompter.outro("Applied");
+        },
+      });
+
+      expect((await engine.handle("connect matrix")).text).toContain("matrix is configured");
+      expect(engine.hasLockedHostedWizard()).toBe(true);
+
+      now.mockReturnValue(1_000 + 5 * 60 * 1_000 + 1);
+      expect(engine.hasLockedHostedWizard()).toBe(false);
+      await expect(engine.dispose()).resolves.toBe(true);
+    } finally {
+      now.mockRestore();
+    }
+  });
+
   it("accepts locked recovery after the inference route disappears", async () => {
     let inferenceConfig: OpenClawConfig = structuredClone(sharedVerifiedInferenceConfig);
     const completed = vi.fn();

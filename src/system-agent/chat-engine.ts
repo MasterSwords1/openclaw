@@ -105,6 +105,13 @@ type SystemAgentChatReply = {
   question?: SystemAgentChatQuestion;
 };
 
+type RetainedTerminalWizardReply = {
+  reply: SystemAgentChatReply;
+  expiresAt: number;
+};
+
+const TERMINAL_WIZARD_REPLY_RETENTION_MS = 5 * 60 * 1_000;
+
 type WizardPrompterLike = import("../wizard/prompts.js").WizardPrompter;
 
 type ActiveWizardBridge = {
@@ -393,7 +400,7 @@ export class SystemAgentChatEngine {
   private readonly history: SystemAgentAssistantTurn[] = [];
   private readonly agentSession: SystemAgentSession;
   private verifiedInference: SystemAgentVerifiedInferenceBinding;
-  private retainedTerminalWizardReply: SystemAgentChatReply | null = null;
+  private retainedTerminalWizardReply: RetainedTerminalWizardReply | null = null;
   /** Turns run strictly one at a time; interleaved handles corrupt wizard/pending state. */
   private turnQueue: Promise<unknown> = Promise.resolve();
 
@@ -466,7 +473,7 @@ export class SystemAgentChatEngine {
 
   async dispose(): Promise<boolean> {
     const wizardSession = this.wizardBridge?.session;
-    if (this.retainedTerminalWizardReply || wizardSession?.isCancellationLocked()) {
+    if (this.readRetainedTerminalWizardReply() || wizardSession?.isCancellationLocked()) {
       return false;
     }
     wizardSession?.cancel();
@@ -479,7 +486,7 @@ export class SystemAgentChatEngine {
 
   hasLockedHostedWizard(): boolean {
     return (
-      this.retainedTerminalWizardReply !== null ||
+      this.readRetainedTerminalWizardReply() !== null ||
       this.wizardBridge?.session.isCancellationLocked() === true
     );
   }
@@ -489,8 +496,9 @@ export class SystemAgentChatEngine {
       if (!this.hasLockedHostedWizard()) {
         return null;
       }
-      if (this.retainedTerminalWizardReply) {
-        return { ...this.retainedTerminalWizardReply };
+      const retainedReply = this.readRetainedTerminalWizardReply();
+      if (retainedReply) {
+        return { ...retainedReply };
       }
       return this.projectWizardReply({
         text: await this.pumpWizardBridge(),
@@ -499,6 +507,18 @@ export class SystemAgentChatEngine {
     });
     this.turnQueue = turn.catch(() => undefined);
     return await turn;
+  }
+
+  private readRetainedTerminalWizardReply(): SystemAgentChatReply | null {
+    const retained = this.retainedTerminalWizardReply;
+    if (!retained) {
+      return null;
+    }
+    if (Date.now() >= retained.expiresAt) {
+      this.retainedTerminalWizardReply = null;
+      return null;
+    }
+    return retained.reply;
   }
 
   async handle(text: string): Promise<SystemAgentChatReply> {
@@ -1289,7 +1309,10 @@ export class SystemAgentChatEngine {
         terminalText = `Channel setup stopped: ${result.error ?? "unknown error"}`;
       }
       if (bridge.session.isCancellationLocked()) {
-        this.retainedTerminalWizardReply = { text: terminalText, action: "none" };
+        this.retainedTerminalWizardReply = {
+          reply: { text: terminalText, action: "none" },
+          expiresAt: Date.now() + TERMINAL_WIZARD_REPLY_RETENTION_MS,
+        };
       }
       return terminalText;
     }
