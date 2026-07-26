@@ -828,12 +828,11 @@ describe("SystemAgentChatEngine", () => {
       text: expect.stringContaining("Retry validation?"),
       wizardInputPending: true,
     });
-    expect(engine.historySince(recoveryHistoryStart)).toEqual([
-      {
-        role: "assistant",
-        text: expect.stringContaining("Retry validation?"),
-      },
-    ]);
+    await expect(engine.resumeLockedHostedWizard()).resolves.toMatchObject({
+      text: expect.stringContaining("Retry validation?"),
+      wizardInputPending: true,
+    });
+    expect(engine.historySince(recoveryHistoryStart)).toEqual([]);
 
     expect((await engine.handle("yes")).text).toContain("matrix is configured");
     expect(completed).toHaveBeenCalledOnce();

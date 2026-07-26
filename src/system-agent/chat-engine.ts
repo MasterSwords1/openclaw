@@ -500,13 +500,19 @@ export class SystemAgentChatEngine {
       if (retainedReply) {
         return { ...retainedReply };
       }
+      const bridgeBeforeRecovery = this.wizardBridge;
+      const stepIdBeforeRecovery = bridgeBeforeRecovery?.step?.id;
       const reply = this.projectWizardReply({
         text: await this.pumpWizardBridge(),
         action: "none",
       });
-      if (reply.text) {
+      const recoveryAdvanced =
+        this.wizardBridge !== bridgeBeforeRecovery ||
+        this.wizardBridge?.step?.id !== stepIdBeforeRecovery;
+      if (reply.text && recoveryAdvanced) {
         // Recovery can be the only delivery of a terminal setup result. Record
-        // newly generated replies once; retained replays return above.
+        // only newly advanced replies; retained and pending-step replays do not
+        // duplicate durable transcript turns.
         this.history.push({ role: "assistant", text: reply.text });
       }
       return reply;
