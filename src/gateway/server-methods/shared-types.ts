@@ -20,6 +20,7 @@ import type {
 import type { SystemAgentApprovalRequestPayload } from "../../infra/system-agent-approvals.js";
 import type { createSubsystemLogger } from "../../logging/subsystem.js";
 import type { RuntimePluginToolGrant } from "../../plugins/runtime/tool-grant.js";
+import type { SystemAgentChatReply } from "../../system-agent/chat-contract.js";
 import type { SystemAgentOperation } from "../../system-agent/operation-types.js";
 import type { WizardSession } from "../../wizard/session.js";
 import type { AgentRuntimeIdentity } from "../agent-runtime-identity-token.js";
@@ -125,17 +126,9 @@ type SystemAgentHistoryTurn = {
   text: string;
 };
 
-type GatewaySystemAgentReply = {
-  text: string;
-  action: "none" | "exit" | "open-tui" | "open-setup";
-  sensitive?: boolean;
-  wizardInputPending?: boolean;
-  question?: SystemAgentChatQuestion;
-};
-
 type GatewaySystemAgentSession = {
   engine: {
-    handle: (message: string) => Promise<GatewaySystemAgentReply>;
+    handle: (message: string) => Promise<SystemAgentChatReply>;
     seedHistory: (turns: readonly SystemAgentHistoryTurn[]) => void;
     historyLength: () => number;
     historySince: (index: number) => SystemAgentHistoryTurn[];
@@ -147,7 +140,7 @@ type GatewaySystemAgentSession = {
     /** False while an irreversible hosted wizard still owns unfinished work. */
     dispose: () => Promise<boolean>;
     hasLockedHostedWizard: () => boolean;
-    resumeLockedHostedWizard: () => Promise<GatewaySystemAgentReply | null>;
+    resumeLockedHostedWizard: () => Promise<SystemAgentChatReply | null>;
   };
   welcome: string;
   welcomeQuestion?: SystemAgentChatQuestion;

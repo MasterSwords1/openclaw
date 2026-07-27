@@ -49,24 +49,32 @@ export async function resolveInitialWizardChannel(
   )?.id;
 }
 
-type ChannelsAddWizardFlowParams = {
+export type HostedChannelSetupLifecycleOptions = {
+  onConfigured?: (accounts: Array<{ channel: ChannelChoice; accountId: string }>) => void;
+  onResolvedChannel?: (channel: ChannelChoice, aliases?: readonly string[]) => void;
+  /** Revalidate/lock cancellation immediately before durable effects. */
+  beforePersistentEffect?: () => Promise<void>;
+  /** Cancels reversible setup work when the remote wizard stops. */
+  abortSignal?: AbortSignal;
+};
+
+export type RunChannelsSetupWizardOptions = HostedChannelSetupLifecycleOptions & {
+  /** Raw channel id or alias supplied by the remote client. */
+  channel?: string;
+};
+
+type ChannelsAddWizardFlowParams = HostedChannelSetupLifecycleOptions & {
   cfg: OpenClawConfig;
   baseHash?: string;
   runtime: RuntimeEnv;
   prompter: WizardPrompter;
   initialChannel?: ChannelChoice;
-  beforePersistentEffect?: () => Promise<void>;
-  abortSignal?: AbortSignal;
   /**
    * The controlling client completes device linking itself after config is
    * written (e.g. the Control UI renders the WhatsApp QR via web.login.*), so
    * setup surfaces must skip terminal-interactive login flows.
    */
   deferDeviceLinkToClient?: boolean;
-  /** Reports the channel accounts actually configured, after config commit. */
-  onConfigured?: (accounts: Array<{ channel: string; accountId: string }>) => void;
-  /** Reports the canonical single channel selected for this setup operation. */
-  onResolvedChannel?: (channel: string, aliases?: readonly string[]) => void;
 };
 
 /** Run the interactive channel-setup flow and persist the resulting config. */
@@ -287,15 +295,7 @@ export async function runChannelsAddWizardFlow(params: ChannelsAddWizardFlowPara
  * must never call runtime.exit — failures throw and surface as wizard errors.
  */
 export async function runChannelsSetupWizard(
-  opts: {
-    channel?: string;
-    onConfigured?: (accounts: Array<{ channel: string; accountId: string }>) => void;
-    onResolvedChannel?: (channel: string, aliases?: readonly string[]) => void;
-    /** Revalidate/lock cancellation immediately before durable effects. */
-    beforePersistentEffect?: () => Promise<void>;
-    /** Cancels reversible setup work when the remote wizard stops. */
-    abortSignal?: AbortSignal;
-  },
+  opts: RunChannelsSetupWizardOptions,
   runtime: RuntimeEnv,
   prompter: WizardPrompter,
 ): Promise<void> {

@@ -24,6 +24,7 @@ import { baseConfigSnapshot, createTestRuntime } from "./test-runtime-config-hel
 
 let channelsAddCommand: typeof import("./channels/add.js").channelsAddCommand;
 let runChannelsSetupWizard: typeof import("./channels/add-wizard.js").runChannelsSetupWizard;
+type SetupChannels = typeof import("./onboard-channels.js").setupChannels;
 
 const catalogMocks = vi.hoisted(() => ({
   getChannelPluginCatalogEntry: vi.fn(),
@@ -60,7 +61,7 @@ const channelWizardMocks = vi.hoisted(() => {
   };
   return {
     prompter,
-    setupChannels: vi.fn(async (...args: unknown[]) => args[0] as OpenClawConfig),
+    setupChannels: vi.fn<SetupChannels>(async (cfg) => cfg),
   };
 });
 
@@ -385,8 +386,6 @@ type SignalSetupInput = ChannelSetupInput & { signalNumber?: string };
 type NextcloudTalkSetupInput = ChannelSetupInput & { secretFile?: string };
 type MatrixSetupInput = ChannelSetupInput & { initialSyncLimit?: number };
 type PreparedChatSetupInput = ChannelSetupInput & { workspace?: string };
-type SetupChannelsOptions =
-  import("../channels/plugins/setup-wizard-types.js").SetupChannelsOptions;
 
 function createSignalPlugin(
   afterAccountConfigWritten: SignalAfterAccountConfigWritten,
@@ -488,9 +487,7 @@ describe("channelsAddCommand", () => {
     channelWizardMocks.prompter.select.mockClear();
     channelWizardMocks.prompter.text.mockClear();
     channelWizardMocks.setupChannels.mockClear();
-    channelWizardMocks.setupChannels.mockImplementation(
-      async (...args: unknown[]) => args[0] as OpenClawConfig,
-    );
+    channelWizardMocks.setupChannels.mockImplementation(async (cfg) => cfg);
     setMinimalChannelsAddRegistryForTests();
   });
 
@@ -547,17 +544,29 @@ describe("channelsAddCommand", () => {
     const beforePersistentEffect = vi.fn(async () => {
       events.push("guard");
     });
+    pluginInstallRecordCommitMocks.commitConfigWithPendingPluginInstalls.mockImplementationOnce(
+      async (params: { nextConfig: unknown }) => {
+        events.push("commit");
+        await configMocks.writeConfigFile(params.nextConfig);
+        return {
+          config: params.nextConfig,
+          installRecords: {},
+          movedInstallRecords: false,
+        };
+      },
+    );
     configMocks.readConfigFileSnapshot.mockResolvedValue({
       ...baseConfigSnapshot,
       sourceConfig: config,
       config,
     });
-    channelWizardMocks.setupChannels.mockImplementationOnce(async (...args: unknown[]) => {
-      const options = args[3] as SetupChannelsOptions;
-      options.onPendingChannelEffects?.([{ channel: "twitch", aliases: ["twitch-chat"] }]);
-      options.onSelection?.(["twitch"]);
-      return configured;
-    });
+    channelWizardMocks.setupChannels.mockImplementationOnce(
+      async (_cfg, _runtime, _prompter, options) => {
+        options.onPendingChannelEffects?.([{ channel: "twitch", aliases: ["twitch-chat"] }]);
+        options.onSelection?.(["twitch"]);
+        return configured;
+      },
+    );
 
     await runChannelsSetupWizard(
       { onResolvedChannel, beforePersistentEffect },
@@ -567,7 +576,7 @@ describe("channelsAddCommand", () => {
 
     expect(onResolvedChannel).toHaveBeenCalledOnce();
     expect(onResolvedChannel).toHaveBeenCalledWith("twitch", ["twitch-chat"]);
-    expect(events).toEqual(["guard", "identity"]);
+    expect(events).toEqual(["guard", "identity", "commit"]);
     expect(configMocks.writeConfigFile).toHaveBeenCalledWith(configured);
   });
 
@@ -584,12 +593,13 @@ describe("channelsAddCommand", () => {
       sourceConfig: config,
       config,
     });
-    channelWizardMocks.setupChannels.mockImplementationOnce(async (...args: unknown[]) => {
-      const options = args[3] as SetupChannelsOptions;
-      options.onPendingChannelEffects?.([{ channel: "discord" }]);
-      options.onSelection?.(["discord"]);
-      return configured;
-    });
+    channelWizardMocks.setupChannels.mockImplementationOnce(
+      async (_cfg, _runtime, _prompter, options) => {
+        options.onPendingChannelEffects?.([{ channel: "discord" }]);
+        options.onSelection?.(["discord"]);
+        return configured;
+      },
+    );
 
     await runChannelsSetupWizard(
       {

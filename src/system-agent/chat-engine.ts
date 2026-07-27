@@ -19,6 +19,7 @@ import {
   type SystemAgentApprovalIntent,
 } from "./approval-intent.js";
 import type { SystemAgentAssistantPlanner, SystemAgentAssistantTurn } from "./assistant.js";
+import type { SystemAgentChatReply } from "./chat-contract.js";
 import { approvalQuestion } from "./dialogue.js";
 import type {
   SystemAgentGreetingFacts,
@@ -88,23 +89,6 @@ export type SystemAgentChatEngineOptions = {
   /** Delegated chats accept approval only from the operator registry. */
   operatorApprovalOnly?: boolean;
 };
-type SystemAgentChatReplyAction = "none" | "exit" | "open-tui" | "open-setup";
-
-type SystemAgentChatReply = {
-  text: string;
-  action: SystemAgentChatReplyAction;
-  /** Client-localized draft intent for the destination agent chat. */
-  agentDraft?: "hatch";
-  /** The next hosted-wizard reply contains a secret and must be masked/redacted by hosts. */
-  sensitive?: boolean;
-  /** The hosted wizard will consume the next message as its current step answer. */
-  wizardInputPending?: boolean;
-  /** Present when the host must leave chat for an interactive handoff. */
-  handoff?: SystemAgentOperation;
-  /** Structured choice mirroring the awaited wizard step for card-capable clients. */
-  question?: SystemAgentChatQuestion;
-};
-
 type RetainedTerminalWizardReply = {
   reply: SystemAgentChatReply;
   expiresAt: number;

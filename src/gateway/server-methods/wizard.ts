@@ -37,17 +37,8 @@ export type SetupWizardRunner = (
   prompter: WizardPrompter,
 ) => Promise<void>;
 
-export type ChannelSetupWizardRunner = (
-  opts: {
-    channel?: string;
-    onConfigured?: (accounts: Array<{ channel: string; accountId: string }>) => void;
-    onResolvedChannel?: (channel: string, aliases?: readonly string[]) => void;
-    beforePersistentEffect?: () => Promise<void>;
-    abortSignal?: AbortSignal;
-  },
-  runtime: RuntimeEnv,
-  prompter: WizardPrompter,
-) => Promise<void>;
+export type ChannelSetupWizardRunner =
+  typeof import("../../commands/channels/add-wizard.js").runChannelsSetupWizard;
 
 export const runDefaultSetupWizard: SetupWizardRunner = async (...args) => {
   const { runSetupWizard } = await import("../../wizard/setup.js");
