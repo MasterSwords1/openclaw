@@ -311,6 +311,45 @@ describe("openclaw.chat session ownership", () => {
     expect(createdEngines).toHaveLength(0);
   });
 
+  it("blocks a bound sibling turn and adopts the owner's locked wizard on welcome", async () => {
+    const retained = makeEngine();
+    retained.hasLockedHostedWizard.mockReturnValue(true);
+    retained.resumeLockedHostedWizard.mockResolvedValue({
+      text: "Retry validation?",
+      action: "none",
+      wizardInputPending: true,
+    });
+    const sibling = makeEngine();
+    const sessions = new Map<string, SystemAgentChatSession>([
+      ["locked-session", seededSession({ engine: retained })],
+      ["sibling-session", seededSession({ engine: sibling })],
+    ]);
+    const context = makeContext(sessions);
+
+    const blocked = await callChat(context, {
+      sessionId: "sibling-session",
+      message: "connect telegram",
+    });
+
+    expect(blocked).toMatchObject({ ok: false, error: { code: "INVALID_REQUEST" } });
+    expect(sibling.handle).not.toHaveBeenCalled();
+    expect(sibling.dispose).not.toHaveBeenCalled();
+
+    const recovered = await callChat(context, { sessionId: "sibling-session" });
+
+    expect(recovered).toMatchObject({
+      ok: true,
+      payload: {
+        sessionId: "sibling-session",
+        reply: "Retry validation?",
+        wizardInputPending: true,
+      },
+    });
+    expect(sibling.dispose).toHaveBeenCalledOnce();
+    expect(sessions.get("sibling-session")?.engine).toBe(retained);
+    expect(retained.resumeLockedHostedWizard).toHaveBeenCalledOnce();
+  });
+
   it("does not adopt a locked wizard owned by another caller", async () => {
     const retained = makeEngine();
     retained.hasLockedHostedWizard.mockReturnValue(true);

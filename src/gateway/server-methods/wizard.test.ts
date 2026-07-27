@@ -565,6 +565,64 @@ describe("channel wizard lifecycle", () => {
     expect(runCount).toHaveBeenCalledTimes(2);
   });
 
+  it("keeps a retained result when another owner's running wizard blocks a fresh start", async () => {
+    const wizardSessions = new Map<string, WizardSession>();
+    const context = {
+      wizardSessions,
+      getRuntimeConfig: () => ({}),
+      findRunningWizard: () =>
+        [...wizardSessions].find(([, session]) => session.getStatus() === "running")?.[0] ?? null,
+      purgeWizardSession: (id: string) => wizardSessions.delete(id),
+      channelWizardRunner: async (options: {
+        beforePersistentEffect?: () => Promise<void>;
+        onResolvedChannel?: (channel: string) => void;
+      }) => {
+        options.onResolvedChannel?.("matrix");
+        await options.beforePersistentEffect?.();
+      },
+    };
+    const owner = {
+      connId: "owner-old-connection",
+      authenticatedUserId: "owner@example.com",
+      connect: { client: { id: "openclaw-control-ui", mode: "webchat" } },
+    };
+    const start = expectDefined(
+      wizardHandlers["wizard.start"],
+      "wizardHandlers[wizard.start] test invariant",
+    );
+    const firstRespond = vi.fn();
+
+    await start({
+      params: { flow: "channels", channel: "matrix" },
+      client: owner,
+      respond: firstRespond,
+      context,
+    } as never);
+
+    const firstResult = firstRespond.mock.calls[0]?.[1] as { sessionId?: string } | undefined;
+    const retainedSessionId = expectDefined(firstResult?.sessionId, "retained wizard session id");
+    const blocker = new WizardSession(async (prompter) => {
+      await prompter.note("Other owner is still configuring.");
+    });
+    wizardSessions.set("other-owner-running", blocker);
+    const freshRespond = vi.fn();
+
+    await start({
+      params: { flow: "channels", channel: "discord" },
+      client: { ...owner, connId: "owner-new-connection" },
+      respond: freshRespond,
+      context,
+    } as never);
+
+    expect(freshRespond).toHaveBeenCalledWith(
+      false,
+      undefined,
+      expect.objectContaining({ code: "UNAVAILABLE", message: "wizard already running" }),
+    );
+    expect(wizardSessions.has(retainedSessionId)).toBe(true);
+    blocker.cancel();
+  });
+
   it("recovers an accountless terminal result by canonical channel identity", async () => {
     const wizardSessions = new Map<string, WizardSession>();
     const runCount = vi.fn();

@@ -40,6 +40,20 @@ function listUniqueSystemAgentSessions(sessions: SystemAgentSessionMap) {
   return [...new Set(sessions.values())];
 }
 
+/** Whether this owner has locked work outside the currently bound session. */
+function hasOtherLockedSystemAgentWizard(params: {
+  sessions: SystemAgentSessionMap;
+  ownerKey: string;
+  exclude?: SystemAgentSession;
+}): boolean {
+  return listUniqueSystemAgentSessions(params.sessions).some(
+    (candidate) =>
+      candidate !== params.exclude &&
+      candidate.ownerKey === params.ownerKey &&
+      candidate.engine.hasLockedHostedWizard(),
+  );
+}
+
 export function resolveSystemAgentSessionOwnerKey(params: {
   delegation?: { agentId?: string; sessionKey?: string };
   client: GatewayClient | null;
@@ -60,13 +74,41 @@ export function resolveSystemAgentSessionOwnerKey(params: {
 }
 
 /** Transfer one exact owner's retained wizard when its client rotates session ids. */
-export function adoptLockedSystemAgentWizard(params: {
+export async function adoptLockedSystemAgentWizard(params: {
   sessions: SystemAgentSessionMap;
   sessionId: string;
   ownerKey: string;
   reset: boolean;
   allowAdoption: boolean;
-}): LockedWizardAdoption {
+  context: GatewayRequestContext;
+  boundSession?: SystemAgentSession;
+}): Promise<LockedWizardAdoption> {
+  if (
+    params.boundSession &&
+    hasOtherLockedSystemAgentWizard({
+      sessions: params.sessions,
+      ownerKey: params.ownerKey,
+      exclude: params.boundSession,
+    })
+  ) {
+    if (params.reset) {
+      return { kind: "reset-refused" };
+    }
+    if (!params.allowAdoption) {
+      return { kind: "welcome-required" };
+    }
+    if (
+      !(await resetSystemAgentSession({
+        sessions: params.sessions,
+        sessionId: params.sessionId,
+        context: params.context,
+      }))
+    ) {
+      return { kind: "reset-refused" };
+    }
+  } else if (params.boundSession) {
+    return { kind: "none" };
+  }
   const retainedSessions = listUniqueSystemAgentSessions(params.sessions).filter(
     (candidate) =>
       candidate.ownerKey === params.ownerKey && candidate.engine.hasLockedHostedWizard(),

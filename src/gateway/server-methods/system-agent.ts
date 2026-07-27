@@ -474,13 +474,15 @@ export const systemAgentHandlers: GatewayRequestHandlers = {
           );
           return;
         }
-        if (!boundSession) {
-          const adoption = adoptLockedSystemAgentWizard({
+        {
+          const adoption = await adoptLockedSystemAgentWizard({
             sessions,
             sessionId,
             ownerKey,
             reset: params.reset === true,
             allowAdoption: welcomeOnly,
+            context,
+            ...(boundSession ? { boundSession } : {}),
           });
           if (adoption.kind === "ambiguous") {
             respond(

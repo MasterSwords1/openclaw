@@ -166,6 +166,7 @@ export const wizardHandlers: GatewayRequestHandlers = {
     // The tracker owns terminal retention timestamps. Sweep before direct
     // owner matching so an expired result cannot be replayed indefinitely.
     let running = context.findRunningWizard();
+    let terminalSessionToPurge: string | undefined;
     if (resumeKey) {
       const ownerSession = [...context.wizardSessions.entries()].find(([, session]) =>
         session.hasResumeKey(resumeKey),
@@ -201,14 +202,18 @@ export const wizardHandlers: GatewayRequestHandlers = {
             running = null;
           }
         } else if (staleSession.getStatus() !== "running") {
-          // A different requested channel is an explicit fresh-start intent.
-          context.purgeWizardSession(staleId);
+          // A different requested channel is fresh intent, but keep the retained
+          // result until admission proves the replacement can actually start.
+          terminalSessionToPurge = staleId;
         }
       }
     }
     if (running) {
       respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, "wizard already running"));
       return;
+    }
+    if (terminalSessionToPurge) {
+      context.purgeWizardSession(terminalSessionToPurge);
     }
     const sessionId = randomUUID();
     const session =
