@@ -223,7 +223,7 @@ async function runHostedConfigWizard(params: {
   const snapshot = await readSetupConfigFileSnapshot();
   if (!snapshot.exists || !snapshot.valid || !snapshot.hash) {
     throw new Error(
-      `${params.label} requires a valid saved config snapshot. Run \`openclaw doctor --fix\`, then retry.`,
+      `${params.label} requires a valid saved config snapshot. On the machine running OpenClaw, \`openclaw doctor --fix\` repairs it; then retry.`,
     );
   }
   const baseConfig = snapshot.sourceConfig ?? snapshot.config;

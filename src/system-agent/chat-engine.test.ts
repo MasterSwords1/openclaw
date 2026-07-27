@@ -681,7 +681,11 @@ describe("SystemAgentChatEngine", () => {
     expect(reply.handoff).toBeUndefined();
     expect(reply.sensitive).toBeUndefined();
     expect(reply.text).toContain("replace the inference route powering this session");
-    expect(reply.text).toContain("Exit OpenClaw and run `openclaw onboard`");
+    // A gateway reader is in a browser or the app and cannot "exit OpenClaw"
+    // into a shell; the copy must name where the command runs instead.
+    expect(reply.text).toContain("`openclaw onboard`");
+    expect(reply.text).toContain("machine running OpenClaw");
+    expect(reply.text).not.toContain("Exit OpenClaw");
   });
 
   it("keeps the current inference route when model provider setup is declined", async () => {
@@ -1953,7 +1957,10 @@ describe("SystemAgentChatEngine", () => {
     const gatewayReply = await gateway.handle("open setup wizard");
     expect(gatewayReply.action).toBe("none");
     expect(gatewayReply.handoff).toBeUndefined();
-    expect(gatewayReply.text).toContain("The app owns the setup screens here");
+    // The gateway surface has real setup screens, so the reply names them
+    // rather than sending the reader to a terminal they may not have.
+    expect(gatewayReply.text).toContain("Settings");
+    expect(gatewayReply.text).not.toContain("Exit OpenClaw");
   });
 
   it.each([

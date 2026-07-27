@@ -291,7 +291,7 @@ describe("OpenClaw rescue message", () => {
 
       await expect(
         runRescue("/openclaw doctor fix", cfg, commandContext(), deps),
-      ).resolves.toContain("run `openclaw doctor --fix` in a terminal");
+      ).resolves.toContain("Run `openclaw doctor --fix` locally");
       await expect(runRescue("/openclaw yes", cfg, commandContext(), deps)).resolves.toBe(
         "No pending OpenClaw rescue change is waiting for approval.",
       );

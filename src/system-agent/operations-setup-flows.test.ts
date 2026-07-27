@@ -150,7 +150,7 @@ describe("system agent setup-flow operations", () => {
     const result = await executeSystemAgentOperation({ kind: "model-setup" }, runtime);
 
     expect(result.applied).toBe(false);
-    expect(lines.join("\n")).toContain("Exit OpenClaw and run `openclaw onboard`");
+    expect(lines.join("\n")).toContain("Run `openclaw onboard` on the machine running OpenClaw");
     expect(lines.join("\n")).not.toContain("openclaw configure --section model");
   });
 

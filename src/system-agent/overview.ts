@@ -317,7 +317,7 @@ function formatStartupAction(overview: SystemAgentOverview): string | undefined 
     return "Config needs attention. Run `doctor` to inspect it.";
   }
   if (!overview.defaultModel) {
-    return "Inference is unavailable. Run `openclaw onboard` and complete a live model check.";
+    return "Reconnecting AI happens on the machine running OpenClaw: run `openclaw onboard` there to complete a live model check.";
   }
   return undefined;
 }
