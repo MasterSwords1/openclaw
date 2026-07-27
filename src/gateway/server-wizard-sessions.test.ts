@@ -6,7 +6,7 @@ describe("createWizardSessionTracker", () => {
   it("retains an uncollected terminal result before reaping it", async () => {
     let now = 1_000;
     const tracker = createWizardSessionTracker({ now: () => now });
-    const terminal = new WizardSession(async () => {});
+    const terminal = new WizardSession(async () => {}, { now: () => now });
     tracker.wizardSessions.set("finished", terminal);
     await terminal.next();
 
@@ -18,6 +18,18 @@ describe("createWizardSessionTracker", () => {
     expect(tracker.wizardSessions.has("finished")).toBe(true);
 
     now += 1;
+    expect(tracker.findRunningWizard()).toBeNull();
+    expect(tracker.wizardSessions.has("finished")).toBe(false);
+  });
+
+  it("expires from terminal completion even before the tracker observes it", async () => {
+    let now = 1_000;
+    const tracker = createWizardSessionTracker({ now: () => now });
+    const terminal = new WizardSession(async () => {}, { now: () => now });
+    tracker.wizardSessions.set("finished", terminal);
+    await terminal.next();
+
+    now += 60 * 60 * 1000;
     expect(tracker.findRunningWizard()).toBeNull();
     expect(tracker.wizardSessions.has("finished")).toBe(false);
   });

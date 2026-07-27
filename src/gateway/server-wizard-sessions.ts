@@ -7,23 +7,18 @@ const UNCOLLECTED_TERMINAL_RETENTION_MS = 5 * 60 * 1000;
 /** Creates the in-memory tracker used for active Gateway wizard sessions. */
 export function createWizardSessionTracker(options?: { now?: () => number }) {
   const wizardSessions = new Map<string, WizardSession>();
-  const terminalSince = new Map<string, number>();
   const now = options?.now ?? Date.now;
 
   const findRunningWizard = (): string | null => {
     for (const [id, session] of wizardSessions) {
       if (session.getStatus() === "running") {
-        terminalSince.delete(id);
         return id;
       }
-      const observedAt = terminalSince.get(id);
-      if (observedAt === undefined) {
-        terminalSince.set(id, now());
-      } else if (now() - observedAt >= UNCOLLECTED_TERMINAL_RETENTION_MS) {
+      const terminalAt = session.getTerminalAt();
+      if (terminalAt !== undefined && now() - terminalAt >= UNCOLLECTED_TERMINAL_RETENTION_MS) {
         // Keep a terminal result long enough for its original client to collect
-        // it; later starts may reap only an abandoned retained result.
+        // it, measured from completion rather than the tracker's first observation.
         wizardSessions.delete(id);
-        terminalSince.delete(id);
       }
     }
     return null;
@@ -38,7 +33,6 @@ export function createWizardSessionTracker(options?: { now?: () => number }) {
       return;
     }
     wizardSessions.delete(id);
-    terminalSince.delete(id);
   };
 
   return { wizardSessions, findRunningWizard, purgeWizardSession };

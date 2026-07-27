@@ -31,6 +31,20 @@ function resolveChannelWizardResumeKey(ownerKey: string | undefined): string | u
   return ownerKey ? JSON.stringify(["gateway-channel-setup", ownerKey]) : undefined;
 }
 
+async function resolveChannelRecoveryIdentity(
+  channel: string | undefined,
+  context: GatewayRequestContext,
+): Promise<{ channel: string | undefined; allowAliasMatch: boolean }> {
+  if (!channel) {
+    return { channel, allowAliasMatch: true };
+  }
+  const { resolveInitialWizardChannel } = await import("../../commands/channels/add-wizard.js");
+  const resolvedChannel = await resolveInitialWizardChannel(channel, context.getRuntimeConfig());
+  return resolvedChannel
+    ? { channel: resolvedChannel, allowAliasMatch: false }
+    : { channel, allowAliasMatch: true };
+}
+
 export type SetupWizardRunner = (
   opts: OnboardOptions,
   runtime: RuntimeEnv,
@@ -143,6 +157,12 @@ export const wizardHandlers: GatewayRequestHandlers = {
     const ownerKey = owner?.key;
     const resumeKey =
       flow === "channels" ? resolveChannelWizardResumeKey(owner?.continuityKey) : undefined;
+    // Canonical ids win over another plugin's alias during recovery, matching
+    // the setup resolver used when the new wizard actually starts.
+    const recoveryIdentity =
+      flow === "channels"
+        ? await resolveChannelRecoveryIdentity(channel, context)
+        : { channel, allowAliasMatch: true };
     // The tracker owns terminal retention timestamps. Sweep before direct
     // owner matching so an expired result cannot be replayed indefinitely.
     let running = context.findRunningWizard();
@@ -150,7 +170,12 @@ export const wizardHandlers: GatewayRequestHandlers = {
       const ownerSession = [...context.wizardSessions.entries()].find(([, session]) =>
         session.hasResumeKey(resumeKey),
       );
-      if (ownerSession && ownerSession[1].canResume(resumeKey, channel)) {
+      if (
+        ownerSession &&
+        ownerSession[1].canResume(resumeKey, recoveryIdentity.channel, {
+          allowAliasMatch: recoveryIdentity.allowAliasMatch,
+        })
+      ) {
         const [resumableId, resumableSession] = ownerSession;
         resumableSession.adoptOwner(ownerKey);
         const result = await resumableSession.next();
@@ -214,7 +239,7 @@ export const wizardHandlers: GatewayRequestHandlers = {
               timeoutMs: CHANNEL_WIZARD_TIMEOUT_MS,
               ...(ownerKey ? { ownerKey } : {}),
               ...(resumeKey ? { resumeKey } : {}),
-              ...(channel ? { requestedChannel: channel } : {}),
+              ...(recoveryIdentity.channel ? { requestedChannel: recoveryIdentity.channel } : {}),
             },
           )
         : new WizardSession((prompter) =>

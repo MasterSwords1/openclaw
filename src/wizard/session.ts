@@ -236,6 +236,7 @@ class WizardSessionPrompter implements WizardPrompter {
 export class WizardSession {
   private readonly abortController = new AbortController();
   private readonly timeoutMs: number | undefined;
+  private readonly now: () => number;
   private expiryTimer: ReturnType<typeof setTimeout> | undefined;
   private currentStep: WizardStep | null = null;
   private progressSteps: WizardStep[] = [];
@@ -258,6 +259,7 @@ export class WizardSession {
     }
   >();
   private status: WizardSessionStatus = "running";
+  private terminalAt: number | undefined;
   private error: string | undefined;
   private configuredAccounts: Array<{ channel: string; accountId: string }> | undefined;
 
@@ -272,10 +274,12 @@ export class WizardSession {
       ownerKey?: string;
       resumeKey?: string;
       requestedChannel?: string;
+      now?: () => number;
     },
   ) {
     const prompter = new WizardSessionPrompter(this);
     this.timeoutMs = options?.timeoutMs;
+    this.now = options?.now ?? Date.now;
     this.ownerKey = options?.ownerKey;
     this.resumeKey = options?.resumeKey;
     this.requestedChannel = normalizeChannelIdentity(options?.requestedChannel);
@@ -375,6 +379,7 @@ export class WizardSession {
       return false;
     }
     this.status = "cancelled";
+    this.terminalAt = this.now();
     this.error = "cancelled";
     this.abortController.abort(new WizardCancelledError());
     this.currentStep = null;
@@ -414,7 +419,11 @@ export class WizardSession {
    * Locked work remains replayable for the same flow. A terminal result needs
    * an explicit channel identity; browse-all without one is fresh intent.
    */
-  canResume(resumeKey: string, requestedChannel?: string): boolean {
+  canResume(
+    resumeKey: string,
+    requestedChannel?: string,
+    options?: { allowAliasMatch?: boolean },
+  ): boolean {
     if (!this.matchesResumeKey(resumeKey)) {
       return false;
     }
@@ -424,8 +433,11 @@ export class WizardSession {
       // fresh intent. Running locked work remains recoverable after reconnect.
       return this.status === "running";
     }
+    if (this.resolvedChannels.has(normalizedRequestedChannel)) {
+      return true;
+    }
     if (
-      this.resolvedChannels.has(normalizedRequestedChannel) ||
+      options?.allowAliasMatch !== false &&
       this.resolvedChannelAliases.has(normalizedRequestedChannel)
     ) {
       return true;
@@ -454,6 +466,11 @@ export class WizardSession {
 
   get signal(): AbortSignal {
     return this.abortController.signal;
+  }
+
+  /** Timestamp of the actual terminal transition, used for bounded result retention. */
+  getTerminalAt(): number | undefined {
+    return this.terminalAt;
   }
 
   pushStep(step: WizardStep) {
@@ -511,6 +528,7 @@ export class WizardSession {
       await this.runner(prompter, this.signal, this);
       if (this.status === "running") {
         this.status = "done";
+        this.terminalAt = this.now();
       }
     } catch (err) {
       if (this.status !== "running") {
@@ -523,6 +541,7 @@ export class WizardSession {
         this.status = "error";
         this.error = String(err);
       }
+      this.terminalAt = this.now();
     } finally {
       this.clearExpiryTimer();
       this.resolveStep(null);

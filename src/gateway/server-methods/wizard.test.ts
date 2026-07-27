@@ -52,6 +52,7 @@ describe("channel wizard lifecycle", () => {
     );
     const context = {
       wizardSessions,
+      getRuntimeConfig: () => ({}),
       findRunningWizard: () => null,
       purgeWizardSession: (id: string) => wizardSessions.delete(id),
       channelWizardRunner: async (
@@ -103,6 +104,7 @@ describe("channel wizard lifecycle", () => {
     const runCount = vi.fn();
     const context = {
       wizardSessions,
+      getRuntimeConfig: () => ({}),
       findRunningWizard: () =>
         [...wizardSessions].find(([, session]) => session.getStatus() === "running")?.[0] ?? null,
       purgeWizardSession: (id: string) => wizardSessions.delete(id),
@@ -247,10 +249,12 @@ describe("channel wizard lifecycle", () => {
 
   it("reaps an expired retained result before same-owner recovery", async () => {
     let now = 1_000;
+    const dateNow = vi.spyOn(Date, "now").mockImplementation(() => now);
     const tracker = createWizardSessionTracker({ now: () => now });
     const runCount = vi.fn();
     const context = {
       ...tracker,
+      getRuntimeConfig: () => ({}),
       channelWizardRunner: async (options: {
         beforePersistentEffect?: () => Promise<void>;
         onResolvedChannel?: (channel: string) => void;
@@ -294,6 +298,7 @@ describe("channel wizard lifecycle", () => {
     const freshResult = freshRespond.mock.calls[0]?.[1] as { sessionId?: string } | undefined;
     expect(freshResult?.sessionId).not.toBe(firstSessionId);
     expect(runCount).toHaveBeenCalledTimes(2);
+    dateNow.mockRestore();
   });
 
   it("resumes locked shared-auth work after credential rotation", async () => {
@@ -301,6 +306,7 @@ describe("channel wizard lifecycle", () => {
     const runCount = vi.fn();
     const context = {
       wizardSessions,
+      getRuntimeConfig: () => ({}),
       findRunningWizard: () =>
         [...wizardSessions].find(([, session]) => session.getStatus() === "running")?.[0] ?? null,
       purgeWizardSession: (id: string) => wizardSessions.delete(id),
@@ -362,6 +368,7 @@ describe("channel wizard lifecycle", () => {
     const runCount = vi.fn();
     const context = {
       wizardSessions,
+      getRuntimeConfig: () => ({}),
       findRunningWizard: () =>
         [...wizardSessions].find(([, session]) => session.getStatus() === "running")?.[0] ?? null,
       purgeWizardSession: (id: string) => wizardSessions.delete(id),
@@ -423,6 +430,7 @@ describe("channel wizard lifecycle", () => {
     const runCount = vi.fn();
     const context = {
       wizardSessions,
+      getRuntimeConfig: () => ({}),
       findRunningWizard: () =>
         [...wizardSessions].find(([, session]) => session.getStatus() === "running")?.[0] ?? null,
       purgeWizardSession: (id: string) => wizardSessions.delete(id),
@@ -506,6 +514,7 @@ describe("channel wizard lifecycle", () => {
     const runCount = vi.fn();
     const context = {
       wizardSessions,
+      getRuntimeConfig: () => ({}),
       findRunningWizard: () =>
         [...wizardSessions].find(([, session]) => session.getStatus() === "running")?.[0] ?? null,
       purgeWizardSession: (id: string) => wizardSessions.delete(id),
@@ -561,6 +570,7 @@ describe("channel wizard lifecycle", () => {
     const runCount = vi.fn();
     const context = {
       wizardSessions,
+      getRuntimeConfig: () => ({}),
       findRunningWizard: () =>
         [...wizardSessions].find(([, session]) => session.getStatus() === "running")?.[0] ?? null,
       purgeWizardSession: (id: string) => wizardSessions.delete(id),
@@ -629,6 +639,76 @@ describe("channel wizard lifecycle", () => {
       undefined,
     );
     expect(runCount).toHaveBeenCalledTimes(2);
+  });
+
+  it("starts an exact canonical channel instead of replaying another channel's alias", async () => {
+    const channelWizardModule = await import("../../commands/channels/add-wizard.js");
+    const resolveChannel = vi
+      .spyOn(channelWizardModule, "resolveInitialWizardChannel")
+      .mockImplementation(
+        async (raw) =>
+          raw as Awaited<ReturnType<typeof channelWizardModule.resolveInitialWizardChannel>>,
+      );
+    try {
+      const wizardSessions = new Map<string, WizardSession>();
+      const runCount = vi.fn();
+      const context = {
+        wizardSessions,
+        getRuntimeConfig: () => ({}),
+        findRunningWizard: () =>
+          [...wizardSessions].find(([, session]) => session.getStatus() === "running")?.[0] ?? null,
+        purgeWizardSession: (id: string) => wizardSessions.delete(id),
+        channelWizardRunner: async (
+          options: {
+            channel?: string;
+            beforePersistentEffect?: () => Promise<void>;
+            onResolvedChannel?: (channel: string, aliases?: readonly string[]) => void;
+          },
+          _runtime: unknown,
+        ) => {
+          runCount();
+          if (options.channel === "alias-owner") {
+            options.onResolvedChannel?.("alias-owner", ["exact-id"]);
+          } else {
+            options.onResolvedChannel?.("exact-id");
+          }
+          await options.beforePersistentEffect?.();
+        },
+      };
+      const owner = {
+        connId: "owner-old-connection",
+        authenticatedUserId: "owner@example.com",
+        connect: { client: { id: "openclaw-control-ui", mode: "webchat" } },
+      };
+      const start = expectDefined(
+        wizardHandlers["wizard.start"],
+        "wizardHandlers[wizard.start] test invariant",
+      );
+      const firstRespond = vi.fn();
+
+      await start({
+        params: { flow: "channels", channel: "alias-owner" },
+        client: owner,
+        respond: firstRespond,
+        context,
+      } as never);
+
+      const firstResult = firstRespond.mock.calls[0]?.[1] as { sessionId?: string } | undefined;
+      const firstSessionId = expectDefined(firstResult?.sessionId, "alias owner session id");
+      const exactRespond = vi.fn();
+      await start({
+        params: { flow: "channels", channel: "exact-id" },
+        client: { ...owner, connId: "owner-new-connection" },
+        respond: exactRespond,
+        context,
+      } as never);
+
+      const exactResult = exactRespond.mock.calls[0]?.[1] as { sessionId?: string } | undefined;
+      expect(exactResult?.sessionId).not.toBe(firstSessionId);
+      expect(runCount).toHaveBeenCalledTimes(2);
+    } finally {
+      resolveChannel.mockRestore();
+    }
   });
 
   it("rejects hosted channel setup without a reconnect-safe owner", async () => {
