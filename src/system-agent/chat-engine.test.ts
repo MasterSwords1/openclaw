@@ -730,6 +730,24 @@ describe("SystemAgentChatEngine", () => {
     expect(wizardRuns).toEqual(["telegram", "token:123:abc", "mode:open"]);
   });
 
+  it("rejects Gateway-hosted setup without a reconnect-safe owner", async () => {
+    const runChannelSetupWizard = vi.fn();
+    const engine = new SystemAgentChatEngine({
+      surface: "gateway",
+      allowHostedChannelSetup: false,
+      runAgentTurn: async () => null,
+      planWithAssistant: async () => null,
+      deps: { loadOverview: fakeOverviewLoader() },
+      runChannelSetupWizard,
+    });
+
+    const reply = await engine.handle("connect matrix");
+
+    expect(reply.text).toContain("identity that can survive reconnects");
+    expect(runChannelSetupWizard).not.toHaveBeenCalled();
+    expect(engine.hasLockedHostedWizard()).toBe(false);
+  });
+
   it("forwards hosted cancellation to reversible channel setup work", async () => {
     let setupSignal: AbortSignal | undefined;
     const engine = new SystemAgentChatEngine({

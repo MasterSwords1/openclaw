@@ -247,6 +247,7 @@ export class WizardSession {
   private pendingExternalUrl: string | undefined;
   private ownerKey: string | undefined;
   private readonly resumeKey: string | undefined;
+  private readonly originConnectionId: string | undefined;
   private readonly requestedChannel: string | undefined;
   private readonly resolvedChannels = new Set<string>();
   private readonly resolvedChannelAliases = new Set<string>();
@@ -273,6 +274,7 @@ export class WizardSession {
       timeoutMs?: number;
       ownerKey?: string;
       resumeKey?: string;
+      originConnectionId?: string;
       requestedChannel?: string;
       now?: () => number;
     },
@@ -282,6 +284,7 @@ export class WizardSession {
     this.now = options?.now ?? Date.now;
     this.ownerKey = options?.ownerKey;
     this.resumeKey = options?.resumeKey;
+    this.originConnectionId = options?.originConnectionId?.trim() || undefined;
     this.requestedChannel = normalizeChannelIdentity(options?.requestedChannel);
     this.refreshExpiryTimer();
     void this.run(prompter);
@@ -330,6 +333,14 @@ export class WizardSession {
   /** Record what the channels flow actually configured (channels flow only). */
   setConfiguredAccounts(accounts: ReadonlyArray<{ channel: string; accountId: string }>) {
     this.configuredAccounts = accounts.map((entry) => ({ ...entry }));
+  }
+
+  /** Whether a request arrived on the connection that started this session. */
+  startedOnConnection(connectionId: string | undefined): boolean {
+    const normalizedConnectionId = connectionId?.trim() || undefined;
+    return (
+      normalizedConnectionId !== undefined && normalizedConnectionId === this.originConnectionId
+    );
   }
 
   /** Record the canonical channel selected by the setup registry. */

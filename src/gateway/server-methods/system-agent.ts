@@ -43,6 +43,7 @@ import {
   handlePendingApprovalRequest,
   listVisiblePendingApprovalRequests,
 } from "./approval-shared.js";
+import { resolveGatewayHostedSessionOwner } from "./hosted-session-owner.js";
 import {
   acknowledgeDeliveredSystemAgentWelcome,
   adoptLockedSystemAgentWizard,
@@ -555,6 +556,9 @@ export const systemAgentHandlers: GatewayRequestHandlers = {
             surface: "gateway",
             verifiedInference: inference.binding,
             operatorApprovalOnly: params.delegation !== undefined,
+            allowHostedChannelSetup:
+              params.delegation !== undefined ||
+              resolveGatewayHostedSessionOwner(client).kind === "stable",
           });
           // `reset: true` keeps the durable logbook but deliberately starts
           // model context clean; only ordinary fresh sessions receive its tail.

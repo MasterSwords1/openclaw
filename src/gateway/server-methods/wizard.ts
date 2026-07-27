@@ -155,6 +155,7 @@ export const wizardHandlers: GatewayRequestHandlers = {
       return;
     }
     const ownerKey = owner?.key;
+    const connectionId = client?.connId?.trim() || undefined;
     const resumeKey =
       flow === "channels" ? resolveChannelWizardResumeKey(owner?.continuityKey) : undefined;
     // Canonical ids win over another plugin's alias during recovery, matching
@@ -171,8 +172,14 @@ export const wizardHandlers: GatewayRequestHandlers = {
       const ownerSession = [...context.wizardSessions.entries()].find(([, session]) =>
         session.hasResumeKey(resumeKey),
       );
+      // Retained terminal results repair a lost response after reconnect. A new
+      // start on the original live connection is fresh setup intent.
+      const terminalResultAlreadyReturnedToConnection =
+        ownerSession?.[1].getStatus() !== "running" &&
+        ownerSession?.[1].startedOnConnection(connectionId);
       if (
         ownerSession &&
+        !terminalResultAlreadyReturnedToConnection &&
         ownerSession[1].canResume(resumeKey, recoveryIdentity.channel, {
           allowAliasMatch: recoveryIdentity.allowAliasMatch,
         })
@@ -244,6 +251,7 @@ export const wizardHandlers: GatewayRequestHandlers = {
               timeoutMs: CHANNEL_WIZARD_TIMEOUT_MS,
               ...(ownerKey ? { ownerKey } : {}),
               ...(resumeKey ? { resumeKey } : {}),
+              ...(connectionId ? { originConnectionId: connectionId } : {}),
               ...(recoveryIdentity.channel ? { requestedChannel: recoveryIdentity.channel } : {}),
             },
           )

@@ -89,11 +89,16 @@ function makeEngine(): FakeEngine {
 }
 
 const createdEngines = vi.hoisted(() => [] as FakeEngine[]);
+const createdEngineOptions = vi.hoisted(() => [] as Array<{ allowHostedChannelSetup?: boolean }>);
 
 vi.mock("../../system-agent/chat-engine.js", () => ({
-  SystemAgentChatEngine: function FakeSystemAgentChatEngine(this: FakeEngine) {
+  SystemAgentChatEngine: function FakeSystemAgentChatEngine(
+    this: FakeEngine,
+    options: { allowHostedChannelSetup?: boolean },
+  ) {
     const engine = makeEngine();
     createdEngines.push(engine);
+    createdEngineOptions.push(options);
     Object.assign(this, engine);
   },
 }));
@@ -170,6 +175,7 @@ async function callChat(
 
 beforeEach(() => {
   createdEngines.length = 0;
+  createdEngineOptions.length = 0;
   setupInferenceMocks.verifySetupInference.mockResolvedValue({ ok: true, binding: {} });
   delegatedInferenceMocks.verifySystemAgentInferenceWithFallback.mockResolvedValue({
     ok: true,
@@ -532,6 +538,7 @@ describe("openclaw.chat session ownership", () => {
 
     expect(call.ok).toBe(true);
     expect(sessions.get("auth-none")?.ownerKey).toBe("connection:auth-none-connection");
+    expect(createdEngineOptions[0]?.allowHostedChannelSetup).toBe(false);
   });
 
   it("keeps explicit delegation authoritative across connection identities", async () => {
@@ -543,6 +550,7 @@ describe("openclaw.chat session ownership", () => {
       { sessionId: "delegated", delegation },
       makeClient({ connId: "conn-owner", deviceId: "device-owner" }),
     );
+    expect(createdEngineOptions[0]?.allowHostedChannelSetup).toBe(true);
     const handle = expectDefined(createdEngines[0], "created delegated engine").handle;
 
     const resumed = await callChat(

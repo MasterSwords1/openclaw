@@ -88,6 +88,8 @@ export type SystemAgentChatEngineOptions = {
   readonly verifiedInference: SystemAgentVerifiedInferenceBinding;
   /** Delegated chats accept approval only from the operator registry. */
   operatorApprovalOnly?: boolean;
+  /** Whether hosted channel work has an owner that can recover after reconnect. */
+  allowHostedChannelSetup?: boolean;
 };
 type RetainedTerminalWizardReply = {
   reply: SystemAgentChatReply;
@@ -1197,6 +1199,12 @@ export class SystemAgentChatEngine {
   private async startChannelSetupWizard(channel: string): Promise<string> {
     this.clearPendingProposals();
     this.lastSensitiveChannel = undefined;
+    if (this.opts.surface === "gateway" && this.opts.allowHostedChannelSetup === false) {
+      return [
+        "Channel setup in chat requires an identity that can survive reconnects.",
+        "Pair this device or sign in to the Gateway, then try again.",
+      ].join("\n");
+    }
     const beforePersistentApply = async (runtime: RuntimeEnv) => {
       await this.requirePersistentApplyInference(runtime);
     };
