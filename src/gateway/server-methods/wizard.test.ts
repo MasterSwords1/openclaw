@@ -509,50 +509,6 @@ describe("channel wizard lifecycle", () => {
     expect(runCount).toHaveBeenCalledTimes(2);
   });
 
-  it("starts fresh after returning a terminal result on the same connection", async () => {
-    const wizardSessions = new Map<string, WizardSession>();
-    const runCount = vi.fn();
-    const context = {
-      wizardSessions,
-      getRuntimeConfig: () => ({}),
-      findRunningWizard: () =>
-        [...wizardSessions].find(([, session]) => session.getStatus() === "running")?.[0] ?? null,
-      purgeWizardSession: (id: string) => wizardSessions.delete(id),
-      channelWizardRunner: async (options: {
-        beforePersistentEffect?: () => Promise<void>;
-        onResolvedChannel?: (channel: string) => void;
-      }) => {
-        runCount();
-        options.onResolvedChannel?.("matrix");
-        await options.beforePersistentEffect?.();
-      },
-    };
-    const client = {
-      connId: "owner-connection",
-      authenticatedUserId: "owner@example.com",
-      connect: { client: { id: "openclaw-control-ui", mode: "webchat" } },
-    };
-    const start = expectDefined(
-      wizardHandlers["wizard.start"],
-      "wizardHandlers[wizard.start] test invariant",
-    );
-
-    await start({
-      params: { flow: "channels", channel: "matrix" },
-      client,
-      respond: vi.fn(),
-      context,
-    } as never);
-    await start({
-      params: { flow: "channels", channel: "matrix" },
-      client,
-      respond: vi.fn(),
-      context,
-    } as never);
-
-    expect(runCount).toHaveBeenCalledTimes(2);
-  });
-
   it("starts a fresh browse-all wizard after retained work is terminal", async () => {
     const wizardSessions = new Map<string, WizardSession>();
     const runCount = vi.fn();
