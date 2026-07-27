@@ -562,8 +562,8 @@ describe("channelsAddCommand", () => {
     });
     channelWizardMocks.setupChannels.mockImplementationOnce(
       async (_cfg, _runtime, _prompter, options) => {
-        options.onPendingChannelEffects?.([{ channel: "twitch", aliases: ["twitch-chat"] }]);
-        options.onSelection?.(["twitch"]);
+        options?.onPendingChannelEffects?.([{ channel: "twitch", aliases: ["twitch-chat"] }]);
+        options?.onSelection?.(["twitch"]);
         return configured;
       },
     );
@@ -595,8 +595,8 @@ describe("channelsAddCommand", () => {
     });
     channelWizardMocks.setupChannels.mockImplementationOnce(
       async (_cfg, _runtime, _prompter, options) => {
-        options.onPendingChannelEffects?.([{ channel: "discord" }]);
-        options.onSelection?.(["discord"]);
+        options?.onPendingChannelEffects?.([{ channel: "discord" }]);
+        options?.onSelection?.(["discord"]);
         return configured;
       },
     );
