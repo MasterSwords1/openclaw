@@ -101,7 +101,10 @@ class OptionCard extends LitElement {
       <section class="option-card" role="group" aria-label=${props.question}>
         ${props.header ? html`<div class="option-card__chip">${props.header}</div>` : nothing}
         <div class="option-card__question">${props.question}</div>
-        <div class="option-card__choices" role=${isAction ? nothing : "radiogroup"}>
+        <div
+          class=${`option-card__choices${isAction ? " option-card__choices--action" : ""}`}
+          role=${isAction ? nothing : "radiogroup"}
+        >
           ${options.map((option, index) => {
             const recommended = index === recommendedIndex;
             const selected = !isAction && option.value === this.selectedValue;

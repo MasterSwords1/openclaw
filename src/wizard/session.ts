@@ -1,6 +1,7 @@
 // Wizard session helpers track onboarding session ids and state.
 import { randomUUID } from "node:crypto";
-import { isDecodableSystemAgentQrCodePngBase64 } from "@openclaw/gateway-protocol";
+import { QR_PNG_DATA_URL_MAX_LENGTH } from "../../packages/gateway-protocol/src/schema/qr.js";
+import { renderQrPngDataUrl } from "../media/qr-image.js";
 import { createDeferred, type Deferred } from "../shared/deferred.js";
 import {
   WizardCancelledError,
@@ -34,7 +35,7 @@ export type WizardStep = {
     expiresInMinutes?: number;
     message?: string;
   };
-  qrCodePngBase64?: string;
+  qrDataUrl?: string;
 };
 
 type WizardSessionStatus = "running" | "done" | "cancelled" | "error";
@@ -70,8 +71,9 @@ class WizardSessionPrompter implements WizardPrompter {
   ) {
     if (supportsQrCode) {
       this.qrCode = async (params) => {
-        if (!(await isDecodableSystemAgentQrCodePngBase64(params.pngBase64))) {
-          throw new Error("Wizard QR code must be a canonical base64-encoded PNG under 1 MB.");
+        const qrDataUrl = await renderQrPngDataUrl(params.text);
+        if (qrDataUrl.length > QR_PNG_DATA_URL_MAX_LENGTH) {
+          throw new Error("Wizard QR code exceeds the Gateway presentation limit.");
         }
         const result = await this.prompt({
           type: "select",
@@ -79,7 +81,7 @@ class WizardSessionPrompter implements WizardPrompter {
           message: params.message,
           options: [{ value: true, label: "Continue" }],
           initialValue: true,
-          qrCodePngBase64: params.pngBase64,
+          qrDataUrl,
           executor: "client",
         });
         return Boolean(result);

@@ -94,7 +94,9 @@ describe("option card", () => {
     await container.querySelector("openclaw-option-card")!.updateComplete;
 
     expect(container.querySelector(".option-card__skip")).toBeNull();
-    expect(container.querySelector(".option-card__choices")?.getAttribute("role")).toBeNull();
+    const actions = container.querySelector(".option-card__choices");
+    expect(actions?.getAttribute("role")).toBeNull();
+    expect(actions?.classList.contains("option-card__choices--action")).toBe(true);
     const action = container.querySelector(".option-card__choice");
     expect(action?.getAttribute("role")).toBeNull();
     expect(action?.getAttribute("aria-checked")).toBeNull();

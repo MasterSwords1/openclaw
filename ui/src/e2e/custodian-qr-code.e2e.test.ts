@@ -1,6 +1,7 @@
 // Control UI tests cover system-agent QR presentation through the mocked Gateway.
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
+import { GATEWAY_CLIENT_CAPS } from "@openclaw/gateway-protocol/client-info";
 import { chromium, type Browser, type Page } from "playwright";
 import qrcode from "qrcode";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -72,7 +73,7 @@ describeControlUiE2e("Control UI system-agent QR presentation", () => {
             options: [{ label: "Continue" }],
             allowSkip: false,
           },
-          qrCodePngBase64: qrDataUrl.replace(/^data:image\/png;base64,/u, ""),
+          qrDataUrl,
         },
       },
     });
@@ -83,8 +84,12 @@ describeControlUiE2e("Control UI system-agent QR presentation", () => {
       const image = page.getByAltText("Setup QR code");
       await image.waitFor();
 
+      const connect = await gateway.waitForRequest("connect");
+      expect(connect.params).toMatchObject({
+        caps: expect.arrayContaining([GATEWAY_CLIENT_CAPS.SYSTEM_AGENT_QR_CODE]),
+      });
       const request = await gateway.waitForRequest("openclaw.chat");
-      expect(request.params).toMatchObject({ capabilities: { qrCodePng: true } });
+      expect(request.params).not.toHaveProperty("capabilities");
       expect(await image.getAttribute("src")).toBe(qrDataUrl);
       await expect
         .poll(() => image.evaluate((element: HTMLImageElement) => element.naturalWidth))

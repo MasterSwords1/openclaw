@@ -250,7 +250,7 @@ describe("runWizardWithPromptNavigationScope", () => {
       const acknowledged = await scopedPrompter.qrCode?.({
         title: "Scan code",
         message: "Scan this QR code, then continue.",
-        pngBase64: "iVBORw0KGgo=",
+        text: "https://example.test/pair",
       });
       expect(acknowledged).toBe(true);
       await scopedPrompter.openUrl?.("https://example.com/link");
@@ -262,7 +262,7 @@ describe("runWizardWithPromptNavigationScope", () => {
     expect(qrCode).toHaveBeenCalledWith({
       title: "Scan code",
       message: "Scan this QR code, then continue.",
-      pngBase64: "iVBORw0KGgo=",
+      text: "https://example.test/pair",
     });
     expect(openUrl).toHaveBeenCalledWith("https://example.com/link");
   });

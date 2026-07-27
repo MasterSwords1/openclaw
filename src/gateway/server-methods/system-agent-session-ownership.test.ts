@@ -2,6 +2,7 @@
 
 import { expectDefined } from "@openclaw/normalization-core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { GATEWAY_CLIENT_CAPS } from "../../../packages/gateway-protocol/src/client-info.js";
 import { resetCommandQueueStateForTest } from "../../process/command-queue.test-support.js";
 import { systemAgentHandlers, type SystemAgentChatSession } from "./system-agent.js";
 import type { GatewayClient, GatewayRequestContext, RespondFn } from "./types.js";
@@ -82,12 +83,14 @@ function makeClient(params: {
   connId: string;
   deviceId?: string;
   authenticatedUserId?: string;
+  supportsQrCode?: boolean;
 }): GatewayClient {
   return {
     connId: params.connId,
     connect: {
       client: { id: "openclaw-control-ui", mode: "webchat" },
       ...(params.deviceId ? { device: { id: params.deviceId } } : {}),
+      caps: params.supportsQrCode ? [GATEWAY_CLIENT_CAPS.SYSTEM_AGENT_QR_CODE] : [],
     },
     ...(params.authenticatedUserId ? { authenticatedUserId: params.authenticatedUserId } : {}),
   } as GatewayClient;
@@ -246,6 +249,47 @@ describe("openclaw.chat session ownership", () => {
     expect(resumed.ok).toBe(true);
     expect(handle).toHaveBeenCalledWith("continue");
   });
+
+  it.each([
+    { initial: false, resumed: true },
+    { initial: true, resumed: false },
+  ])(
+    "requires a reset when QR support changes from $initial to $resumed",
+    async ({ initial, resumed }) => {
+      const sessions = new Map<string, SystemAgentChatSession>();
+      const context = makeContext(sessions);
+      const owner = {
+        deviceId: "device-owner",
+        authenticatedUserId: "owner@example.com",
+      };
+      await callChat(
+        context,
+        { sessionId: "capability-change" },
+        makeClient({ ...owner, connId: "conn-old", supportsQrCode: initial }),
+      );
+      const original = expectDefined(createdEngines[0], "created system-agent engine");
+
+      const rejected = await callChat(
+        context,
+        { sessionId: "capability-change", message: "continue" },
+        makeClient({ ...owner, connId: "conn-new", supportsQrCode: resumed }),
+      );
+      expect(rejected).toMatchObject({
+        ok: false,
+        error: { code: "INVALID_REQUEST" },
+      });
+      expect(original.handle).not.toHaveBeenCalled();
+
+      const reset = await callChat(
+        context,
+        { sessionId: "capability-change", reset: true },
+        makeClient({ ...owner, connId: "conn-new", supportsQrCode: resumed }),
+      );
+      expect(reset.ok).toBe(true);
+      expect(original.dispose).toHaveBeenCalledOnce();
+      expect(sessions.get("capability-change")?.supportsQrCode).toBe(resumed);
+    },
+  );
 
   it("rejects non-delegated chat without a server-authenticated identity", async () => {
     const call = await callChat(makeContext(new Map()), { sessionId: "anonymous" }, null);

@@ -2028,7 +2028,6 @@ export const en: TranslationMap = {
     thinking: "OpenClaw is thinking",
     earlier: "Earlier",
     setupQrCodeAlt: "Setup QR code",
-    invalidSetupQrCode: "The Gateway returned an invalid setup QR code. Retry setup.",
     requestFailed: "OpenClaw could not reply. Try again.",
     connectionChanged: "The Gateway connection changed. Retry to continue this setup.",
     sessionRestarted:

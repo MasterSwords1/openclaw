@@ -33,6 +33,10 @@
   gap: 10px;
 }
 
+.option-card__choices--action {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .option-card__choice {
   display: flex;
   min-height: 88px;

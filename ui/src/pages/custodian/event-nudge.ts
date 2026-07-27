@@ -11,10 +11,6 @@ export type CustodianEventNudge = {
 
 export type CustodianSendDelivery = "unsent" | "sent" | "received";
 export type CustodianSendOutcome = "sent" | "rejected" | "unknown";
-export type CustodianSendResult = {
-  outcome: CustodianSendOutcome;
-  delivery: CustodianSendDelivery;
-};
 
 export function classifyCustodianSendFailure(
   error: unknown,

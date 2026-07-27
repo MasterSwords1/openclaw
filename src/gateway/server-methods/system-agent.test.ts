@@ -2,6 +2,7 @@
 
 import { expectDefined } from "@openclaw/normalization-core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { GATEWAY_CLIENT_CAPS } from "../../../packages/gateway-protocol/src/client-info.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
 import type { SystemAgentApprovalRequestPayload } from "../../infra/system-agent-approvals.js";
 import { getCommandLaneSnapshot } from "../../process/command-queue.js";
@@ -118,6 +119,16 @@ const defaultClient = {
   connId: "conn-test",
   connect: { device: { id: "device-test" } },
 } as GatewayClient;
+
+function clientWithQrSupport(enabled: boolean): GatewayClient {
+  return {
+    ...defaultClient,
+    connect: {
+      ...defaultClient.connect,
+      caps: enabled ? [GATEWAY_CLIENT_CAPS.SYSTEM_AGENT_QR_CODE] : [],
+    },
+  };
+}
 
 const verifiedConfig: OpenClawConfig = {
   agents: { defaults: { model: "openai/gpt-5.5@openai:verified" } },
@@ -522,9 +533,7 @@ describe("openclaw.chat", () => {
     expect(secondCall.ok).toBe(true);
   });
 
-  it("returns caller-supplied QR bytes only to clients that negotiated support", async () => {
-    const pngBase64 =
-      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+  it("returns a core-rendered QR only to clients that negotiated support", async () => {
     vi.spyOn(
       verifiedInferenceRuntime,
       "resolveSystemAgentVerifiedInferenceRoute",
@@ -534,7 +543,7 @@ describe("openclaw.chat", () => {
         await prompter.qrCode?.({
           title: "Link a device",
           message: "Scan this QR code, then continue.",
-          pngBase64,
+          text: "https://example.test/pair",
         });
         return cfg;
       },
@@ -542,61 +551,29 @@ describe("openclaw.chat", () => {
     const sessions = new Map<string, SystemAgentChatSession>();
     const context = makeContext(sessions);
 
-    const capable = await callChat(context, {
-      sessionId: "qr-capable",
-      message: "connect discord",
-      capabilities: { qrCodePng: true },
-    });
-    const legacy = await callChat(context, {
-      sessionId: "qr-legacy",
-      message: "connect discord",
-    });
+    const capable = await callChat(
+      context,
+      {
+        sessionId: "qr-capable",
+        message: "connect discord",
+      },
+      clientWithQrSupport(true),
+    );
+    const legacy = await callChat(
+      context,
+      {
+        sessionId: "qr-legacy",
+        message: "connect discord",
+      },
+      clientWithQrSupport(false),
+    );
 
     expect(capable, JSON.stringify(capable)).toMatchObject({ ok: true });
     expect(capable.payload).toMatchObject({
-      qrCodePngBase64: pngBase64,
+      qrDataUrl: expect.stringMatching(/^data:image\/png;base64,/u),
       wizardInputPending: true,
     });
-    expect(legacy.payload).not.toHaveProperty("qrCodePngBase64");
-  });
-
-  it.each([
-    { initialQr: true, resumedQr: false },
-    { initialQr: false, resumedQr: true },
-  ])("rejects a session resumed with QR support changed", async ({ initialQr, resumedQr }) => {
-    stubEngineOverview();
-    const sessions = new Map<string, SystemAgentChatSession>();
-    const context = makeContext(sessions);
-    const capabilities = (qrCodePng: boolean) => ({ capabilities: { qrCodePng } });
-
-    const first = await callChat(context, {
-      sessionId: "qr-capability-change",
-      ...capabilities(initialQr),
-    });
-    const resumed = await callChat(context, {
-      sessionId: "qr-capability-change",
-      message: "continue",
-      ...capabilities(resumedQr),
-    });
-
-    expect(first.ok).toBe(true);
-    expect(resumed).toMatchObject({
-      ok: false,
-      error: {
-        code: "INVALID_REQUEST",
-        message: "OpenClaw chat capabilities changed; retry with reset=true.",
-      },
-    });
-
-    const reset = await callChat(context, {
-      sessionId: "qr-capability-change",
-      reset: true,
-      ...capabilities(resumedQr),
-    });
-    expect([reset.ok, sessions.get("qr-capability-change")?.supportsQrCode]).toEqual([
-      true,
-      resumedQr,
-    ]);
+    expect(legacy.payload).not.toHaveProperty("qrDataUrl");
   });
 
   it("keeps read-only setup detection outside the serialized system-agent lane", async () => {

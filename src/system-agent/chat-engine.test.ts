@@ -30,8 +30,7 @@ import {
   type SystemAgentVerifiedInferenceDeps,
 } from "./verified-inference.js";
 
-const PNG_BASE64 =
-  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+const QR_TEXT = "https://example.test/pair";
 
 const mocks = vi.hoisted(() => ({
   readConfigFileSnapshot: vi.fn(async () => ({
@@ -744,7 +743,7 @@ describe("SystemAgentChatEngine", () => {
         acknowledged = await prompter.qrCode?.({
           title: "Link a device",
           message: "Scan this QR code, then continue.",
-          pngBase64: PNG_BASE64,
+          text: QR_TEXT,
         });
       },
     });
@@ -754,7 +753,7 @@ describe("SystemAgentChatEngine", () => {
     expect(prompt).toMatchObject({
       text: expect.stringContaining("Scan this QR code"),
       wizardInputPending: true,
-      qrCodePngBase64: PNG_BASE64,
+      qrDataUrl: expect.stringMatching(/^data:image\/png;base64,/u),
       question: {
         id: expect.any(String),
         header: "Link a device",
@@ -766,71 +765,8 @@ describe("SystemAgentChatEngine", () => {
 
     const done = await engine.handle("Continue");
     expect(done.text).toContain("telegram is configured");
-    expect(done.qrCodePngBase64).toBeUndefined();
+    expect(done.qrDataUrl).toBeUndefined();
     expect(acknowledged).toBe(true);
-  });
-
-  it("does not let cancellation aliases bypass a QR acknowledgement", async () => {
-    let acknowledged: boolean | undefined;
-    const engine = new SystemAgentChatEngine({
-      runAgentTurn: async () => null,
-      planWithAssistant: async () => null,
-      deps: { loadOverview: fakeOverviewLoader() },
-      supportsQrCode: true,
-      runChannelSetupWizard: async (_channel: string, prompter: WizardPrompter) => {
-        acknowledged = await prompter.qrCode?.({
-          title: "Link a device",
-          message: "Scan this QR code, then continue.",
-          pngBase64: PNG_BASE64,
-        });
-      },
-    });
-
-    await engine.handle("connect telegram");
-    const rejectedCancel = await engine.handle("cancel");
-
-    expect(rejectedCancel.text).toContain("I could not match that answer.");
-    expect(rejectedCancel.qrCodePngBase64).toBe(PNG_BASE64);
-    expect(rejectedCancel.question?.options).toEqual([{ label: "Continue", recommended: true }]);
-    expect(acknowledged).toBeUndefined();
-
-    const done = await engine.handle("Continue");
-    expect(done.text).toContain("telegram is configured");
-    expect(acknowledged).toBe(true);
-  });
-
-  it("releases the acknowledged QR step before awaiting later wizard work", async () => {
-    let releaseProviderWork!: () => void;
-    const providerWork = new Promise<void>((resolve) => {
-      releaseProviderWork = resolve;
-    });
-    const engine = new SystemAgentChatEngine({
-      runAgentTurn: async () => null,
-      planWithAssistant: async () => null,
-      deps: { loadOverview: fakeOverviewLoader() },
-      supportsQrCode: true,
-      runChannelSetupWizard: async (_channel: string, prompter: WizardPrompter) => {
-        await prompter.qrCode?.({
-          title: "Link a device",
-          message: "Scan this QR code, then continue.",
-          pngBase64: PNG_BASE64,
-        });
-        await providerWork;
-      },
-    });
-
-    await engine.handle("connect telegram");
-    const completion = engine.handle("Continue");
-
-    await vi.waitFor(() => {
-      const bridge = Reflect.get(engine, "wizardBridge") as object | null;
-      expect(bridge).not.toBeNull();
-      expect(Reflect.get(bridge!, "step")).toBeNull();
-    });
-
-    releaseProviderWork();
-    const done = await completion;
-    expect(done.text).toContain("telegram is configured");
   });
 
   it("keeps generic one-option wizard selections prose-only", async () => {

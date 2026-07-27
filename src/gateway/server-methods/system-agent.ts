@@ -1,4 +1,8 @@
 import { randomUUID } from "node:crypto";
+import {
+  GATEWAY_CLIENT_CAPS,
+  hasGatewayClientCap,
+} from "../../../packages/gateway-protocol/src/client-info.js";
 // OpenClaw gateway methods host the setup/repair conversation for clients.
 import {
   buildSystemAgentSessionInvalidatedErrorDetails,
@@ -523,14 +527,17 @@ export const systemAgentHandlers: GatewayRequestHandlers = {
           );
           return;
         }
-        const supportsQrCode = params.capabilities?.qrCodePng === true;
+        const supportsQrCode = hasGatewayClientCap(
+          client?.connect.caps,
+          GATEWAY_CLIENT_CAPS.SYSTEM_AGENT_QR_CODE,
+        );
         if (boundSession && !params.reset && boundSession.supportsQrCode !== supportsQrCode) {
           respond(
             false,
             undefined,
             errorShape(
               ErrorCodes.INVALID_REQUEST,
-              "OpenClaw chat capabilities changed; retry with reset=true.",
+              "OpenClaw client capabilities changed; reset the session to continue.",
             ),
           );
           return;
@@ -745,9 +752,7 @@ export const systemAgentHandlers: GatewayRequestHandlers = {
               : {}),
             ...(reply.sensitive === true ? { sensitive: true } : {}),
             ...(reply.wizardInputPending === true ? { wizardInputPending: true } : {}),
-            ...(session.supportsQrCode && reply.qrCodePngBase64
-              ? { qrCodePngBase64: reply.qrCodePngBase64 }
-              : {}),
+            ...(session.supportsQrCode && reply.qrDataUrl ? { qrDataUrl: reply.qrDataUrl } : {}),
             ...(reply.question ? { question: reply.question } : {}),
             ...(proposalId ? { needsApproval: true, proposalId } : {}),
           },

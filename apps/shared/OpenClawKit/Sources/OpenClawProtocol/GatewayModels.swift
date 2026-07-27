@@ -9144,6 +9144,7 @@ public struct SystemAgentChatResult: Codable, Sendable {
     public let agentid: String?
     public let needsapproval: Bool?
     public let proposalid: String?
+    public let qrdataurl: String?
     public let question: [String: AnyCodable]?
 
     public init(
@@ -9156,6 +9157,7 @@ public struct SystemAgentChatResult: Codable, Sendable {
         agentid: String? = nil,
         needsapproval: Bool? = nil,
         proposalid: String? = nil,
+        qrdataurl: String? = nil,
         question: [String: AnyCodable]? = nil)
     {
         self.sessionid = sessionid
@@ -9167,6 +9169,7 @@ public struct SystemAgentChatResult: Codable, Sendable {
         self.agentid = agentid
         self.needsapproval = needsapproval
         self.proposalid = proposalid
+        self.qrdataurl = qrdataurl
         self.question = question
     }
 
@@ -9180,6 +9183,7 @@ public struct SystemAgentChatResult: Codable, Sendable {
         case agentid = "agentId"
         case needsapproval = "needsApproval"
         case proposalid = "proposalId"
+        case qrdataurl = "qrDataUrl"
         case question
     }
 }

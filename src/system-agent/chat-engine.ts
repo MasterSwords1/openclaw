@@ -76,7 +76,7 @@ export type SystemAgentChatEngineOptions = {
   appendAuditEntry?: typeof import("./audit.js").appendSystemAgentAuditEntry;
   /** Where side effects run; the gateway surface never manages its own daemon. */
   surface?: "cli" | "gateway";
-  /** The current chat client can render raw PNG QR payloads. */
+  /** The current chat client can render QR images. */
   supportsQrCode?: boolean;
   /** Test seam for the channel-setup wizard hosted by the chat bridge. */
   runChannelSetupWizard?: (
@@ -104,8 +104,8 @@ type SystemAgentChatReply = {
   handoff?: SystemAgentOperation;
   /** Structured choice mirroring the awaited wizard step for card-capable clients. */
   question?: SystemAgentChatQuestion;
-  /** Raw PNG base64 for a hosted wizard QR prompt. */
-  qrCodePngBase64?: string;
+  /** Core-rendered PNG data URL for a hosted wizard QR prompt. */
+  qrDataUrl?: string;
 };
 
 type WizardPrompterLike = import("../wizard/prompts.js").WizardPrompter;
@@ -231,7 +231,7 @@ function wizardStepChatQuestion(step: WizardStep | null): SystemAgentChatQuestio
     return undefined;
   }
   const options = step.options ?? [];
-  const minimumOptions = step.qrCodePngBase64 ? 1 : 2;
+  const minimumOptions = step.qrDataUrl ? 1 : 2;
   if (options.length < minimumOptions || options.length > 4) {
     return undefined;
   }
@@ -239,7 +239,7 @@ function wizardStepChatQuestion(step: WizardStep | null): SystemAgentChatQuestio
     id: step.id,
     header: step.title ?? "Choose one",
     question: step.message ?? "Choose one.",
-    ...(step.qrCodePngBase64 ? { allowSkip: false } : {}),
+    ...(step.qrDataUrl ? { allowSkip: false } : {}),
     options: options.map((option) => {
       const mapped: SystemAgentChatQuestion["options"][number] = { label: option.label };
       if (option.hint) {
@@ -280,9 +280,7 @@ function renderWizardStep(step: WizardStep): string {
     default:
       break;
   }
-  if (!step.qrCodePngBase64) {
-    lines.push("Say `cancel` to stop this setup.");
-  }
+  lines.push("Say `cancel` to stop this setup.");
   return lines.filter(Boolean).join("\n");
 }
 
@@ -503,8 +501,8 @@ export class SystemAgentChatEngine {
       ...(this.wizardBridge?.step?.sensitive === true ? { sensitive: true } : {}),
       ...(this.wizardBridge ? { wizardInputPending: true } : {}),
       ...(question ? { question } : {}),
-      ...(this.wizardBridge?.step?.qrCodePngBase64
-        ? { qrCodePngBase64: this.wizardBridge.step.qrCodePngBase64 }
+      ...(this.wizardBridge?.step?.qrDataUrl
+        ? { qrDataUrl: this.wizardBridge.step.qrDataUrl }
         : {}),
     };
   }
@@ -1277,16 +1275,12 @@ export class SystemAgentChatEngine {
     if (!bridge) {
       return "";
     }
-    const step = bridge.step;
-    if (!step) {
-      // handle() serializes turns, so another reply cannot observe this
-      // transient between-step state while pumpWizardBridge awaits the provider.
+    if (/^(cancel|abort|stop|quit|exit)$/i.test(text.trim())) {
+      bridge.session.cancel();
       return await this.pumpWizardBridge();
     }
-    // QR acknowledgement is deliberately non-skippable: cancellation aliases
-    // must re-render it instead of bypassing the single declared action.
-    if (!step.qrCodePngBase64 && /^(cancel|abort|stop|quit|exit)$/i.test(text.trim())) {
-      bridge.session.cancel();
+    const step = bridge.step;
+    if (!step) {
       return await this.pumpWizardBridge();
     }
     const answer = parseWizardAnswer(step, text);
@@ -1297,10 +1291,7 @@ export class SystemAgentChatEngine {
     if (validationError) {
       return [validationError, renderWizardStep(step)].join("\n\n");
     }
-    // The session has released its step. Drop the bridge reference and return
-    // the next-step promise directly so this frame cannot retain QR credentials.
-    bridge.step = null;
-    return this.pumpWizardBridge();
+    return await this.pumpWizardBridge();
   }
 }
 /* oxlint-disable max-lines -- TODO: split this grandfathered oversized file. */

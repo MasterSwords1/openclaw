@@ -19,31 +19,8 @@ export type CustodianMessage = {
   text: string;
   at: number;
   question: CustodianStructuredQuestion | null;
-  qrCodePngBase64?: string;
+  qrDataUrl?: string;
 };
-
-export function appendCustodianAssistantMessage(
-  messages: readonly CustodianMessage[],
-  params: {
-    id: number;
-    text: string;
-    at: number;
-    question: CustodianStructuredQuestion | null;
-    qrCodePngBase64?: string;
-  },
-): CustodianMessage[] {
-  return [
-    ...messages,
-    {
-      id: params.id,
-      role: "assistant",
-      text: params.text,
-      at: params.at,
-      question: params.question,
-      ...(params.qrCodePngBase64 ? { qrCodePngBase64: params.qrCodePngBase64 } : {}),
-    },
-  ];
-}
 
 export function hasUnresolvedCustodianQuestion(
   messages: readonly CustodianMessage[],
@@ -75,38 +52,6 @@ export function retireCustodianQuestions(
     }
   }
   return answered;
-}
-
-export function scrubAnsweredCustodianQrCodes(
-  messages: readonly CustodianMessage[],
-  answeredQuestions: ReadonlySet<string>,
-): CustodianMessage[] {
-  return messages.map((message) => {
-    if (
-      !message.qrCodePngBase64 ||
-      !message.question ||
-      !answeredQuestions.has(`${message.id}:${message.question.id}`)
-    ) {
-      return message;
-    }
-    const { qrCodePngBase64: _qrCodePngBase64, ...scrubbed } = message;
-    return scrubbed;
-  });
-}
-
-export function restoreCustodianQrCodes(
-  messages: readonly CustodianMessage[],
-  source: readonly CustodianMessage[],
-): CustodianMessage[] {
-  const qrCodeByMessageId = new Map(
-    source.flatMap((message) =>
-      message.qrCodePngBase64 ? [[message.id, message.qrCodePngBase64] as const] : [],
-    ),
-  );
-  return messages.map((message) => {
-    const qrCodePngBase64 = qrCodeByMessageId.get(message.id);
-    return qrCodePngBase64 && !message.qrCodePngBase64 ? { ...message, qrCodePngBase64 } : message;
-  });
 }
 
 export function createCustodianSessionId(): string {
@@ -211,12 +156,9 @@ export function renderCustodianTranscriptEntry(params: {
           assistantAvatar: "OC",
         })
       : nothing}
-    ${params.showQrCode && params.message.qrCodePngBase64
+    ${params.showQrCode && params.message.qrDataUrl
       ? html`<div class="custodian__qr-code">
-          <img
-            src=${`data:image/png;base64,${params.message.qrCodePngBase64}`}
-            alt=${t("custodian.setupQrCodeAlt")}
-          />
+          <img src=${params.message.qrDataUrl} alt=${t("custodian.setupQrCodeAlt")} />
         </div>`
       : nothing}
     ${renderCustodianEarlierDivider(params.message, params.boundaryAfterId)}

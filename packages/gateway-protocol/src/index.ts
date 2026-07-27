@@ -1,6 +1,5 @@
 export * from "./clawhub-trust-error-details.js";
 export * from "./system-agent-error-details.js";
-export * from "./system-agent-qr.js";
 export {
   isMcpAppViewExpiredError,
   readMissingScopeError,

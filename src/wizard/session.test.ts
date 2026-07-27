@@ -2,8 +2,16 @@
 import { describe, expect, test, vi } from "vitest";
 import { WizardSession } from "./session.js";
 
-const PNG_BASE64 =
-  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+const QR_TEXT = "https://example.test/pair";
+const QR_DATA_URL =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+const qrImageMocks = vi.hoisted(() => ({
+  renderQrPngDataUrl: vi.fn(async () => QR_DATA_URL),
+}));
+
+vi.mock("../media/qr-image.js", () => ({
+  renderQrPngDataUrl: qrImageMocks.renderQrPngDataUrl,
+}));
 
 function noteRunner() {
   return new WizardSession(async (prompter) => {
@@ -110,14 +118,14 @@ describe("WizardSession", () => {
     });
   });
 
-  test("projects a caller-supplied QR image only for capable hosts", async () => {
+  test("renders caller-supplied text as a QR image only for capable hosts", async () => {
     let acknowledged: boolean | undefined;
     const supported = new WizardSession(
       async (prompter) => {
         acknowledged = await prompter.qrCode?.({
           title: "Link a device",
           message: "Scan this QR code, then continue.",
-          pngBase64: PNG_BASE64,
+          text: QR_TEXT,
         });
       },
       { supportsQrCode: true },
@@ -130,9 +138,10 @@ describe("WizardSession", () => {
       message: "Scan this QR code, then continue.",
       options: [{ value: true, label: "Continue" }],
       initialValue: true,
-      qrCodePngBase64: PNG_BASE64,
+      qrDataUrl: QR_DATA_URL,
       executor: "client",
     });
+    expect(qrImageMocks.renderQrPngDataUrl).toHaveBeenCalledWith(QR_TEXT);
     if (!prompt.step) {
       throw new Error("expected QR acknowledgement step");
     }
@@ -148,13 +157,14 @@ describe("WizardSession", () => {
     expect(unsupportedHasQr).toBe(false);
   });
 
-  test("rejects malformed QR payloads before presenting a wizard step", async () => {
+  test("reports QR rendering failures before presenting a wizard step", async () => {
+    qrImageMocks.renderQrPngDataUrl.mockRejectedValueOnce(new Error("QR rendering failed"));
     const session = new WizardSession(
       async (prompter) => {
         await prompter.qrCode?.({
           title: "Link a device",
           message: "Scan this QR code, then continue.",
-          pngBase64: "not-a-png",
+          text: QR_TEXT,
         });
       },
       { supportsQrCode: true },
@@ -164,7 +174,7 @@ describe("WizardSession", () => {
     expect(result).toMatchObject({
       done: true,
       status: "error",
-      error: expect.stringContaining("canonical base64-encoded PNG"),
+      error: expect.stringContaining("QR rendering failed"),
     });
   });
 
