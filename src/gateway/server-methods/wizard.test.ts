@@ -475,6 +475,24 @@ describe("channel wizard lifecycle", () => {
     );
     expect(wizardSessions.has(sessionId)).toBe(true);
 
+    const statusRespond = vi.fn();
+    await expectDefined(
+      wizardHandlers["wizard.status"],
+      "wizardHandlers[wizard.status] test invariant",
+    )({
+      params: { sessionId },
+      client: owner,
+      respond: statusRespond,
+      context,
+    } as never);
+
+    expect(statusRespond).toHaveBeenCalledWith(
+      true,
+      { status: "done", error: undefined },
+      undefined,
+    );
+    expect(wizardSessions.has(sessionId)).toBe(true);
+
     const recoveredRespond = vi.fn();
     await start({
       params: { flow: "channels", channel: "matrix" },

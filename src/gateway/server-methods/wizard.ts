@@ -339,13 +339,7 @@ export const wizardHandlers: GatewayRequestHandlers = {
     }
     const status = readWizardStatus(session);
     respond(true, status, undefined);
-    if (status.status !== "running") {
-      finishTerminalWizardResponse({
-        context,
-        sessionId,
-        session,
-        collectLockedTerminal: true,
-      });
-    }
+    // Status polling is observational. Only a full terminal result or an
+    // explicit cancel may discard retained channels/accounts recovery data.
   },
 };
