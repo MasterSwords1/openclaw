@@ -37,6 +37,7 @@ import {
   resolveCurrentSelfUser,
   resolveChatPaneObserverRunId,
   revealSessionWorkspaceFile,
+  scheduleChatScroll,
   scopedAgentParamsForSession,
   selectedChatSessionRow,
   submitQuestionPrompt,
@@ -463,6 +464,8 @@ export class ChatPaneRender extends ChatPaneHeaderRender {
       },
       onChatScroll: (event) => this.handleTranscriptScroll(event),
       onHistoryIntent: (event) => this.handleTranscriptHistoryIntent(event),
+      // Media metadata can change height after commit; honor the existing follow lock.
+      onAssistantAttachmentLoaded: () => scheduleChatScroll(state),
       getDraft: () => state.chatMessage,
       onDraftChange: state.handleChatDraftChange,
       onRequestUpdate: state.requestUpdate,
