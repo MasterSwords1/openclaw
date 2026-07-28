@@ -48,12 +48,16 @@ describe("OpenClaw chat question protocol", () => {
   });
 
   it("accepts a single non-skippable acknowledgement action", () => {
+    const acknowledgement = {
+      ...question,
+      options: [{ label: "Continue" }],
+    };
+    expect(Value.Check(SystemAgentChatQuestionSchema, acknowledgement)).toBe(false);
     expect(
-      Value.Check(SystemAgentChatQuestionSchema, {
-        ...question,
-        options: [{ label: "Continue" }],
-        allowSkip: false,
-      }),
+      Value.Check(SystemAgentChatQuestionSchema, { ...acknowledgement, allowSkip: true }),
+    ).toBe(false);
+    expect(
+      Value.Check(SystemAgentChatQuestionSchema, { ...acknowledgement, allowSkip: false }),
     ).toBe(true);
   });
 });

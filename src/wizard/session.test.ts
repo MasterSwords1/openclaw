@@ -1,16 +1,17 @@
 // Wizard session tests cover session creation and state transitions.
 import { describe, expect, test, vi } from "vitest";
+import { QR_PNG_DATA_URL_MAX_LENGTH } from "../../packages/gateway-protocol/src/schema/qr.js";
 import { WizardSession } from "./session.js";
 
 const QR_TEXT = "https://example.test/pair";
 const QR_DATA_URL =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
 const qrImageMocks = vi.hoisted(() => ({
-  renderQrPngDataUrl: vi.fn(async () => QR_DATA_URL),
+  renderQrPngDataUrlWithinLimit: vi.fn(async () => QR_DATA_URL),
 }));
 
 vi.mock("../media/qr-image.js", () => ({
-  renderQrPngDataUrl: qrImageMocks.renderQrPngDataUrl,
+  renderQrPngDataUrlWithinLimit: qrImageMocks.renderQrPngDataUrlWithinLimit,
 }));
 
 function noteRunner() {
@@ -141,7 +142,10 @@ describe("WizardSession", () => {
       qrDataUrl: QR_DATA_URL,
       executor: "client",
     });
-    expect(qrImageMocks.renderQrPngDataUrl).toHaveBeenCalledWith(QR_TEXT);
+    expect(qrImageMocks.renderQrPngDataUrlWithinLimit).toHaveBeenCalledWith(
+      QR_TEXT,
+      QR_PNG_DATA_URL_MAX_LENGTH,
+    );
     if (!prompt.step) {
       throw new Error("expected QR acknowledgement step");
     }
@@ -158,7 +162,9 @@ describe("WizardSession", () => {
   });
 
   test("reports QR rendering failures before presenting a wizard step", async () => {
-    qrImageMocks.renderQrPngDataUrl.mockRejectedValueOnce(new Error("QR rendering failed"));
+    qrImageMocks.renderQrPngDataUrlWithinLimit.mockRejectedValueOnce(
+      new Error("QR rendering failed"),
+    );
     const session = new WizardSession(
       async (prompter) => {
         await prompter.qrCode?.({
@@ -175,6 +181,28 @@ describe("WizardSession", () => {
       done: true,
       status: "error",
       error: expect.stringContaining("QR rendering failed"),
+    });
+  });
+
+  test("rejects rendered QR images that exceed the Gateway presentation limit", async () => {
+    qrImageMocks.renderQrPngDataUrlWithinLimit.mockRejectedValueOnce(
+      new RangeError("QR PNG data URL exceeds the presentation limit at minimum scale."),
+    );
+    const session = new WizardSession(
+      async (prompter) => {
+        await prompter.qrCode?.({
+          title: "Link a device",
+          message: "Scan this QR code, then continue.",
+          text: QR_TEXT,
+        });
+      },
+      { supportsQrCode: true },
+    );
+
+    expect(await session.next()).toMatchObject({
+      done: true,
+      status: "error",
+      error: expect.stringContaining("exceeds the presentation limit"),
     });
   });
 

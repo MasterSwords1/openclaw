@@ -280,7 +280,9 @@ function renderWizardStep(step: WizardStep): string {
     default:
       break;
   }
-  lines.push("Say `cancel` to stop this setup.");
+  if (!step.qrDataUrl) {
+    lines.push("Say `cancel` to stop this setup.");
+  }
   return lines.filter(Boolean).join("\n");
 }
 
@@ -1275,11 +1277,14 @@ export class SystemAgentChatEngine {
     if (!bridge) {
       return "";
     }
+    const step = bridge.step;
     if (/^(cancel|abort|stop|quit|exit)$/i.test(text.trim())) {
+      if (step?.qrDataUrl) {
+        return renderWizardStep(step);
+      }
       bridge.session.cancel();
       return await this.pumpWizardBridge();
     }
-    const step = bridge.step;
     if (!step) {
       return await this.pumpWizardBridge();
     }

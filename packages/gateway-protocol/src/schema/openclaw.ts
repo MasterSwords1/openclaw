@@ -39,27 +39,38 @@ export const SystemAgentChatParamsSchema = closedObject({
  * options and send back `reply` (default: `label`) as the next message; text
  * clients ignore this and use the reply prose, which always stands alone.
  */
-export const SystemAgentChatQuestionSchema = closedObject({
+const SystemAgentChatQuestionOptionSchema = closedObject({
+  label: NonEmptyString,
+  description: Type.Optional(Type.String()),
+  recommended: Type.Optional(Type.Boolean()),
+  /** Message text a client sends when this option is chosen; defaults to label. */
+  reply: Type.Optional(NonEmptyString),
+});
+
+const SystemAgentChatQuestionFields = {
   id: NonEmptyString,
   header: NonEmptyString,
   question: NonEmptyString,
-  options: Type.Array(
-    closedObject({
-      label: NonEmptyString,
-      description: Type.Optional(Type.String()),
-      recommended: Type.Optional(Type.Boolean()),
-      /** Message text a client sends when this option is chosen; defaults to label. */
-      reply: Type.Optional(NonEmptyString),
-    }),
-    { minItems: 1, maxItems: 4 },
-  ),
   /** Free-text answers are also accepted for this question. */
   isOther: Type.Optional(Type.Boolean()),
-  /** False omits the visible skip/cancel action. */
-  allowSkip: Type.Optional(Type.Boolean()),
   /** Client-owned action for the visible skip control; omitted means send a reply. */
   skipAction: Type.Optional(Type.Literal("exit")),
-});
+};
+
+export const SystemAgentChatQuestionSchema = Type.Union([
+  closedObject({
+    ...SystemAgentChatQuestionFields,
+    options: Type.Array(SystemAgentChatQuestionOptionSchema, { minItems: 1, maxItems: 1 }),
+    /** A single option is an acknowledgement action, never a skippable choice. */
+    allowSkip: Type.Literal(false),
+  }),
+  closedObject({
+    ...SystemAgentChatQuestionFields,
+    options: Type.Array(SystemAgentChatQuestionOptionSchema, { minItems: 2, maxItems: 4 }),
+    /** False omits the visible skip/cancel action. */
+    allowSkip: Type.Optional(Type.Boolean()),
+  }),
+]);
 
 /** One OpenClaw reply; `action` tells clients about conversation handoffs. */
 export const SystemAgentChatResultSchema = closedObject({

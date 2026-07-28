@@ -106,6 +106,16 @@ describeControlUiE2e("Control UI system-agent QR presentation", () => {
         { height: 900, width: 1440, name: "desktop-1440x900.png" },
       ]) {
         await page.setViewportSize(viewport);
+        const [actionGridBox, continueButtonBox] = await Promise.all([
+          page.locator(".option-card__choices").boundingBox(),
+          continueButton.boundingBox(),
+        ]);
+        if (!actionGridBox || !continueButtonBox) {
+          throw new Error(`missing QR action geometry at ${viewport.width}x${viewport.height}`);
+        }
+        expect(Math.abs(continueButtonBox.x - actionGridBox.x)).toBeLessThanOrEqual(1);
+        expect(Math.abs(continueButtonBox.width - actionGridBox.width)).toBeLessThanOrEqual(1);
+        expect(continueButtonBox.x + continueButtonBox.width).toBeLessThanOrEqual(viewport.width);
         await expect
           .poll(() =>
             page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),

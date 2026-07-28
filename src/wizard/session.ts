@@ -1,7 +1,7 @@
 // Wizard session helpers track onboarding session ids and state.
 import { randomUUID } from "node:crypto";
 import { QR_PNG_DATA_URL_MAX_LENGTH } from "../../packages/gateway-protocol/src/schema/qr.js";
-import { renderQrPngDataUrl } from "../media/qr-image.js";
+import { renderQrPngDataUrlWithinLimit } from "../media/qr-image.js";
 import { createDeferred, type Deferred } from "../shared/deferred.js";
 import {
   WizardCancelledError,
@@ -71,10 +71,10 @@ class WizardSessionPrompter implements WizardPrompter {
   ) {
     if (supportsQrCode) {
       this.qrCode = async (params) => {
-        const qrDataUrl = await renderQrPngDataUrl(params.text);
-        if (qrDataUrl.length > QR_PNG_DATA_URL_MAX_LENGTH) {
-          throw new Error("Wizard QR code exceeds the Gateway presentation limit.");
-        }
+        const qrDataUrl = await renderQrPngDataUrlWithinLimit(
+          params.text,
+          QR_PNG_DATA_URL_MAX_LENGTH,
+        );
         const result = await this.prompt({
           type: "select",
           title: params.title,

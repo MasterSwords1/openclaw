@@ -9,7 +9,9 @@ const { MOCK_PNG_BASE64, MOCK_PNG_BUFFER, toBuffer } = vi.hoisted(() => {
   return {
     MOCK_PNG_BASE64: MOCK_PNG_BUFFERLocal.toString("base64"),
     MOCK_PNG_BUFFER: MOCK_PNG_BUFFERLocal,
-    toBuffer: vi.fn(async () => MOCK_PNG_BUFFERLocal),
+    toBuffer: vi.fn(
+      async (_input: string, _opts: { margin: number; scale: number }) => MOCK_PNG_BUFFERLocal,
+    ),
   };
 });
 
@@ -19,7 +21,12 @@ vi.mock("qrcode", () => ({
   },
 }));
 
-import { renderQrPngBase64, renderQrPngDataUrl, writeQrPngTempFile } from "./qr-image.ts";
+import {
+  renderQrPngBase64,
+  renderQrPngDataUrl,
+  renderQrPngDataUrlWithinLimit,
+  writeQrPngTempFile,
+} from "./qr-image.ts";
 
 describe("renderQrPngBase64", () => {
   const tmpRoot = path.join(os.tmpdir(), "openclaw-qr-image-tests");
@@ -75,6 +82,27 @@ describe("renderQrPngBase64", () => {
     await expect(renderQrPngDataUrl("openclaw")).resolves.toBe(
       `data:image/png;base64,${MOCK_PNG_BASE64}`,
     );
+  });
+
+  it("reduces the scale until the QR data URL fits its presentation limit", async () => {
+    toBuffer
+      .mockResolvedValueOnce(Buffer.alloc(30))
+      .mockResolvedValueOnce(Buffer.alloc(20))
+      .mockResolvedValueOnce(Buffer.alloc(10));
+
+    const result = await renderQrPngDataUrlWithinLimit("openclaw", 40);
+
+    expect(result.length).toBeLessThanOrEqual(40);
+    expect(toBuffer.mock.calls.map(([, opts]) => opts.scale)).toEqual([6, 5, 4]);
+  });
+
+  it("rejects QR data URLs that exceed the limit at minimum scale", async () => {
+    toBuffer.mockResolvedValue(Buffer.alloc(30));
+
+    await expect(renderQrPngDataUrlWithinLimit("openclaw", 40)).rejects.toThrow(
+      "exceeds the presentation limit",
+    );
+    expect(toBuffer.mock.calls.map(([, opts]) => opts.scale)).toEqual([6, 5, 4, 3, 2, 1]);
   });
 
   it("writes QR PNGs to a scoped temp file", async () => {

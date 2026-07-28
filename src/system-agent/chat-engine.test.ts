@@ -763,6 +763,15 @@ describe("SystemAgentChatEngine", () => {
       },
     });
 
+    const stillPending = await engine.handle("cancel");
+    expect(stillPending).toMatchObject({
+      text: expect.stringContaining("Scan this QR code"),
+      qrDataUrl: prompt.qrDataUrl,
+      question: { allowSkip: false, options: [{ label: "Continue" }] },
+    });
+    expect(stillPending.text).not.toContain("Say `cancel`");
+    expect(acknowledged).toBeUndefined();
+
     const done = await engine.handle("Continue");
     expect(done.text).toContain("telegram is configured");
     expect(done.qrDataUrl).toBeUndefined();

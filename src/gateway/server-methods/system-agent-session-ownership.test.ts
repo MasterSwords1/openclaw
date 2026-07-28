@@ -202,7 +202,7 @@ describe("openclaw.chat session ownership", () => {
     ).not.toHaveBeenCalled();
   });
 
-  it("lets the same authenticated principal resume after reconnecting", async () => {
+  it("lets the same QR-capable authenticated principal resume after reconnecting", async () => {
     const sessions = new Map<string, SystemAgentChatSession>();
     const context = makeContext(sessions);
     await callChat(
@@ -212,6 +212,7 @@ describe("openclaw.chat session ownership", () => {
         connId: "conn-old",
         deviceId: "device-old",
         authenticatedUserId: "owner@example.com",
+        supportsQrCode: true,
       }),
     );
     const handle = expectDefined(createdEngines[0], "created system-agent engine").handle;
@@ -223,6 +224,7 @@ describe("openclaw.chat session ownership", () => {
         connId: "conn-new",
         deviceId: "device-new",
         authenticatedUserId: "owner@example.com",
+        supportsQrCode: true,
       }),
     );
 

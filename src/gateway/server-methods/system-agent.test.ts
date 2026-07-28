@@ -533,13 +533,14 @@ describe("openclaw.chat", () => {
     expect(secondCall.ok).toBe(true);
   });
 
-  it("returns a core-rendered QR only to clients that negotiated support", async () => {
+  it("projects an owner-invoked QR only to clients that negotiated support", async () => {
     vi.spyOn(
       verifiedInferenceRuntime,
       "resolveSystemAgentVerifiedInferenceRoute",
     ).mockResolvedValue(requireVerifiedInferenceFixture().execution);
     onboardChannelsMocks.setupChannels.mockImplementation(
       async (cfg: OpenClawConfig, _runtime: unknown, prompter: WizardPrompter) => {
+        // Core owns the transport contract, while setup owners decide when to invoke it.
         await prompter.qrCode?.({
           title: "Link a device",
           message: "Scan this QR code, then continue.",

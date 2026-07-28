@@ -69,7 +69,7 @@ export type WizardPrompter = {
   note: (message: string, title?: string) => Promise<void>;
   /** Present a browser device code as structured UI when the client supports it. */
   deviceCode?: (params: WizardDeviceCodeParams) => Promise<void>;
-  /** Render caller-supplied text as a QR code and wait for acknowledgement. */
+  /** Optional owner-controlled QR presentation; core only transports declared payloads. */
   qrCode?: (params: WizardQrCodeParams) => Promise<boolean>;
   plain?: (message: string) => Promise<void>;
   select: <T>(params: WizardSelectParams<T>) => Promise<T>;
