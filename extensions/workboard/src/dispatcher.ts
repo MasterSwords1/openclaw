@@ -322,7 +322,9 @@ function selectStartableCards(
       continue;
     }
     // A grace-protected running claim still occupies its actual worker, even
-    // after the lease expires and the card's assigned agent differs.
+    // after the lease expires and the card's assigned agent differs. Claim owners
+    // stay verbatim: an explicit ownerId is an arbitrary worker identity, not an
+    // agent id, so normalizing it here would merge unrelated workers.
     const owner = claim?.ownerId ?? resolveDispatchOwner(card, now, undefined, defaultAgentId);
     runningByOwner.set(owner, (runningByOwner.get(owner) ?? 0) + 1);
   }
