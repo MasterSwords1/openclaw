@@ -6,10 +6,13 @@
  * to keep the two modes cleanly isolated.
  */
 
-import nodePath from "node:path";
 import { toErrorObject } from "openclaw/plugin-sdk/error-runtime";
 import { resolveFetch } from "openclaw/plugin-sdk/fetch-runtime";
-import { detectMime, parseMediaContentLength } from "openclaw/plugin-sdk/media-runtime";
+import {
+  detectMime,
+  extractOriginalFilename,
+  parseMediaContentLength,
+} from "openclaw/plugin-sdk/media-runtime";
 import {
   parseStrictNonNegativeInteger,
   resolveTimerTimeoutMs,
@@ -554,7 +557,7 @@ async function filesToBase64DataUris(
     });
     remainingBytes -= buffer.byteLength;
     const mime = (await detectMime({ buffer, filePath })) ?? "application/octet-stream";
-    const filename = nodePath.basename(filePath);
+    const filename = extractOriginalFilename(filePath);
     const b64 = buffer.toString("base64");
     results.push(`data:${mime};filename=${filename};base64,${b64}`);
   }

@@ -912,6 +912,39 @@ describe("containerSendMessage", () => {
     await fs.rm(tmpDir, { recursive: true });
   });
 
+  it("restores original filenames for media-store-staged attachments", async () => {
+    const fs = await import("node:fs/promises");
+    const os = await import("node:os");
+    const path = await import("node:path");
+
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "signal-test-"));
+    try {
+      const stagedFile = path.join(tmpDir, "report---a1b2c3d4-5678-90ab-cdef-1234567890ab.jpg");
+      const content = Buffer.from([0xff, 0xd8, 0xff, 0xe0]);
+      await fs.writeFile(stagedFile, content);
+
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        ...bodyStream(JSON.stringify({})),
+      });
+
+      await containerSendMessage({
+        baseUrl: "http://localhost:8080",
+        account: "+14259798283",
+        recipients: ["+15550001111"],
+        message: "Photo",
+        attachments: [stagedFile],
+      });
+
+      expect(parseFetchBody().base64_attachments).toEqual([
+        `data:image/jpeg;filename=report.jpg;base64,${content.toString("base64")}`,
+      ]);
+    } finally {
+      await fs.rm(tmpDir, { recursive: true, force: true });
+    }
+  });
+
   it("rejects outbound attachments that exceed the size cap", async () => {
     const fs = await import("node:fs/promises");
     const os = await import("node:os");
