@@ -103,11 +103,32 @@ function cardHasActiveClaim(card: WorkboardCard, now: number): boolean {
   return Boolean(claim && isFutureDateTimestampMs(claim.expiresAt, { nowMs: now }));
 }
 
+/**
+ * Owner used for both the worker session key and dispatch capacity accounting.
+ * Resolved once per dispatch: an unassigned card that runs as the default agent
+ * must occupy that agent's single worker slot, or it can start alongside a card
+ * explicitly assigned to the same agent and write the same workspace.
+ */
+function resolveDispatchDefaultAgentId(resolveDefaultAgentId: (() => string) | undefined): {
+  agentId?: string;
+  error?: string;
+} {
+  if (!resolveDefaultAgentId) {
+    return {};
+  }
+  try {
+    const agentId = resolveDefaultAgentId().trim();
+    return agentId ? { agentId } : {};
+  } catch (error) {
+    return { error: formatErrorMessage(error) };
+  }
+}
+
 function resolveDispatchAgentId(
   card: WorkboardCard,
-  resolveDefaultAgentId: (() => string) | undefined,
+  defaultAgentId: string | undefined,
 ): string | undefined {
-  return card.agentId?.trim() || resolveDefaultAgentId?.().trim() || undefined;
+  return card.agentId?.trim() || defaultAgentId || undefined;
 }
 
 // Sessions live in per-agent SQLite stores, so an unscoped key has no store to
@@ -254,11 +275,16 @@ function sortReadyCards(a: WorkboardCard, b: WorkboardCard): number {
   );
 }
 
-function resolveDispatchOwner(card: WorkboardCard, now: number, ownerOverride?: string): string {
+function resolveDispatchOwner(
+  card: WorkboardCard,
+  now: number,
+  ownerOverride: string | undefined,
+  defaultAgentId: string | undefined,
+): string {
   return (
     ownerOverride ||
     (cardHasActiveClaim(card, now) ? card.metadata?.claim?.ownerId : undefined) ||
-    card.agentId ||
+    resolveDispatchAgentId(card, defaultAgentId) ||
     DEFAULT_DISPATCH_OWNER
   );
 }
@@ -268,6 +294,7 @@ function selectStartableCards(
   limit: number,
   candidates: WorkboardCard[],
   ownerOverride: string | undefined,
+  defaultAgentId: string | undefined,
   now: number,
 ): WorkboardCard[] {
   if (limit <= 0) {
@@ -288,7 +315,7 @@ function selectStartableCards(
     }
     // A grace-protected running claim still occupies its actual worker, even
     // after the lease expires and the card's assigned agent differs.
-    const owner = claim?.ownerId ?? resolveDispatchOwner(card, now);
+    const owner = claim?.ownerId ?? resolveDispatchOwner(card, now, undefined, defaultAgentId);
     runningByOwner.set(owner, (runningByOwner.get(owner) ?? 0) + 1);
   }
   const selected: WorkboardCard[] = [];
@@ -300,7 +327,7 @@ function selectStartableCards(
         entry.status === "ready" && !cardHasActiveClaim(entry, now) && !cardIsArchived(entry),
     )
     .toSorted(sortReadyCards)) {
-    const owner = resolveDispatchOwner(card, now, ownerOverride);
+    const owner = resolveDispatchOwner(card, now, ownerOverride, defaultAgentId);
     if ((runningByOwner.get(owner) ?? 0) > 0) {
       continue;
     }
@@ -353,32 +380,36 @@ async function runWorkboardDispatch(
   const cards = await params.store.list();
   const candidates = await params.store.list({ boardId });
   const ownerOverride = params.options?.ownerId?.trim() || undefined;
+  const defaultAgent = resolveDispatchDefaultAgentId(params.options?.resolveDefaultAgentId);
   const startedOwners = new Set<string>();
   // Allow one fallback per worker slot without draining the queue during an outage.
   const maxAttempts = maxStarts * 2;
   let acceptedStarts = 0;
   let attemptedStarts = 0;
 
-  for (const card of selectStartableCards(cards, maxStarts, candidates, ownerOverride, now)) {
-    const ownerId = resolveDispatchOwner(card, now, ownerOverride);
+  for (const card of selectStartableCards(
+    cards,
+    maxStarts,
+    candidates,
+    ownerOverride,
+    defaultAgent.agentId,
+    now,
+  )) {
+    const ownerId = resolveDispatchOwner(card, now, ownerOverride, defaultAgent.agentId);
     if (acceptedStarts >= maxStarts || attemptedStarts >= maxAttempts) {
       break;
     }
     if (startedOwners.has(ownerId)) {
       continue;
     }
-    let dispatchAgentId: string | undefined;
-    try {
-      dispatchAgentId = resolveDispatchAgentId(card, params.options?.resolveDefaultAgentId);
-    } catch (error) {
-      startFailures.push({ cardId: card.id, title: card.title, error: formatErrorMessage(error) });
-      continue;
-    }
+    const dispatchAgentId = resolveDispatchAgentId(card, defaultAgent.agentId);
     if (!dispatchAgentId) {
       startFailures.push({
         cardId: card.id,
         title: card.title,
-        error: "card has no agentId and no default agent was resolved for this dispatch",
+        error:
+          defaultAgent.error ??
+          "card has no agentId and no default agent was resolved for this dispatch",
       });
       continue;
     }
