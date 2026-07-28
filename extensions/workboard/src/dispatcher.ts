@@ -37,6 +37,14 @@ type WorkboardDispatchStartOptions = {
   provider?: string;
   ownerId?: string;
   boardId?: string;
+  /**
+   * Owner for cards with no explicit `agentId`. Workboard already resolves their
+   * workspace and sandbox authority through the same rule, so the worker session
+   * must land in that agent's SQLite store. Resolved lazily and per card: it reads
+   * config and throws when no agent is configured, which must fail one card rather
+   * than the whole dispatch.
+   */
+  resolveDefaultAgentId?: () => string;
   now?: number;
   materializeWorktree?: boolean;
   resolveAgentWorkspace?: (agentId?: string) => string;
@@ -95,11 +103,20 @@ function cardHasActiveClaim(card: WorkboardCard, now: number): boolean {
   return Boolean(claim && isFutureDateTimestampMs(claim.expiresAt, { nowMs: now }));
 }
 
-function buildSessionKey(card: WorkboardCard): string {
+function resolveDispatchAgentId(
+  card: WorkboardCard,
+  resolveDefaultAgentId: (() => string) | undefined,
+): string | undefined {
+  return card.agentId?.trim() || resolveDefaultAgentId?.().trim() || undefined;
+}
+
+// Sessions live in per-agent SQLite stores, so an unscoped key has no store to
+// resolve and every worker start fails. Callers that cannot name an owner get a
+// start failure instead of a key the session runtime will reject.
+function buildSessionKey(card: WorkboardCard, agentId: string): string {
   const boardId = sanitizeSessionSegment(cardBoardId(card), "default");
   const cardId = sanitizeSessionSegment(card.id, "card");
-  const suffix = `subagent:workboard-${boardId}-${cardId}`;
-  return card.agentId ? `agent:${sanitizeSessionSegment(card.agentId, "agent")}:${suffix}` : suffix;
+  return `agent:${sanitizeSessionSegment(agentId, "agent")}:subagent:workboard-${boardId}-${cardId}`;
 }
 
 function buildExecution(params: {
@@ -350,7 +367,22 @@ async function runWorkboardDispatch(
     if (startedOwners.has(ownerId)) {
       continue;
     }
-    const sessionKey = buildSessionKey(card);
+    let dispatchAgentId: string | undefined;
+    try {
+      dispatchAgentId = resolveDispatchAgentId(card, params.options?.resolveDefaultAgentId);
+    } catch (error) {
+      startFailures.push({ cardId: card.id, title: card.title, error: formatErrorMessage(error) });
+      continue;
+    }
+    if (!dispatchAgentId) {
+      startFailures.push({
+        cardId: card.id,
+        title: card.title,
+        error: "card has no agentId and no default agent was resolved for this dispatch",
+      });
+      continue;
+    }
+    const sessionKey = buildSessionKey(card, dispatchAgentId);
     let claimValue = "";
     let materializedWorkspace: WorkboardWorkspace | undefined;
     let implicitWorkspaceCwd: string | undefined;
@@ -389,7 +421,7 @@ async function runWorkboardDispatch(
           await assertCanonicalWorkboardRootAccess(implicitWorkspaceCwd, workspaceAccess);
           await assertRestrictedWorkboardTarget({
             root: implicitWorkspaceCwd,
-            agentId: card.agentId,
+            agentId: dispatchAgentId,
             sessionKey,
             modelProvider: params.options?.provider,
             modelId: params.options?.model,
@@ -422,7 +454,7 @@ async function runWorkboardDispatch(
           await assertCanonicalWorkboardRootAccess(canonicalSourcePath, workspaceAccess);
           await assertRestrictedWorkboardTarget({
             root: canonicalSourcePath,
-            agentId: card.agentId,
+            agentId: dispatchAgentId,
             sessionKey,
             modelProvider: params.options?.provider,
             modelId: params.options?.model,
@@ -470,7 +502,7 @@ async function runWorkboardDispatch(
         await assertRestrictedWorkboardTarget({
           root: runCwd,
           // Claim may populate agentId; keep the sessionKey target identity.
-          agentId: card.agentId,
+          agentId: dispatchAgentId,
           sessionKey,
           modelProvider: params.options?.provider,
           modelId: params.options?.model,

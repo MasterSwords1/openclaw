@@ -43,7 +43,11 @@ describe("dispatchAndStartWorkboardCards", () => {
     await dispatchAndStartWorkboardCards({
       store,
       subagent: { run },
-      options: { now: 10, maxStarts: 1 },
+      options: {
+        resolveDefaultAgentId: () => "main",
+        now: 10,
+        maxStarts: 1,
+      },
     });
 
     await expect(store.get(card.id)).resolves.toMatchObject({
@@ -67,7 +71,11 @@ describe("dispatchAndStartWorkboardCards", () => {
     await dispatchAndStartWorkboardCards({
       store,
       subagent: { run: vi.fn().mockResolvedValue({ runId: "run-unknown" }) },
-      options: { now: 10, maxStarts: 1 },
+      options: {
+        resolveDefaultAgentId: () => "main",
+        now: 10,
+        maxStarts: 1,
+      },
     });
 
     const execution = (await store.get(card.id))?.execution;
@@ -104,6 +112,7 @@ describe("dispatchAndStartWorkboardCards", () => {
       subagent: { run },
       worktrees,
       options: {
+        resolveDefaultAgentId: () => "main",
         now: 10,
         maxStarts: 1,
         materializeWorktree: true,
@@ -162,7 +171,11 @@ describe("dispatchAndStartWorkboardCards", () => {
         release: vi.fn(),
         removeIfLossless: vi.fn(),
       },
-      options: { maxStarts: 1, materializeWorktree: true },
+      options: {
+        resolveDefaultAgentId: () => "main",
+        maxStarts: 1,
+        materializeWorktree: true,
+      },
     });
 
     expect(result.startFailures).toEqual([
@@ -185,7 +198,10 @@ describe("dispatchAndStartWorkboardCards", () => {
     const result = await dispatchAndStartWorkboardCards({
       store,
       subagent: { run },
-      options: { maxStarts: 1 },
+      options: {
+        resolveDefaultAgentId: () => "main",
+        maxStarts: 1,
+      },
     });
 
     expect(result.startFailures).toEqual([]);
@@ -219,7 +235,11 @@ describe("dispatchAndStartWorkboardCards", () => {
     const result = await dispatchAndStartWorkboardCards({
       store,
       subagent: { run },
-      options: { maxStarts: 1, workspaceAccess: { unrestricted: true } },
+      options: {
+        resolveDefaultAgentId: () => "main",
+        maxStarts: 1,
+        workspaceAccess: { unrestricted: true },
+      },
     });
 
     expect(result.startFailures).toEqual([
@@ -251,6 +271,7 @@ describe("dispatchAndStartWorkboardCards", () => {
       subagent: { run: vi.fn() },
       worktrees,
       options: {
+        resolveDefaultAgentId: () => "main",
         maxStarts: 1,
         workspaceAccess: { unrestricted: false, roots: ["/workspace"], writable: true },
       },
@@ -280,6 +301,7 @@ describe("dispatchAndStartWorkboardCards", () => {
       store,
       subagent: { run },
       options: {
+        resolveDefaultAgentId: () => "main",
         maxStarts: 1,
         materializeWorktree: false,
         workspaceAccess: { unrestricted: false, roots: ["/workspace"], writable: true },
@@ -312,6 +334,7 @@ describe("dispatchAndStartWorkboardCards", () => {
       store,
       subagent: { run },
       options: {
+        resolveDefaultAgentId: () => "main",
         maxStarts: 1,
         workspaceAccess: { unrestricted: false, roots: ["/workspace"], writable: true },
       },
@@ -340,6 +363,7 @@ describe("dispatchAndStartWorkboardCards", () => {
       store,
       subagent: { run },
       options: {
+        resolveDefaultAgentId: () => "main",
         maxStarts: 1,
         resolveAgentWorkspace: (agentId) =>
           agentId === "other" ? "/workspace-other" : "/workspace",
@@ -377,6 +401,7 @@ describe("dispatchAndStartWorkboardCards", () => {
       subagent: { run },
       worktrees,
       options: {
+        resolveDefaultAgentId: () => "main",
         maxStarts: 1,
         resolveAgentWorkspace: () => "/workspace",
         resolveAgentWorkspaceRuntime: () => ({
@@ -418,6 +443,7 @@ describe("dispatchAndStartWorkboardCards", () => {
         removeIfLossless: vi.fn(),
       },
       options: {
+        resolveDefaultAgentId: () => "main",
         maxStarts: 1,
         resolveAgentWorkspace: () => "/workspace",
         resolveAgentWorkspaceRuntime: () => ({
@@ -455,6 +481,7 @@ describe("dispatchAndStartWorkboardCards", () => {
         removeIfLossless: vi.fn(),
       },
       options: {
+        resolveDefaultAgentId: () => "main",
         maxStarts: 1,
         resolveAgentWorkspace: () => "/workspace",
         resolveAgentWorkspaceRuntime: () => ({
@@ -485,7 +512,11 @@ describe("dispatchAndStartWorkboardCards", () => {
     const result = await dispatchAndStartWorkboardCards({
       store,
       subagent: { run },
-      options: { maxStarts: 1, workspaceAccess: { unrestricted: true } },
+      options: {
+        resolveDefaultAgentId: () => "main",
+        maxStarts: 1,
+        workspaceAccess: { unrestricted: true },
+      },
     });
 
     expect(result.startFailures).toEqual([
@@ -522,6 +553,7 @@ describe("dispatchAndStartWorkboardCards", () => {
         removeIfLossless: vi.fn(),
       },
       options: {
+        resolveDefaultAgentId: () => "main",
         maxStarts: 1,
         resolveAgentWorkspaceRuntime: () => ({
           sandboxed: true,
@@ -558,6 +590,7 @@ describe("dispatchAndStartWorkboardCards", () => {
         removeIfLossless: vi.fn(),
       },
       options: {
+        resolveDefaultAgentId: () => "main",
         maxStarts: 1,
         resolveAgentWorkspace: () => "/workspace",
         resolveAgentWorkspaceRuntime: () => ({
@@ -597,6 +630,7 @@ describe("dispatchAndStartWorkboardCards", () => {
         removeIfLossless: vi.fn(),
       },
       options: {
+        resolveDefaultAgentId: () => "main",
         maxStarts: 1,
         resolveAgentWorkspace: () => "/repo/workspace",
         resolveAgentWorkspaceRuntime: () => ({
@@ -641,6 +675,7 @@ describe("dispatchAndStartWorkboardCards", () => {
         removeIfLossless: vi.fn(),
       },
       options: {
+        resolveDefaultAgentId: () => "main",
         maxStarts: 1,
         materializeWorktree: true,
         resolveAgentWorkspace: () => "/workspace",
@@ -685,6 +720,7 @@ describe("dispatchAndStartWorkboardCards", () => {
       subagent: { run },
       worktrees,
       options: {
+        resolveDefaultAgentId: () => "main",
         maxStarts: 1,
         materializeWorktree: true,
         resolveAgentWorkspace: () => "/repo",
@@ -724,6 +760,7 @@ describe("dispatchAndStartWorkboardCards", () => {
         removeIfLossless: vi.fn(),
       },
       options: {
+        resolveDefaultAgentId: () => "main",
         maxStarts: 1,
         resolveAgentWorkspace: () => "/workspace",
         resolveAgentWorkspaceRuntime: () => ({
@@ -770,7 +807,11 @@ describe("dispatchAndStartWorkboardCards", () => {
         release: vi.fn(),
         removeIfLossless: vi.fn(),
       },
-      options: { maxStarts: 1, materializeWorktree: true },
+      options: {
+        resolveDefaultAgentId: () => "main",
+        maxStarts: 1,
+        materializeWorktree: true,
+      },
     });
 
     expect(create).toHaveBeenCalledWith(
@@ -810,7 +851,11 @@ describe("dispatchAndStartWorkboardCards", () => {
     const result = await dispatchAndStartWorkboardCards({
       store,
       subagent: { run },
-      options: { now: 10, maxStarts: 3 },
+      options: {
+        resolveDefaultAgentId: () => "main",
+        now: 10,
+        maxStarts: 3,
+      },
     });
 
     expect(result.started.map((entry) => entry.cardId).toSorted()).toEqual(
@@ -867,7 +912,12 @@ describe("dispatchAndStartWorkboardCards", () => {
     const result = await dispatchAndStartWorkboardCards({
       store,
       subagent: { run },
-      options: { now: 10, maxStarts: 3, ownerId: " shared-worker " },
+      options: {
+        resolveDefaultAgentId: () => "main",
+        now: 10,
+        maxStarts: 3,
+        ownerId: " shared-worker ",
+      },
     });
 
     expect(result.started).toEqual([
@@ -901,7 +951,12 @@ describe("dispatchAndStartWorkboardCards", () => {
     const result = await dispatchAndStartWorkboardCards({
       store,
       subagent: { run },
-      options: { now: 10, maxStarts: 3, ownerId: "shared-worker" },
+      options: {
+        resolveDefaultAgentId: () => "main",
+        now: 10,
+        maxStarts: 3,
+        ownerId: "shared-worker",
+      },
     });
 
     expect(result.started).toEqual([]);
@@ -934,7 +989,11 @@ describe("dispatchAndStartWorkboardCards", () => {
       const result = await dispatchAndStartWorkboardCards({
         store,
         subagent: { run },
-        options: { now: 10, maxStarts: 1 },
+        options: {
+          resolveDefaultAgentId: () => "main",
+          now: 10,
+          maxStarts: 1,
+        },
       });
 
       expect(run).toHaveBeenCalledTimes(2);
@@ -969,7 +1028,11 @@ describe("dispatchAndStartWorkboardCards", () => {
     const result = await dispatchAndStartWorkboardCards({
       store,
       subagent: { run },
-      options: { now: 10, maxStarts: 3 },
+      options: {
+        resolveDefaultAgentId: () => "main",
+        now: 10,
+        maxStarts: 3,
+      },
     });
 
     expect(result.started).toEqual([
@@ -979,6 +1042,64 @@ describe("dispatchAndStartWorkboardCards", () => {
       }),
     ]);
     expect(run).toHaveBeenCalledOnce();
+  });
+
+  // Regression: an unscoped `subagent:workboard-...` key has no per-agent SQLite
+  // store to resolve, so every worker start failed with "Cannot resolve SQLite
+  // session scope without an agent id".
+  it("scopes an unassigned card's worker session to the default agent", async () => {
+    const store = new WorkboardStore(createMemoryStore());
+    const card = await store.create({
+      title: "Unassigned worker",
+      status: "ready",
+      priority: "urgent",
+      workspaceAccess: { unrestricted: true },
+    });
+    const run = vi.fn().mockResolvedValue({ runId: "run-unassigned" });
+
+    const result = await dispatchAndStartWorkboardCards({
+      store,
+      subagent: { run },
+      options: { resolveDefaultAgentId: () => "researcher", now: 10, maxStarts: 1 },
+    });
+
+    expect(result.started).toEqual([
+      expect.objectContaining({
+        cardId: card.id,
+        sessionKey: `agent:researcher:subagent:workboard-default-${card.id}`,
+      }),
+    ]);
+    expect(run.mock.calls[0]?.[0]).toMatchObject({
+      sessionKey: `agent:researcher:subagent:workboard-default-${card.id}`,
+    });
+  });
+
+  it("fails an unassigned card closed when no owning agent resolves", async () => {
+    const store = new WorkboardStore(createMemoryStore());
+    const card = await store.create({
+      title: "Ownerless worker",
+      status: "ready",
+      priority: "urgent",
+      workspaceAccess: { unrestricted: true },
+    });
+    const run = vi.fn().mockResolvedValue({ runId: "run-ownerless" });
+
+    const result = await dispatchAndStartWorkboardCards({
+      store,
+      subagent: { run },
+      options: { now: 10, maxStarts: 1 },
+    });
+
+    expect(run).not.toHaveBeenCalled();
+    expect(result.started).toEqual([]);
+    expect(result.startFailures).toEqual([
+      expect.objectContaining({
+        cardId: card.id,
+        error: "card has no agentId and no default agent was resolved for this dispatch",
+      }),
+    ]);
+    // A card that never reached a worker stays dispatchable.
+    await expect(store.get(card.id)).resolves.toMatchObject({ status: "ready" });
   });
 
   it("starts workers only for the selected board", async () => {
@@ -1002,13 +1123,18 @@ describe("dispatchAndStartWorkboardCards", () => {
     const result = await dispatchAndStartWorkboardCards({
       store,
       subagent: { run },
-      options: { now: 10, maxStarts: 3, boardId: "ops" },
+      options: {
+        resolveDefaultAgentId: () => "main",
+        now: 10,
+        maxStarts: 3,
+        boardId: "ops",
+      },
     });
 
     expect(result.started).toEqual([expect.objectContaining({ cardId: ops.id })]);
     expect(run).toHaveBeenCalledOnce();
     expect(run.mock.calls[0]?.[0]).toMatchObject({
-      sessionKey: `subagent:workboard-ops-${ops.id}`,
+      sessionKey: `agent:main:subagent:workboard-ops-${ops.id}`,
       lane: `workboard:ops:${ops.id}`,
     });
     await expect(store.get(product.id)).resolves.toMatchObject({
@@ -1037,7 +1163,11 @@ describe("dispatchAndStartWorkboardCards", () => {
     const result = await dispatchAndStartWorkboardCards({
       store,
       subagent: { run },
-      options: { now: 10, maxStarts: 3 },
+      options: {
+        resolveDefaultAgentId: () => "main",
+        now: 10,
+        maxStarts: 3,
+      },
     });
 
     expect(result.started).toEqual([]);
@@ -1056,7 +1186,11 @@ describe("dispatchAndStartWorkboardCards", () => {
     const result = await dispatchAndStartWorkboardCards({
       store,
       subagent: { run },
-      options: { now: 10, maxStarts: 1 },
+      options: {
+        resolveDefaultAgentId: () => "main",
+        now: 10,
+        maxStarts: 1,
+      },
     });
 
     expect(result.started).toEqual([]);
@@ -1065,7 +1199,7 @@ describe("dispatchAndStartWorkboardCards", () => {
     ]);
     expect(run).toHaveBeenCalledWith(
       expect.objectContaining({
-        sessionKey: `subagent:workboard-default-${card.id}`,
+        sessionKey: `agent:main:subagent:workboard-default-${card.id}`,
       }),
     );
     await expect(store.get(card.id)).resolves.toMatchObject({
