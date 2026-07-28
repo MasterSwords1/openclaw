@@ -98,6 +98,40 @@ describe("Workboard dispatcher ownership", () => {
     await expect(store.get(unassigned.id)).resolves.toMatchObject({ status: "ready" });
   });
 
+  it("treats agent-id casing aliases as one worker slot", async () => {
+    const store = new WorkboardStore(createMemoryStore());
+    const upper = await store.create({
+      title: "Uppercase agent worker",
+      status: "ready",
+      priority: "urgent",
+      agentId: "MAIN",
+      workspaceAccess: { unrestricted: true },
+    });
+    const lower = await store.create({
+      title: "Lowercase agent worker",
+      status: "ready",
+      priority: "urgent",
+      agentId: "main",
+      workspaceAccess: { unrestricted: true },
+    });
+    const run = vi.fn().mockResolvedValue({ runId: "run-canonical-owner" });
+
+    const result = await dispatchAndStartWorkboardCards({
+      store,
+      subagent: { run },
+      options: { resolveDefaultAgentId: () => "main", now: 10, maxStarts: 3 },
+    });
+
+    expect(run).toHaveBeenCalledOnce();
+    expect(result.started).toEqual([
+      expect.objectContaining({
+        cardId: upper.id,
+        sessionKey: `agent:main:subagent:workboard-default-${upper.id}`,
+      }),
+    ]);
+    await expect(store.get(lower.id)).resolves.toMatchObject({ status: "ready" });
+  });
+
   it("bounds failed worker attempts without draining the ready queue", async () => {
     const store = new WorkboardStore(createMemoryStore());
     const cards = [];

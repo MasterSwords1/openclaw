@@ -8,6 +8,7 @@ import type {
 import { formatErrorMessage } from "openclaw/plugin-sdk/error-runtime";
 import { isFutureDateTimestampMs } from "openclaw/plugin-sdk/number-runtime";
 import type { PluginRuntime } from "openclaw/plugin-sdk/plugin-runtime";
+import { normalizeAgentId } from "openclaw/plugin-sdk/routing";
 import { canonicalPathFromExistingAncestor } from "openclaw/plugin-sdk/security-runtime";
 import {
   assertRestrictedWorkboardTarget,
@@ -128,16 +129,23 @@ function resolveDispatchAgentId(
   card: WorkboardCard,
   defaultAgentId: string | undefined,
 ): string | undefined {
-  return card.agentId?.trim() || defaultAgentId || undefined;
+  // Cards persist whatever agent id they were created with, so canonicalize before
+  // it becomes a capacity owner: `MAIN` and `main` route to one agent store and
+  // workspace and must not each claim a worker slot. Only a non-empty id is
+  // normalized — `normalizeAgentId` maps blank to `main`, which would reinstate the
+  // implicit-main default this dispatch deliberately fails closed on.
+  const explicitAgentId = card.agentId?.trim();
+  return explicitAgentId ? normalizeAgentId(explicitAgentId) : defaultAgentId || undefined;
 }
 
 // Sessions live in per-agent SQLite stores, so an unscoped key has no store to
 // resolve and every worker start fails. Callers that cannot name an owner get a
-// start failure instead of a key the session runtime will reject.
+// start failure instead of a key the session runtime will reject. `agentId` is
+// already canonical from resolveDispatchAgentId.
 function buildSessionKey(card: WorkboardCard, agentId: string): string {
   const boardId = sanitizeSessionSegment(cardBoardId(card), "default");
   const cardId = sanitizeSessionSegment(card.id, "card");
-  return `agent:${sanitizeSessionSegment(agentId, "agent")}:subagent:workboard-${boardId}-${cardId}`;
+  return `agent:${agentId}:subagent:workboard-${boardId}-${cardId}`;
 }
 
 function buildExecution(params: {
