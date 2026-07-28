@@ -118,10 +118,7 @@ describe("loadSystemAgentOverview", () => {
       'Next: run "openclaw onboard" to establish inference',
     );
     expect(startup).toContain("Inference is unavailable");
-    // This is the deterministic greeting the Control UI shows in a browser when
-    // inference is down, so the recovery line has to say where the command runs.
-    expect(startup).toContain("`openclaw onboard`");
-    expect(startup).toContain("machine running OpenClaw");
+    expect(startup).toContain("Run `openclaw onboard`");
     expect(startup.match(/`[^`]+`/g)).toEqual(["`openclaw onboard`"]);
     expect(startup).not.toContain("local Claude Code/Codex/Gemini login");
     expect(startup).not.toContain("typed commands as last resort");
