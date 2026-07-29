@@ -2277,6 +2277,165 @@ Do not edit it by hand; run `pnpm docs:map:gen`.
   - H2: Launch contract
   - H2: Runtime boundary
 
+## concepts/2026-07-29-memory-impl-plan.md
+
+- Route: /concepts/2026-07-29-memory-impl-plan
+- Headings:
+  - H1: OpenClaw Multiplayer Memory Implementation Plan
+  - H2: 1. Outcome
+  - H2: 2. Non-negotiable architecture boundaries
+  - H3: 2.1 Core ownership
+  - H3: 2.2 Plugin SDK ownership
+  - H3: 2.3 Selected memory plugin ownership
+  - H3: 2.4 Identity plugin ownership
+  - H3: 2.5 Storage and migration rules
+  - H2: 3. Current implementation anchors
+  - H2: 4. Decisions required before implementation
+  - H2: 5. Phase dependency graph
+  - H2: 6. Phase 0: contracts and shadow decisions
+  - H3: Goal
+  - H3: Deliverables
+  - H4: 6.1 Serializable contract
+  - H4: 6.2 Runtime capability extension
+  - H4: 6.3 Core context factory
+  - H4: 6.4 Pure policy conformance harness
+  - H4: 6.5 Complete path inventory
+  - H3: Data changes
+  - H3: Suggested PR slices
+  - H3: Tests
+  - H3: Definition of done
+  - H3: Rollback
+  - H2: 7. Phase 1A: identity and write-once session subject
+  - H3: Goal
+  - H3: Deliverables
+  - H4: 7.1 Principal model
+  - H4: 7.2 Identity binding
+  - H4: 7.3 Session memory subject
+  - H4: 7.4 DM precondition
+  - H4: 7.5 Actor separation
+  - H3: Data changes
+  - H3: Likely files
+  - H3: Tests
+  - H3: Definition of done
+  - H3: Rollback
+  - H2: 8. Phase 1B: scoped store, policy, and migration foundation
+  - H3: Goal
+  - H3: Deliverables
+  - H4: 8.1 Root and store registry
+  - H4: 8.2 Resource revision model
+  - H4: 8.3 Policy model
+  - H4: 8.4 Builtin authorized runtime
+  - H4: 8.5 QMD and alternate backend admission
+  - H4: 8.6 Doctor migration scaffold
+  - H3: Data changes
+  - H3: Likely files
+  - H3: Tests
+  - H3: Definition of done
+  - H3: Rollback
+  - H2: 9. Phase 1C: private and channel read isolation
+  - H3: Goal
+  - H3: Deliverables
+  - H4: 9.1 Core access host
+  - H4: 9.2 Search and exact read
+  - H4: 9.3 Bootstrap and automatic recall
+  - H4: 9.4 Supplemental plugin paths
+  - H4: 9.5 Operator surfaces
+  - H4: 9.6 Minimum transcript policy labeling
+  - H4: 9.7 Minimum transcript policy storage
+  - H3: Likely files
+  - H3: Tests
+  - H3: Definition of done
+  - H3: Rollback
+  - H2: 10. Phase 1D: filesystem and egress confinement
+  - H3: Goal
+  - H3: Deliverables
+  - H4: 10.1 Virtual filesystem view
+  - H4: 10.2 Tool filesystem policy
+  - H4: 10.3 Sandbox
+  - H4: 10.4 Exec behavior
+  - H4: 10.5 Run exposure and egress
+  - H3: Likely files
+  - H3: Tests
+  - H3: Definition of done
+  - H3: Rollback
+  - H2: 11. Phase 2A: authorized writes and crash-consistent resources
+  - H3: Goal
+  - H3: Deliverables
+  - H4: 11.1 Closed mutation model
+  - H4: 11.2 Builtin write state machine
+  - H4: 11.3 Convert write paths
+  - H4: 11.4 Audit outbox
+  - H3: Data changes
+  - H3: Tests
+  - H3: Definition of done
+  - H3: Rollback
+  - H2: 12. Phase 2B: complete transcript policy lifecycle
+  - H3: Goal
+  - H3: Deliverables
+  - H4: 12.1 Policy companion rows
+  - H4: 12.2 Policy sets
+  - H4: 12.3 Session transitions
+  - H4: 12.4 Missing-label behavior
+  - H3: Data changes
+  - H3: Likely files
+  - H3: Tests
+  - H3: Definition of done
+  - H3: Rollback
+  - H2: 13. Phase 2C: compaction, flush, dreaming, and delegation
+  - H3: Goal
+  - H3: Deliverables
+  - H4: 13.1 Derivation requirements
+  - H4: 13.2 Compaction
+  - H4: 13.3 Memory flush
+  - H4: 13.4 Dreaming and promotion
+  - H4: 13.5 Tombstones and descendants
+  - H4: 13.6 Delegation and autonomous runs
+  - H3: Data changes
+  - H3: Tests
+  - H3: Definition of done
+  - H3: Rollback
+  - H2: 14. Phase 3: explicit sharing and postbox
+  - H3: Goal
+  - H3: Deliverables
+  - H4: 14.1 Publisher operations
+  - H4: 14.2 Projections
+  - H4: 14.3 Postbox
+  - H4: 14.4 Owner/admin surfaces
+  - H3: Data changes
+  - H3: Tests
+  - H3: Definition of done
+  - H3: Rollback
+  - H2: 15. Phase 4: enterprise identity and operations
+  - H3: Goal
+  - H3: Deliverables
+  - H4: 15.1 Generic adapter registry
+  - H4: 15.2 Provider adapters
+  - H4: 15.3 Membership snapshots
+  - H4: 15.4 Operations
+  - H3: Tests
+  - H3: Definition of done
+  - H3: Rollback
+  - H2: 16. Phase 5: process-adversarial isolation
+  - H3: Goal
+  - H3: Deliverables
+  - H3: Tests
+  - H3: Definition of done
+  - H3: Rollback
+  - H2: 17. Phase 6: migration, pilot, and cleanup
+  - H3: Goal
+  - H3: Deliverables
+  - H4: 17.1 Migration
+  - H4: 17.2 Pilot matrix
+  - H4: 17.3 Cleanup
+  - H3: Definition of done
+  - H2: 18. Recommended PR sequence
+  - H2: 19. Validation strategy
+  - H3: 19.1 Test layers
+  - H3: 19.2 Repository commands
+  - H2: 20. Observability
+  - H2: 21. Main risks and mitigations
+  - H2: 22. Completion checklist
+
 ## concepts/active-memory.md
 
 - Route: /concepts/active-memory
