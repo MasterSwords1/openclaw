@@ -5011,6 +5011,7 @@ public struct SessionRow: Codable, Sendable {
     public let kind: AnyCodable
     public let label: String?
     public let boardface: AnyCodable?
+    public let presentation: SessionPresentation?
     public let displayname: String?
     public let derivedtitle: String?
     public let lastmessagepreview: String?
@@ -5068,6 +5069,7 @@ public struct SessionRow: Codable, Sendable {
         kind: AnyCodable,
         label: String? = nil,
         boardface: AnyCodable? = nil,
+        presentation: SessionPresentation? = nil,
         displayname: String? = nil,
         derivedtitle: String? = nil,
         lastmessagepreview: String? = nil,
@@ -5124,6 +5126,7 @@ public struct SessionRow: Codable, Sendable {
         self.kind = kind
         self.label = label
         self.boardface = boardface
+        self.presentation = presentation
         self.displayname = displayname
         self.derivedtitle = derivedtitle
         self.lastmessagepreview = lastmessagepreview
@@ -5182,6 +5185,7 @@ public struct SessionRow: Codable, Sendable {
         case kind
         case label
         case boardface = "boardFace"
+        case presentation
         case displayname = "displayName"
         case derivedtitle = "derivedTitle"
         case lastmessagepreview = "lastMessagePreview"
