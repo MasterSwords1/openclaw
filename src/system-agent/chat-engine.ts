@@ -1222,7 +1222,7 @@ export class SystemAgentChatEngine {
       this.clearPendingProposals();
       if (this.opts.surface === "gateway") {
         return {
-          text: "Open Settings to change your model or connect a channel. On the machine running OpenClaw, `openclaw onboard` does the same job.",
+          text: "Open Settings to change your model or connect a channel. To change providers from a shell, run `openclaw onboard` on the machine running OpenClaw.",
           action: "none",
         };
       }
@@ -1585,7 +1585,7 @@ export class SystemAgentChatEngine {
     return {
       text: [
         "Changing provider credentials would replace the inference route powering this session.",
-        "Run `openclaw onboard` on the machine running OpenClaw: it stages credentials, live-tests the new route, and saves only a passing setup. OpenClaw restarts afterward.",
+        "Run `openclaw onboard` on the machine running OpenClaw: it stages credentials, live-tests the new route, and saves only a passing setup. Return to OpenClaw when it finishes.",
       ].join("\n"),
       action: "none",
     };
