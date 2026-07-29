@@ -7,6 +7,7 @@ import type { QaThinkingLevel } from "./qa-gateway-config.js";
 import type {
   QaTransportAdapterFactory,
   QaTransportFactoryContext,
+  QaTransportDriver,
   QaTransportId,
 } from "./qa-transport-registry.js";
 import type { QaReportCheck } from "./report.js";
@@ -60,6 +61,7 @@ export type QaSuiteRunParams = {
   forcedRuntime?: RuntimeId;
   runtimePair?: [RuntimeId, RuntimeId];
   captureRuntimeParityCell?: boolean;
+  onTransportCreated?: (channelDriver: QaTransportDriver) => void;
   roundTripProbe?: QaSuiteRoundTripProbe;
   // Unified suite partitions consume child evidence in memory; only the
   // parent should write the aggregate qa-evidence.json artifact.

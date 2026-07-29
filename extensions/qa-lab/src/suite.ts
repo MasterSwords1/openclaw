@@ -21,6 +21,7 @@ import type { QaThinkingLevel } from "./qa-gateway-config.js";
 import {
   createQaTransportAdapter,
   type QaTransportAdapterFactory,
+  type QaTransportDriver,
   type QaTransportFactoryContext,
   type QaTransportId,
 } from "./qa-transport-registry.js";
@@ -86,24 +87,36 @@ export async function createQaSuiteTransportAdapter(params: {
   channelId?: string;
   channelDriverSelection?: OpenClawCrablineChannelDriverSelection | null;
   cleanupOnFailure?: () => Promise<void>;
+  onTransportCreated?: (channelDriver: QaTransportDriver) => void;
   outputDir: string;
   transportPolicy?: NonNullable<QaSuiteRunParams["adapterOptions"]>["transportPolicy"];
   state: QaLabServerHandle["state"];
   transportId: QaTransportId;
 }) {
   try {
-    const usesLiveAdapter =
-      params.channelDriver === "live" &&
-      params.channelId !== undefined &&
-      params.adapterFactories !== undefined;
-    return await createQaTransportAdapter(
+    const selectedDriver = params.channelDriverSelection?.channelDriver;
+    if (params.channelDriver && selectedDriver && params.channelDriver !== selectedDriver) {
+      throw new Error(
+        `channelDriver=${params.channelDriver} conflicts with adapter setup driver=${selectedDriver}`,
+      );
+    }
+    const channelDriver: QaTransportDriver =
+      selectedDriver ?? params.channelDriver ?? params.transportId;
+    if (channelDriver === "live" && !params.channelId) {
+      throw new Error("channelDriver=live requires a selected channel");
+    }
+    if (channelDriver === "live" && !params.adapterFactories) {
+      throw new Error("channelDriver=live requires a contributed adapter factory");
+    }
+    if (channelDriver === "crabline" && !params.channelDriverSelection) {
+      throw new Error("channelDriver=crabline requires Crabline adapter setup");
+    }
+    const channelId =
+      params.channelId ?? params.channelDriverSelection?.channel ?? params.transportId;
+    const transportFactoryResult = await createQaTransportAdapter(
       {
-        channelId: params.channelId ?? params.channelDriverSelection?.channel ?? params.transportId,
-        driver: usesLiveAdapter
-          ? "live"
-          : params.channelDriverSelection
-            ? "crabline"
-            : params.transportId,
+        channelId,
+        driver: channelDriver,
         outputDir: params.outputDir,
         adapterOptions: {
           ...params.adapterOptions,
@@ -118,8 +131,10 @@ export async function createQaSuiteTransportAdapter(params: {
         },
         state: params.state,
       },
-      usesLiveAdapter ? params.adapterFactories : undefined,
+      channelDriver === "live" ? params.adapterFactories : undefined,
     );
+    params.onTransportCreated?.(channelDriver);
+    return { ...transportFactoryResult, channelDriver };
   } catch (error) {
     await params.cleanupOnFailure?.().catch(() => undefined);
     throw error;
@@ -155,6 +170,7 @@ export type QaSuiteRunParams = {
   forcedRuntime?: RuntimeId;
   runtimePair?: [RuntimeId, RuntimeId];
   captureRuntimeParityCell?: boolean;
+  onTransportCreated?: (channelDriver: QaTransportDriver) => void;
   roundTripProbe?: QaSuiteRoundTripProbe;
   // Profile runs prove every applicable declared channel. Direct channel lanes
   // still treat execution.channels as an OR eligibility list.

@@ -140,6 +140,7 @@ export async function runQaFlowSuiteFromRuntime(params?: QaSuiteRunParams): Prom
       transportId,
       channelDriverSelection: params.channelDriverSelection,
       channelDriver: params.channelDriver,
+      onTransportCreated: params.onTransportCreated,
       primaryModel,
       alternateModel,
       fastMode,

@@ -116,18 +116,24 @@ describe("qa suite", () => {
     expect(startLab).not.toHaveBeenCalled();
   });
 
-  it("keeps metadata-only live channel drivers on the shared QA transport", async () => {
+  it("rejects conflicting channel driver setup", async () => {
     const create = vi.fn();
 
     await expect(
       qaSuiteProgressTesting.createQaSuiteTransportAdapter({
         adapterFactories: [{ id: "telegram", matches: () => true, create }],
         channelDriver: "live",
+        channelDriverSelection: {
+          capabilityMatrixPath: "crabline-fake-provider-capabilities.json",
+          channel: "telegram",
+          channelDriver: "crabline",
+          smokeArtifactPath: "crabline-fake-provider-smoke.json",
+        },
         outputDir: "/tmp/qa-output",
         state: {} as QaLabServerHandle["state"],
         transportId: "qa-channel",
       }),
-    ).resolves.toMatchObject({ adapter: { id: "qa-channel" } });
+    ).rejects.toThrow("channelDriver=live conflicts with adapter setup driver=crabline");
 
     expect(create).not.toHaveBeenCalled();
   });
@@ -187,7 +193,10 @@ describe("qa suite", () => {
         state: {} as QaLabServerHandle["state"],
         transportId: "qa-channel",
       }),
-    ).resolves.toMatchObject({ adapter });
+    ).resolves.toMatchObject({
+      adapter,
+      channelDriver: "live",
+    });
 
     expect(create).toHaveBeenCalledTimes(1);
     expect(create).toHaveBeenCalledWith(
@@ -509,6 +518,8 @@ describe("qa suite", () => {
           id: "qa-channel",
           createReportNotes: () => [],
         } as unknown as QaTransportAdapter,
+        channelId: "qa-channel",
+        channelDriver: "qa-channel",
         providerMode: "mock-openai",
         primaryModel: "mock-openai/gpt-5.6-luna",
         alternateModel: "mock-openai/gpt-5.6-luna-alt",
@@ -545,6 +556,8 @@ describe("qa suite", () => {
           id: "qa-channel",
           createReportNotes: () => [],
         } as unknown as QaTransportAdapter,
+        channelId: "qa-channel",
+        channelDriver: "qa-channel",
         providerMode: "mock-openai",
         primaryModel: "mock-openai/gpt-5.6-luna",
         alternateModel: "mock-openai/gpt-5.6-luna-alt",
@@ -605,6 +618,8 @@ describe("qa suite", () => {
           id: "qa-channel",
           createReportNotes: () => [],
         } as unknown as QaTransportAdapter,
+        channelId: "telegram",
+        channelDriver: "crabline",
         providerMode: "mock-openai",
         primaryModel: "mock-openai/gpt-5.6-luna",
         alternateModel: "mock-openai/gpt-5.6-luna-alt",
@@ -709,6 +724,8 @@ describe("qa suite", () => {
         id: "qa-channel",
         createReportNotes: () => [],
       } as unknown as QaTransportAdapter,
+      channelId: "telegram",
+      channelDriver: "crabline",
       providerMode: "mock-openai",
       primaryModel: "mock-openai/gpt-5.6-luna",
       alternateModel: "mock-openai/gpt-5.6-luna-alt",

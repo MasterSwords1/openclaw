@@ -4,7 +4,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { QaSuiteInfraError } from "./errors.js";
 import type { QaLabServerHandle } from "./lab-server.types.js";
-import type { QaSuiteScenarioResult } from "./suite.js";
+import type { QaSuiteRunParams, QaSuiteScenarioResult } from "./suite.js";
 import type {
   QaTestFileScenario,
   QaTestFileScenarioRunResult,
@@ -78,6 +78,14 @@ function trackMaxActiveFlowRuns() {
   return () => maxActive;
 }
 
+function selectMockChannelDriver(params: QaSuiteRunParams | undefined) {
+  return params?.channelDriver === "live" && params.channelId
+    ? ("live" as const)
+    : params?.channelDriverSelection
+      ? ("crabline" as const)
+      : ("qa-channel" as const);
+}
+
 function mockFlowPartitionFailures(failuresByScenarioId: ReadonlyMap<string, readonly Error[]>) {
   const run = runQaFlowSuite.getMockImplementation();
   if (!run) {
@@ -93,6 +101,7 @@ function mockFlowPartitionFailures(failuresByScenarioId: ReadonlyMap<string, rea
     attempts.set(scenarioId, attempt);
     const failure = failuresByScenarioId.get(scenarioId)?.[attempt - 1];
     if (failure) {
+      params?.onTransportCreated?.(selectMockChannelDriver(params));
       throw failure;
     }
     return await run(params);
@@ -104,32 +113,28 @@ describe("qa suite runtime launcher", () => {
   beforeEach(() => {
     runQaFlowSuite.mockReset();
     runQaTestFileScenarios.mockReset();
-    runQaFlowSuite.mockImplementation(
-      async (
-        params:
-          | { outputDir?: string; scenarioIds?: string[]; writeEvidenceFile?: boolean }
-          | undefined,
-      ) => {
-        const outputDir = params?.outputDir ?? "/tmp/qa-flow";
-        const evidencePath = path.join(outputDir, "qa-evidence.json");
-        const evidence = await writeEvidence(evidencePath, params?.writeEvidenceFile);
-        const scenarioIds = params?.scenarioIds ?? ["channel-chat-baseline"];
-        return {
-          evidence,
-          outputDir,
-          evidencePath,
-          reportPath: path.join(outputDir, "qa-suite-report.md"),
-          summaryPath: path.join(outputDir, "qa-suite-summary.json"),
-          report: "# QA Suite Report\n",
-          scenarios: scenarioIds.map((scenarioId) => ({
-            name: scenarioId,
-            status: "pass",
-            steps: [],
-          })),
-          watchUrl: "http://127.0.0.1:43124",
-        };
-      },
-    );
+    runQaFlowSuite.mockImplementation(async (params: QaSuiteRunParams | undefined) => {
+      const outputDir = params?.outputDir ?? "/tmp/qa-flow";
+      const evidencePath = path.join(outputDir, "qa-evidence.json");
+      const evidence = await writeEvidence(evidencePath, params?.writeEvidenceFile);
+      const scenarioIds = params?.scenarioIds ?? ["channel-chat-baseline"];
+      const channelDriver = selectMockChannelDriver(params);
+      params?.onTransportCreated?.(channelDriver);
+      return {
+        evidence,
+        outputDir,
+        evidencePath,
+        reportPath: path.join(outputDir, "qa-suite-report.md"),
+        summaryPath: path.join(outputDir, "qa-suite-summary.json"),
+        report: "# QA Suite Report\n",
+        scenarios: scenarioIds.map((scenarioId) => ({
+          name: scenarioId,
+          status: "pass",
+          steps: [],
+        })),
+        watchUrl: "http://127.0.0.1:43124",
+      };
+    });
     runQaTestFileScenarios.mockImplementation(
       async (params: {
         outputDir: string;
@@ -262,6 +267,10 @@ describe("qa suite runtime launcher", () => {
         scenarioIds: ["matrix-allowlist-hot-reload"],
       }),
     );
+    const summary = JSON.parse(
+      await fs.readFile(path.join(outputDir, "qa-suite-summary.json"), "utf8"),
+    ) as { run?: { channel?: unknown; channelDriver?: unknown } };
+    expect(summary.run).toMatchObject({ channel: "qa-channel", channelDriver: "qa-channel" });
     expect(runQaTestFileScenarios).not.toHaveBeenCalled();
   });
 
@@ -504,6 +513,7 @@ describe("qa suite runtime launcher", () => {
     expect(summary.counts).toMatchObject({ total: 2, passed: 1, failed: 1 });
     const evidence = JSON.parse(await fs.readFile(result.result.evidencePath, "utf8")) as {
       entries: Array<{
+        execution: { channel: Record<string, unknown> };
         test: { id: string };
         result: { status: string; failure?: { reason: string } };
       }>;
@@ -522,6 +532,10 @@ describe("qa suite runtime launcher", () => {
         }),
       ]),
     );
+    expect(
+      evidence.entries.find((entry) => entry.test.id === "whatsapp-status-command")?.execution
+        .channel,
+    ).toEqual({ id: "whatsapp", driver: "live", live: true });
     await expect(fs.access(result.result.reportPath)).resolves.toBeUndefined();
   });
 
@@ -834,6 +848,7 @@ describe("qa suite runtime launcher", () => {
             },
             channel: {
               id: params?.channelDriverSelection?.channel ?? "qa-channel",
+
               live: false,
               driver: "crabline",
             },
@@ -891,7 +906,7 @@ describe("qa suite runtime launcher", () => {
     const summary = JSON.parse(
       await fs.readFile(path.join(outputDir, "qa-suite-summary.json"), "utf8"),
     ) as { run?: { channel?: unknown; channelDriver?: unknown; scenarioIds?: unknown } };
-    expect(summary.run?.channelDriver).toBe("crabline");
+    expect(summary.run?.channelDriver).toBeNull();
     expect(summary.run?.channel).toBeNull();
     expect(summary.run?.scenarioIds).toEqual(["telegram-help-command", "matrix-restart-resume"]);
     const evidence = JSON.parse(
@@ -2203,7 +2218,7 @@ describe("qa suite runtime launcher", () => {
     ]);
     const evidence = JSON.parse(await fs.readFile(result.result.evidencePath, "utf8")) as {
       entries?: Array<{
-        execution?: { channel?: { id?: string } };
+        execution?: { channel?: Record<string, unknown> };
         result?: { status?: string };
         test?: { id?: string };
       }>;
@@ -2211,8 +2226,11 @@ describe("qa suite runtime launcher", () => {
     for (const scenarioId of ["whatsapp-status-command", "whatsapp-access-control-dm-open"]) {
       const blocked = evidence.entries?.find((entry) => entry.test?.id === scenarioId);
       expect(blocked).toMatchObject({
-        execution: { channel: { id: "whatsapp", driver: "live", live: true } },
         result: { status: "blocked" },
+      });
+      expect(blocked?.execution?.channel).toEqual({
+        id: "whatsapp",
+        live: false,
       });
     }
   });

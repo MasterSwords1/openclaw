@@ -58,6 +58,7 @@ export async function runQaRuntimeParitySuite(params: {
   enabledPluginIds?: string[];
   channelDriver?: QaScorecardChannelDriver | null;
   channelDriverSelection?: OpenClawCrablineChannelDriverSelection | null;
+  onTransportCreated?: QaSuiteRunParams["onTransportCreated"];
   concurrency: number;
   selectedScenarios: ReturnType<typeof readQaBootstrapScenarioCatalog>["scenarios"];
   startLab?: QaSuiteStartLabFn;
@@ -84,6 +85,7 @@ export async function runQaRuntimeParitySuite(params: {
     channelDriverSelection: params.channelDriverSelection,
     adapterOptions: params.adapterOptions,
     cleanupOnFailure: ownsLab ? () => lab.stop() : undefined,
+    onTransportCreated: params.onTransportCreated,
     outputDir: params.outputDir,
     transportPolicy: collectQaSuiteTransportPolicy(params.selectedScenarios),
     state: lab.state,
@@ -246,12 +248,13 @@ export async function runQaRuntimeParitySuite(params: {
         scenarioDefinitions: params.selectedScenarios,
         evidenceMode: params.evidenceMode,
         transport,
+        channelId: params.channelId ?? params.channelDriverSelection?.channel ?? params.transportId,
+        channelDriver: transportFactoryResult.channelDriver,
         providerMode: params.providerMode,
         primaryModel: params.primaryModel,
         alternateModel: params.alternateModel,
         fastMode: params.fastMode,
         concurrency: params.concurrency,
-        channelDriver: params.channelDriver,
         channelDriverSelection: params.channelDriverSelection,
         scenarioIds:
           params.scenarioIds && params.scenarioIds.length > 0
