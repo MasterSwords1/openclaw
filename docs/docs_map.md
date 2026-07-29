@@ -2665,6 +2665,77 @@ Do not edit it by hand; run `pnpm docs:map:gen`.
   - H2: Further reading
   - H2: Related
 
+## concepts/memory-multiplayer.md
+
+- Route: /concepts/memory-multiplayer
+- Headings:
+  - H2: Why multiplayer memory fails
+  - H2: Design principles
+  - H2: Decision summary
+  - H2: Isolation model at a glance
+  - H2: Design inputs
+  - H2: Current state and gaps
+  - H2: Goals
+  - H2: Non-goals
+  - H2: Threat model
+  - H2: Vocabulary and invariants
+  - H2: Identity and session subject
+  - H3: Resolution flow
+  - H3: Trusted types
+  - H3: Session mapping
+  - H2: Scope and storage model
+  - H3: Scope kinds
+  - H3: Storage roots and backend namespaces
+  - H3: Catalog rows and derived indexes
+  - H3: Front card and searchable notes
+  - H3: Subject lookup
+  - H3: Virtual mount topology
+  - H2: Authorization model
+  - H3: Permission lattice
+  - H3: Evaluation order
+  - H2: Read and prompt path
+  - H3: Authoritative pipeline
+  - H3: Authorized runtime contract
+  - H3: Every read lane uses the same view
+  - H2: Write, derive, and share path
+  - H3: Write flow
+  - H3: Crash consistency
+  - H3: Derived content
+  - H3: Postbox
+  - H3: Projections
+  - H2: Transcripts, compaction, and dreaming
+  - H3: Transcript labels
+  - H3: Compaction
+  - H3: Memory flush and dreaming
+  - H3: Delegation and autonomous runs
+  - H2: Core and plugin ownership
+  - H2: Proposed builtin data model
+  - H3: Shared state database
+  - H3: Per-agent database
+  - H2: Migration and compatibility
+  - H3: Enablement
+  - H3: Classification rules
+  - H3: Migration transaction
+  - H3: Compatibility rules
+  - H2: Staged implementation plan
+  - H3: Stage 0: contracts and shadow decisions
+  - H3: Stage 1: private and channel read isolation
+  - H3: Stage 2: scoped writes and derived lifecycle
+  - H3: Stage 3: explicit sharing and postbox
+  - H3: Stage 4: enterprise identity and operations
+  - H3: Stage 5: adversarial isolation
+  - H2: Verification strategy
+  - H3: Policy and identity tests
+  - H3: Read non-leakage tests
+  - H3: Write and derivation tests
+  - H3: Sharing and membership tests
+  - H3: End-to-end proof
+  - H2: Observability and operations
+  - H2: Existing solutions preflight
+  - H2: Open decisions
+  - H2: Completion criteria
+  - H2: Related
+
 ## concepts/memory-qmd.md
 
 - Route: /concepts/memory-qmd
