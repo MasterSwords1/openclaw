@@ -1,6 +1,6 @@
 // Wizard session tests cover session creation and state transitions.
 import { describe, expect, test, vi } from "vitest";
-import { WizardSession } from "./session.js";
+import { WizardSession, wizardStepAwaitsInput } from "./session.js";
 
 function noteRunner() {
   return new WizardSession(async (prompter) => {
@@ -11,6 +11,19 @@ function noteRunner() {
 }
 
 describe("WizardSession", () => {
+  test.each([
+    ["select", undefined, true],
+    ["multiselect", undefined, true],
+    ["text", undefined, true],
+    ["confirm", undefined, true],
+    ["action", "client", true],
+    ["action", "gateway", false],
+    ["note", undefined, false],
+    ["progress", undefined, false],
+  ] as const)("classifies whether %s/%s awaits user input", (type, executor, expected) => {
+    expect(wizardStepAwaitsInput({ id: "step", type, executor })).toBe(expected);
+  });
+
   test("steps progress in order", async () => {
     const session = noteRunner();
 

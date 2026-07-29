@@ -30,6 +30,24 @@ export type WizardStep = {
   };
 };
 
+/** Whether a step needs a user answer instead of client or gateway acknowledgement. */
+export function wizardStepAwaitsInput(step: WizardStep): boolean {
+  switch (step.type) {
+    case "select":
+    case "multiselect":
+    case "text":
+    case "confirm":
+      return true;
+    case "action":
+      return step.executor === "client";
+    case "note":
+    case "progress":
+      return false;
+  }
+  const unreachableType: never = step.type;
+  return unreachableType;
+}
+
 type WizardSessionStatus = "running" | "done" | "cancelled" | "error";
 
 type WizardNextResult = {

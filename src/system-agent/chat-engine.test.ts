@@ -2013,6 +2013,8 @@ describe("SystemAgentChatEngine", () => {
     const invalid = await engine.handle("banana");
     expect(invalid.text).toContain("Enter port 18789");
     expect(invalid.text).toContain("Port");
+    expect(countCancelHints(invalid.text)).toBe(1);
+    expect(invalid.text.endsWith(CANCEL_HINT)).toBe(true);
     const done = await engine.handle("18789");
     expect(done.text).toContain("telegram is configured");
   });
@@ -2039,6 +2041,7 @@ describe("SystemAgentChatEngine", () => {
     expect(prompt.text).toContain("Phone number");
     expect(countCancelHints(prompt.text)).toBe(1);
     expect(prompt.text.endsWith(CANCEL_HINT)).toBe(true);
+    expect(engine.historySince(0).at(-1)).toEqual({ role: "assistant", text: prompt.text });
 
     const done = await engine.handle("+15551230000");
     expect(done.text).toContain("Step 4");

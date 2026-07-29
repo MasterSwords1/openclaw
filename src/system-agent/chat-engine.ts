@@ -4,7 +4,7 @@ import { isSensitiveConfigPath } from "../config/sensitive-paths.js";
 import { formatErrorMessage } from "../infra/errors.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import type { RuntimeEnv } from "../runtime.js";
-import { WizardSession, type WizardStep } from "../wizard/session.js";
+import { WizardSession, wizardStepAwaitsInput, type WizardStep } from "../wizard/session.js";
 import type {
   MemoryImportProviderOutcome,
   SetupMemoryImportOutcome,
@@ -539,21 +539,6 @@ function renderWizardStep(step: WizardStep): string {
 }
 
 const WIZARD_CANCEL_HINT = "Say `cancel` to stop this setup.";
-
-/** Steps that block on the user; note/progress/gateway actions advance on their own. */
-function wizardStepAwaitsInput(step: WizardStep): boolean {
-  switch (step.type) {
-    case "select":
-    case "multiselect":
-    case "text":
-    case "confirm":
-      return true;
-    case "action":
-      return step.executor === "client";
-    default:
-      return false;
-  }
-}
 
 /** Map a chat reply to a wizard step answer; null means "could not parse". */
 function parseWizardAnswer(step: WizardStep, text: string): { value: unknown } | null {
