@@ -1541,6 +1541,8 @@ describe("SystemAgentChatEngine", () => {
     const handoff = await engine.handle("open search wizard");
     expect(handoff.action).toBe("open-setup");
     expect(handoff.handoff).toEqual({ kind: "open-setup", target: "search" });
+  });
+
   it("does not promise Doctor will repair every invalid channel setup config", async () => {
     mocks.readSetupConfigFileSnapshot.mockResolvedValue({
       exists: true,
