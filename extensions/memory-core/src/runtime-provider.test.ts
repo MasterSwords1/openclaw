@@ -1,3 +1,4 @@
+import { LEGACY_MEMORY_AUTHORIZATION_CAPABILITIES } from "openclaw/plugin-sdk/memory-authorization";
 // Memory Core provider tests cover plugin runtime integration.
 import type { OpenClawConfig } from "openclaw/plugin-sdk/memory-core-host-runtime-core";
 import { describe, expect, it, vi } from "vitest";
@@ -27,6 +28,10 @@ vi.mock("./memory/index.js", () => ({
 import { createMemoryRuntime, memoryRuntime } from "./runtime-provider.js";
 
 describe("memoryRuntime", () => {
+  it("declares the context-free backend as legacy-only", () => {
+    expect(memoryRuntime.authorization).toEqual(LEGACY_MEMORY_AUTHORIZATION_CAPABILITIES);
+  });
+
   it("preserves manager debug metadata", async () => {
     const cfg = {} as OpenClawConfig;
 

@@ -4,6 +4,7 @@ import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { resolveUserPath } from "../utils.js";
 import { getLoadedRuntimePluginRegistry } from "./active-runtime-registry.js";
 import { normalizePluginsConfig } from "./config-state.js";
+import { emitMemoryAuthorizationShadowSurfaceInspection } from "./memory-authorization-shadow.js";
 import { getMemoryRuntime } from "./memory-state.js";
 import { ensureStandaloneRuntimePluginRegistryLoaded } from "./runtime/standalone-runtime-registry-loader.js";
 
@@ -33,6 +34,9 @@ function resolveMemoryRuntimeWorkspaceDir(cfg: OpenClawConfig): string | undefin
 function ensureMemoryRuntime(cfg?: OpenClawConfig) {
   const current = getMemoryRuntime();
   if (current || !cfg) {
+    if (current) {
+      emitMemoryAuthorizationShadowSurfaceInspection(current);
+    }
     return current;
   }
   const onlyPluginIds = resolveMemoryRuntimePluginIds(cfg);
@@ -40,8 +44,10 @@ function ensureMemoryRuntime(cfg?: OpenClawConfig) {
     return getMemoryRuntime();
   }
   getLoadedRuntimePluginRegistry({ requiredPluginIds: onlyPluginIds });
-  if (getMemoryRuntime()) {
-    return getMemoryRuntime();
+  const loadedRuntime = getMemoryRuntime();
+  if (loadedRuntime) {
+    emitMemoryAuthorizationShadowSurfaceInspection(loadedRuntime);
+    return loadedRuntime;
   }
   const workspaceDir = resolveMemoryRuntimeWorkspaceDir(cfg);
   ensureStandaloneRuntimePluginRegistryLoaded({
@@ -52,7 +58,11 @@ function ensureMemoryRuntime(cfg?: OpenClawConfig) {
       workspaceDir,
     },
   });
-  return getMemoryRuntime();
+  const standaloneRuntime = getMemoryRuntime();
+  if (standaloneRuntime) {
+    emitMemoryAuthorizationShadowSurfaceInspection(standaloneRuntime);
+  }
+  return standaloneRuntime;
 }
 
 /** Returns the active plugin-backed memory search manager for an agent. */

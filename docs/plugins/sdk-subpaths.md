@@ -364,6 +364,7 @@ Use `isLoopbackHost(host)` when a plugin must accept only the local machine. It 
   <Accordion title="Memory subpaths">
     | Subpath | Key exports |
     | --- | --- |
+    | `plugin-sdk/memory-authorization` | Versioned serializable memory authorization contracts, backend capability declarations, and pure conformance helpers. Phase 0 is shadow-only and does not enable an isolation mode. |
     | `plugin-sdk/memory-core-host-embedding-registry` | Private-local after July 2026; Lightweight memory embedding provider registry helpers |
     | `plugin-sdk/memory-core-host-engine-foundation` | Memory host foundation engine exports |
     | `plugin-sdk/memory-core-host-engine-embeddings` | Private-local after July 2026; Memory host embedding contracts, registry access, local provider, and generic batch/remote helpers. `registerMemoryEmbeddingProvider` on this surface is deprecated; use the generic embedding provider API for new providers. |

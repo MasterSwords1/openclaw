@@ -3,6 +3,10 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import type { MemoryCitationsMode } from "../config/types.memory.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
+import type {
+  AuthorizedMemoryRuntime,
+  MemoryAuthorizationCapabilities,
+} from "../memory-host-sdk/host/authorization.js";
 import type { MemorySearchManager } from "../memory-host-sdk/host/types.js";
 
 const log = createSubsystemLogger("plugins/memory-state");
@@ -142,6 +146,16 @@ type MemoryRuntimeBackendConfig =
     };
 
 export type MemoryPluginRuntime = {
+  /** Additive during shadow rollout; mandatory and complete in enforced mode. */
+  readonly authorization?: MemoryAuthorizationCapabilities;
+  authorize?: AuthorizedMemoryRuntime["authorize"];
+  searchAuthorized?: AuthorizedMemoryRuntime["searchAuthorized"];
+  readAuthorized?: AuthorizedMemoryRuntime["readAuthorized"];
+  writeAuthorized?: AuthorizedMemoryRuntime["writeAuthorized"];
+  importAuthorized?: AuthorizedMemoryRuntime["importAuthorized"];
+  syncAuthorized?: AuthorizedMemoryRuntime["syncAuthorized"];
+  exportAuthorized?: AuthorizedMemoryRuntime["exportAuthorized"];
+  statusAuthorized?: AuthorizedMemoryRuntime["statusAuthorized"];
   getMemorySearchManager(params: {
     cfg: OpenClawConfig;
     agentId: string;

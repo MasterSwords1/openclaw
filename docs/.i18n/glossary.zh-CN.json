@@ -1644,6 +1644,10 @@
     "target": "多人记忆设计"
   },
   {
+    "source": "Multiplayer memory implementation plan",
+    "target": "多人记忆实现计划"
+  },
+  {
     "source": "Memory architecture",
     "target": "记忆架构"
   },

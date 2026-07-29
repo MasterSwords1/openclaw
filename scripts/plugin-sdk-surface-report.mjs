@@ -156,7 +156,8 @@ export function readPluginSdkSurfaceBudgets(env = process.env) {
       // +1: bounded archive extraction and single-entry reads.
       // +1: budgeted root-bounded directory walking.
       // +1: pinned secret reads and first-writer-wins creation.
-      146,
+      // +1: versioned multiplayer-memory authorization contract and conformance suite.
+      147,
       env,
     ),
     publicExports: readPluginSdkSurfaceBudgetEnv(
@@ -199,7 +200,8 @@ export function readPluginSdkSurfaceBudgets(env = process.env) {
       // +1: watched-sessions prompt block for plugin-owned harness runtimes.
       // +11: attributed skill proposal evaluation and committed skill lifecycle contracts.
       // +1: inbound media-fact metadata projection for plugin-owned channel ingestion.
-      4769,
+      // +45: multiplayer-memory authorization shapes, runtime contract, and conformance types.
+      4814,
       env,
     ),
     publicFunctionExports: readPluginSdkSurfaceBudgetEnv(
@@ -235,7 +237,8 @@ export function readPluginSdkSurfaceBudgets(env = process.env) {
       // +1: canonical Gateway browser-origin acceptance for browser-facing plugin routes.
       // +1: watched-sessions prompt block for plugin-owned harness runtimes.
       // +1: inbound media-fact metadata projection for plugin-owned channel ingestion.
-      2879,
+      // +6: memory capability guards, runtime admission helpers, and conformance evaluators.
+      2885,
       env,
     ),
     publicDeprecatedExports: readPluginSdkSurfaceBudgetEnv(
@@ -250,7 +253,8 @@ export function readPluginSdkSurfaceBudgets(env = process.env) {
     ),
     publicWildcardReexports: readPluginSdkSurfaceBudgetEnv(
       "OPENCLAW_PLUGIN_SDK_MAX_PUBLIC_WILDCARD_REEXPORTS",
-      82,
+      // +2: serializable memory authorization contract and pure conformance suite.
+      84,
       env,
     ),
   };

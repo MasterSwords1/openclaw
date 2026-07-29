@@ -1,3 +1,16 @@
+---
+doc-schema-version: 1
+summary: "Phased implementation and verification plan for multiplayer memory authorization"
+title: "Multiplayer memory implementation plan"
+sidebarTitle: "Multiplayer memory implementation"
+read_when:
+  - You are implementing the multiplayer memory design
+  - You need the phase dependencies, rollback rules, or definitions of done
+  - You are reviewing evidence for a multiplayer memory rollout phase
+---
+
+<!-- markdownlint-configure-file { "MD024": { "siblings_only": true } } -->
+
 # OpenClaw Multiplayer Memory Implementation Plan
 
 Date: 2026-07-29
@@ -5,6 +18,13 @@ Date: 2026-07-29
 Status: planning document; no behavior described here is shipped
 
 Canonical design: `docs/concepts/memory-multiplayer.md`
+
+<Warning>
+Phase 0 is an internal shadow rollout only. It adds no public configuration and
+makes no memory-isolation claim. Existing personal-agent memory behavior stays
+unchanged until a later phase is explicitly enabled after its full definition
+of done is proven.
+</Warning>
 
 ## 1. Outcome
 
@@ -320,6 +340,10 @@ Legacy agents may continue to use the existing manager path. An enforced agent
 must reject a runtime without the new capability. Do not silently wrap a
 context-free backend and call it conforming.
 
+Phase 0 shadow inspection reports only declared surface completeness. A
+complete method/capability shape is not enforced-mode admission; Phase 1B must
+bind the selected implementation to host-verified conformance evidence.
+
 #### 6.3 Core context factory
 
 Add a single core factory that receives only trusted runtime facts:
@@ -394,6 +418,12 @@ Minimum inventory:
 - child agents and completion handoff;
 - cron, heartbeat, webhook, and system runs.
 
+The executable Phase 0 inventory is maintained in
+`src/plugins/memory-authorization-path-inventory.ts`. It intentionally records
+no path as authorized during the shadow-only phase. Existing personal-agent
+paths are `legacy-only`; paths that cannot safely serve a future enforced
+agent are `blocked-in-enforced-mode` until their owning phase converts them.
+
 ### Data changes
 
 None required for the first contract PR. Shadow traces may use bounded
@@ -420,19 +450,19 @@ until the stable identifiers are decided.
 Phase 0 is complete only when all of the following are demonstrated on the
 current implementation head:
 
-- [ ] Every memory ingress and egress path has a recorded owner and one explicit
+- [x] Every memory ingress and egress path has a recorded owner and one explicit
       disposition: authorized, blocked in enforced mode, or legacy-only.
-- [ ] Tool JSON, prompt text, plugin extras, and caller-assembled objects cannot
+- [x] Tool JSON, prompt text, plugin extras, and caller-assembled objects cannot
       construct or modify a trusted access context or authorization plan.
-- [ ] Every selected backend must declare authorization capabilities, and the
+- [x] Every selected backend must declare authorization capabilities, and the
       conformance suite rejects a context-free backend in enforced mode.
-- [ ] Shadow evaluation emits only bounded decision metadata; it never logs
+- [x] Shadow evaluation emits only bounded decision metadata; it never logs
       memory content, prompts, queries, snippets, or raw principal identifiers.
-- [ ] Existing single-user results, configured corpora, and measured hot-path
+- [x] Existing single-user results, configured corpora, and measured hot-path
       latency remain unchanged.
-- [ ] SDK exports, API baselines, contract tests, focused context tests, and any
+- [x] SDK exports, API baselines, contract tests, focused context tests, and any
       required build/lazy-import gates pass.
-- [ ] Product and security documentation still describes the feature as
+- [x] Product and security documentation still describes the feature as
       shadow-only, with no public isolation claim or public configuration.
 
 ### Rollback

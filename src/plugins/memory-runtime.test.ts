@@ -13,6 +13,10 @@ const ensureStandaloneRuntimePluginRegistryLoadedMock = vi.hoisted(() =>
 const applyPluginAutoEnableMock =
   vi.fn<typeof import("../config/plugin-auto-enable.js").applyPluginAutoEnable>();
 const getMemoryRuntimeMock = vi.fn<typeof import("./memory-state.js").getMemoryRuntime>();
+const emitMemoryAuthorizationShadowSurfaceInspectionMock =
+  vi.fn<
+    typeof import("./memory-authorization-shadow.js").emitMemoryAuthorizationShadowSurfaceInspection
+  >();
 const resolveAgentWorkspaceDirMock =
   vi.fn<typeof import("../agents/agent-scope.js").resolveAgentWorkspaceDir>();
 const resolveDefaultAgentIdMock = vi.fn<
@@ -42,6 +46,11 @@ vi.mock("./runtime/standalone-runtime-registry-loader.js", () => ({
 
 vi.mock("./memory-state.js", () => ({
   getMemoryRuntime: () => getMemoryRuntimeMock(),
+}));
+
+vi.mock("./memory-authorization-shadow.js", () => ({
+  emitMemoryAuthorizationShadowSurfaceInspection:
+    emitMemoryAuthorizationShadowSurfaceInspectionMock,
 }));
 
 let getActiveMemorySearchManager: typeof import("./memory-runtime.js").getActiveMemorySearchManager;
@@ -158,6 +167,7 @@ describe("memory runtime auto-enable loading", () => {
     ensureStandaloneRuntimePluginRegistryLoadedMock.mockReset();
     applyPluginAutoEnableMock.mockReset();
     getMemoryRuntimeMock.mockReset();
+    emitMemoryAuthorizationShadowSurfaceInspectionMock.mockReset();
     resolveAgentWorkspaceDirMock.mockReset();
     resolveDefaultAgentIdMock.mockClear();
     applyPluginAutoEnableMock.mockImplementation((params) => ({
@@ -317,6 +327,21 @@ describe("memory runtime auto-enable loading", () => {
 
     expect(getLoadedRuntimePluginRegistryMock).toHaveBeenCalled();
     expect(ensureStandaloneRuntimePluginRegistryLoadedMock).not.toHaveBeenCalled();
+  });
+
+  it("evaluates shadow admission without changing manager acquisition inputs or results", async () => {
+    const runtime = createMemoryRuntimeFixture();
+    const cfg = { plugins: {} };
+    const params = { cfg: cfg as never, agentId: "main", purpose: "default" as const };
+    getMemoryRuntimeMock.mockReturnValue(runtime);
+
+    const result = await getActiveMemorySearchManager(params);
+
+    expect(result).toEqual({ manager: null, error: "no index" });
+    expect(runtime.getMemorySearchManager).toHaveBeenCalledOnce();
+    expect(runtime.getMemorySearchManager).toHaveBeenCalledWith(params);
+    expect(emitMemoryAuthorizationShadowSurfaceInspectionMock).toHaveBeenCalledOnce();
+    expect(emitMemoryAuthorizationShadowSurfaceInspectionMock).toHaveBeenCalledWith(runtime);
   });
 
   it.each([
