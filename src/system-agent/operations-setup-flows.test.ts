@@ -121,6 +121,7 @@ describe("system agent setup-flow operations", () => {
     expect(output).toContain("openclaw channels add --channel slack");
     expect(output).toContain("openclaw configure --section web");
     expect(output).toContain("openclaw configure --section gateway");
+    expect(output).toContain("on the machine running OpenClaw");
   });
 
   it("prints one-shot pointers for hosted skills, search, and Gateway setup", async () => {
