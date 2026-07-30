@@ -9,6 +9,7 @@ import {
   resolveDefaultAgentId,
   resolveSessionAgentId,
 } from "../agents/agent-scope.js";
+import { type AgentTurnHandle, AgentTurnRegistry } from "../agents/agent-turn-registry.js";
 import { ensureContextWindowCacheLoaded } from "../agents/context.js";
 import { DEFAULT_PROVIDER } from "../agents/defaults.js";
 import {
@@ -83,7 +84,7 @@ import {
   resolveSessionModelRef,
 } from "../gateway/session-utils.js";
 import { projectSessionsPatchEntry } from "../gateway/sessions-patch.js";
-import { type AgentEventPayload, onAgentEvent } from "../infra/agent-events.js";
+import type { AgentEventPayload } from "../infra/agent-events.js";
 import { setEmbeddedMode } from "../infra/embedded-mode.js";
 import {
   clearEmbeddedPluginApprovalBroker,
@@ -117,7 +118,6 @@ import { formatTuiErrorMessage } from "./tui-formatters.js";
 type LocalRunState = {
   sessionKey: string;
   agentId: string;
-  controller: AbortController;
   buffer: string;
   lastBroadcastText?: string;
   isBtw: boolean;
@@ -141,6 +141,8 @@ type LocalRunState = {
   markQueuedRunReady: () => void;
 };
 
+type LocalTurnHandle = AgentTurnHandle<LocalRunState, void>;
+
 type QueuedSessionRun = {
   runId: string;
   run: LocalRunState;
@@ -148,7 +150,7 @@ type QueuedSessionRun = {
 };
 
 type LocalPendingMessage = {
-  run: LocalRunState;
+  turn: LocalTurnHandle;
   messageIndex: number;
   message: string;
 };
@@ -364,9 +366,8 @@ export class EmbeddedTuiBackend implements TuiBackend {
   onGap?: (info: { expected: number; received: number }) => void;
 
   private readonly deps = createDefaultDeps();
-  private readonly runs = new Map<string, LocalRunState>();
-  private readonly runPromises = new Map<string, Promise<void>>();
-  private unsubscribe?: () => void;
+  private turns = new AgentTurnRegistry<LocalRunState, void>();
+  private started = false;
   private previousRuntimeLog?: typeof defaultRuntime.log;
   private previousRuntimeError?: typeof defaultRuntime.error;
   private seq = 0;
@@ -377,9 +378,10 @@ export class EmbeddedTuiBackend implements TuiBackend {
   private ready: Promise<void> = Promise.resolve();
 
   start() {
-    if (this.unsubscribe) {
+    if (this.started) {
       return;
     }
+    this.started = true;
     setEmbeddedMode(true);
     void ensureContextWindowCacheLoaded();
     // Suppress console output from logError/logInfo that would pollute the TUI.
@@ -388,8 +390,6 @@ export class EmbeddedTuiBackend implements TuiBackend {
     this.previousRuntimeError = defaultRuntime.error;
     defaultRuntime.log = silentRuntime.log;
     defaultRuntime.error = silentRuntime.error;
-    // Keep this synchronous so the shared event bus can isolate listener failures.
-    this.unsubscribe = onAgentEvent((evt) => this.handleAgentEvent(evt));
     setEmbeddedPluginApprovalBroker(this.pluginApprovalBroker);
     this.unsubscribePluginApprovals = this.pluginApprovalBroker.subscribe((event) => {
       this.emit(event.event, event.payload);
@@ -414,33 +414,29 @@ export class EmbeddedTuiBackend implements TuiBackend {
     this.unsubscribePluginApprovals?.();
     this.unsubscribePluginApprovals = undefined;
     const maintenancePromises: Promise<void>[] = [];
-    for (const [runId, run] of this.runs) {
+    const activeTurns = this.turns.seal();
+    for (const turn of activeTurns) {
+      const run = turn.state;
       if (run.finishing || run.lifecycleEnded) {
-        const promise = this.runPromises.get(runId);
-        if (promise) {
-          maintenancePromises.push(promise);
-        }
+        maintenancePromises.push(turn.result);
         continue;
       }
-      run.controller.abort();
+      turn.cancel();
     }
     this.pluginApprovalBroker.stop();
     const maintenanceCompleted = await waitForLocalRunShutdown(maintenancePromises);
     if (!maintenanceCompleted) {
-      for (const run of this.runs.values()) {
+      for (const turn of this.turns.list()) {
+        const run = turn.state;
         if (run.finishing || run.lifecycleEnded) {
-          run.controller.abort();
+          turn.cancel();
         }
       }
     }
-    this.unsubscribe?.();
-    this.unsubscribe = undefined;
     this.clearPendingLifecycleErrors();
-    for (const run of this.runs.values()) {
-      run.controller.abort();
-    }
-    this.runs.clear();
-    this.runPromises.clear();
+    this.turns.detachAll("embedded TUI stopped");
+    this.turns = new AgentTurnRegistry<LocalRunState, void>();
+    this.started = false;
     defaultRuntime.log = this.previousRuntimeLog ?? defaultRuntime.log;
     defaultRuntime.error = this.previousRuntimeError ?? defaultRuntime.error;
     this.previousRuntimeLog = undefined;
@@ -513,12 +509,10 @@ export class EmbeddedTuiBackend implements TuiBackend {
         pendingQueue = queued.queue;
       }
     }
-    const controller = new AbortController();
     const queuedRunReadiness = createQueuedRunReadiness();
-    this.runs.set(runId, {
+    const state: LocalRunState = {
       sessionKey: opts.sessionKey,
       agentId,
-      controller,
       buffer: "",
       isBtw: Boolean(question),
       question,
@@ -529,28 +523,32 @@ export class EmbeddedTuiBackend implements TuiBackend {
       ...(pendingQueue ? { pendingQueue } : {}),
       queuedRunReady: queuedRunReadiness.promise,
       markQueuedRunReady: queuedRunReadiness.markReady,
-    });
-
-    const runPromise = this.runTurn({
+    };
+    const turn = this.turns.submit({
       runId,
       sessionKey: opts.sessionKey,
-      agentId: opts.agentId,
-      message: opts.message,
-      thinking: opts.thinking,
-      deliver: opts.deliver,
-      timeoutMs: opts.timeoutMs,
-      controller,
-      queuedAfter,
-    });
-    this.runPromises.set(runId, runPromise);
-    void runPromise.finally(() => {
-      this.runPromises.delete(runId);
+      agentId,
+      state,
+      onEvent: (event) => this.handleAgentEvent(event),
+      execute: async (signal) =>
+        await this.runTurn({
+          runId,
+          sessionKey: opts.sessionKey,
+          agentId,
+          message: opts.message,
+          thinking: opts.thinking,
+          deliver: opts.deliver,
+          timeoutMs: opts.timeoutMs,
+          signal,
+          state,
+          queuedAfter,
+        }),
     });
 
     if (isQueueCommand) {
       // Queue directives are control-plane mutations. Complete them before
       // admitting another local prompt so later sends cannot overtake the new mode.
-      await runPromise;
+      await turn.result;
     }
 
     return { runId };
@@ -561,7 +559,8 @@ export class EmbeddedTuiBackend implements TuiBackend {
       // Session-scoped abort for local embedded: abort all matching runs.
       let aborted = false;
       const runIds: string[] = [];
-      for (const [runId, run] of this.runs) {
+      for (const turn of this.turns.list()) {
+        const { runId, state: run } = turn;
         if (run.isBtw) {
           continue;
         }
@@ -579,14 +578,15 @@ export class EmbeddedTuiBackend implements TuiBackend {
         if (!this.isAbortableRun(runId, run)) {
           continue;
         }
-        run.controller.abort();
+        turn.cancel();
         aborted = true;
         runIds.push(runId);
       }
       return { ok: true, aborted, runIds };
     }
-    const run = this.runs.get(opts.runId);
-    if (!run || run.sessionKey !== opts.sessionKey) {
+    const turn = this.turns.get(opts.runId);
+    const run = turn?.state;
+    if (!turn || !run || run.sessionKey !== opts.sessionKey) {
       return { ok: true, aborted: false, runIds: [] };
     }
     if (opts.sessionKey === "global") {
@@ -600,7 +600,7 @@ export class EmbeddedTuiBackend implements TuiBackend {
     if (!this.isAbortableRun(opts.runId, run)) {
       return { ok: true, aborted: false, runIds: [] };
     }
-    run.controller.abort();
+    turn.cancel();
     return { ok: true, aborted: true, runIds: [opts.runId] };
   }
 
@@ -662,18 +662,20 @@ export class EmbeddedTuiBackend implements TuiBackend {
     const capped = capArrayByJsonBytes(replaced.messages, maxHistoryBytes).items;
     const bounded = enforceChatHistoryFinalBudget({ messages: capped, maxBytes: maxHistoryBytes });
     const messages = bounded.messages;
-    const newestInFlightRun = [...this.runs.entries()].findLast(
-      ([, run]) =>
-        !run.isBtw &&
-        !run.finalSent &&
-        agentSessionKeysMatchByRequestKey(run.sessionKey, opts.sessionKey) &&
-        normalizeAgentId(run.agentId) === normalizeAgentId(sessionAgentId),
-    );
+    const newestInFlightRun = this.turns
+      .list()
+      .findLast(
+        (turn) =>
+          !turn.state.isBtw &&
+          !turn.state.finalSent &&
+          agentSessionKeysMatchByRequestKey(turn.sessionKey, opts.sessionKey) &&
+          normalizeAgentId(turn.agentId) === normalizeAgentId(sessionAgentId),
+      );
     const inFlightRun = newestInFlightRun
       ? {
-          runId: newestInFlightRun[0],
+          runId: newestInFlightRun.runId,
           text: projectLiveAssistantBufferedText(
-            normalizeLiveAssistantBufferedText(newestInFlightRun[1].buffer).trim(),
+            normalizeLiveAssistantBufferedText(newestInFlightRun.state.buffer).trim(),
             { suppressLeadFragments: true },
           ).text.trim(),
         }
@@ -840,7 +842,7 @@ export class EmbeddedTuiBackend implements TuiBackend {
     agentId?: string;
     question: string;
     timeoutMs?: number;
-    controller: AbortController;
+    signal: AbortSignal;
   }) {
     const loadOptions = params.agentId ? { agentId: params.agentId } : undefined;
     const { cfg, canonicalKey, storePath, store, entry } = loadSessionEntry(
@@ -872,7 +874,7 @@ export class EmbeddedTuiBackend implements TuiBackend {
       resolvedReasoningLevel: "off",
       opts: {
         runId: params.runId,
-        abortSignal: params.controller.signal,
+        abortSignal: params.signal,
         ...(timeoutSeconds !== undefined ? { timeoutOverrideSeconds: Number(timeoutSeconds) } : {}),
       },
       isNewSession: false,
@@ -892,7 +894,8 @@ export class EmbeddedTuiBackend implements TuiBackend {
   }
 
   async getGatewayStatus() {
-    return `local embedded mode${this.runs.size > 0 ? ` (${String(this.runs.size)} active run${this.runs.size === 1 ? "" : "s"})` : ""}`;
+    const activeCount = this.turns.list().length;
+    return `local embedded mode${activeCount > 0 ? ` (${String(activeCount)} active run${activeCount === 1 ? "" : "s"})` : ""}`;
   }
 
   async listPluginApprovals(): Promise<unknown> {
@@ -1055,24 +1058,25 @@ export class EmbeddedTuiBackend implements TuiBackend {
     }
 
     const retained = new Set(overflowQueue.items);
-    const droppedByRun = new Map<LocalRunState, number[]>();
+    const droppedByTurn = new Map<LocalTurnHandle, number[]>();
     for (const dropped of pendingMessages) {
       if (retained.has(dropped)) {
         continue;
       }
-      const indices = droppedByRun.get(dropped.run) ?? [];
+      const indices = droppedByTurn.get(dropped.turn) ?? [];
       indices.push(dropped.messageIndex);
-      droppedByRun.set(dropped.run, indices);
+      droppedByTurn.set(dropped.turn, indices);
     }
     const inheritedSummaryLines: string[] = [];
-    for (const [run, indices] of droppedByRun) {
+    for (const [turn, indices] of droppedByTurn) {
+      const run = turn.state;
       for (const index of indices.toSorted((a, b) => b - a)) {
         run.pendingQueue?.messages.splice(index, 1);
       }
       if (run.pendingQueue?.messages.length === 0) {
         inheritedSummaryLines.push(...run.pendingQueue.summaryLines);
         overflowQueue.droppedCount += run.pendingQueue.droppedCount;
-        run.controller.abort();
+        turn.cancel();
       }
     }
     overflowQueue.summaryLines.unshift(...inheritedSummaryLines);
@@ -1081,7 +1085,8 @@ export class EmbeddedTuiBackend implements TuiBackend {
     }
 
     const enqueuedAt = Date.now();
-    for (const run of this.runs.values()) {
+    for (const turn of this.turns.list()) {
+      const run = turn.state;
       if (!this.isSameRunScope(run, params.runScope) || !run.pendingQueue) {
         continue;
       }
@@ -1090,17 +1095,18 @@ export class EmbeddedTuiBackend implements TuiBackend {
     }
 
     if (params.settings.mode === "collect") {
-      const target = [...this.runs.entries()].findLast(
-        ([, run]) => this.isSameRunScope(run, params.runScope) && run.pendingQueue,
-      );
-      const targetQueue = target?.[1].pendingQueue;
-      if (target && targetQueue?.mode === "collect" && !target[1].controller.signal.aborted) {
-        const [targetRunId] = target;
+      const target = this.turns
+        .list()
+        .findLast(
+          (turn) => this.isSameRunScope(turn.state, params.runScope) && turn.state.pendingQueue,
+        );
+      const targetQueue = target?.state.pendingQueue;
+      if (target && targetQueue?.mode === "collect" && !target.signal.aborted) {
         targetQueue.messages.push(params.message);
         targetQueue.dropPolicy = params.settings.dropPolicy ?? DEFAULT_QUEUE_DROP;
         targetQueue.droppedCount += overflowQueue.droppedCount;
         targetQueue.summaryLines.push(...overflowQueue.summaryLines);
-        return { kind: "handled", runId: targetRunId };
+        return { kind: "handled", runId: target.runId };
       }
     }
 
@@ -1123,12 +1129,13 @@ export class EmbeddedTuiBackend implements TuiBackend {
     agentId?: string;
   }): LocalPendingMessage[] {
     const pending: LocalPendingMessage[] = [];
-    for (const run of this.runs.values()) {
+    for (const turn of this.turns.list()) {
+      const run = turn.state;
       if (!this.isSameRunScope(run, params) || !run.pendingQueue) {
         continue;
       }
       run.pendingQueue.messages.forEach((message, messageIndex) => {
-        pending.push({ run, messageIndex, message });
+        pending.push({ turn, messageIndex, message });
       });
     }
     return pending;
@@ -1139,28 +1146,28 @@ export class EmbeddedTuiBackend implements TuiBackend {
     agentId?: string;
   }): QueuedSessionRun | undefined {
     let queuedAfter: QueuedSessionRun | undefined;
-    for (const [runId, run] of this.runs) {
+    for (const turn of this.turns.list()) {
+      const run = turn.state;
       if (this.isSameRunScope(run, params) && !run.isBtw) {
-        const promise = this.runPromises.get(runId);
-        if (promise) {
-          queuedAfter = { runId, run, promise };
-        }
+        queuedAfter = { runId: turn.runId, run, promise: turn.result };
       }
     }
     return queuedAfter;
   }
 
   private abortSessionRuns(params: { sessionKey: string; agentId?: string }) {
-    for (const [runId, run] of this.runs) {
-      if (this.isSameRunScope(run, params) && !run.isBtw && this.isAbortableRun(runId, run)) {
-        run.controller.abort();
+    for (const turn of this.turns.list()) {
+      const run = turn.state;
+      if (this.isSameRunScope(run, params) && !run.isBtw && this.isAbortableRun(turn.runId, run)) {
+        turn.cancel();
       }
     }
   }
 
   private hasAbortableSessionRun(params: { sessionKey: string; agentId?: string }): boolean {
-    for (const [runId, run] of this.runs) {
-      if (this.isSameRunScope(run, params) && !run.isBtw && this.isAbortableRun(runId, run)) {
+    for (const turn of this.turns.list()) {
+      const run = turn.state;
+      if (this.isSameRunScope(run, params) && !run.isBtw && this.isAbortableRun(turn.runId, run)) {
         return true;
       }
     }
@@ -1178,7 +1185,7 @@ export class EmbeddedTuiBackend implements TuiBackend {
   }
 
   private isAbortableRun(runId: string, run: LocalRunState): boolean {
-    return !run.lifecycleEnded || this.runPromises.has(runId);
+    return !run.lifecycleEnded || this.turns.get(runId) !== undefined;
   }
 
   private nextSeq() {
@@ -1349,10 +1356,11 @@ export class EmbeddedTuiBackend implements TuiBackend {
   }
 
   private handleAgentEvent(evt: AgentEventPayload) {
-    const run = this.runs.get(evt.runId);
-    if (!run) {
+    const turn = this.turns.get(evt.runId);
+    if (!turn) {
       return;
     }
+    const run = turn.state;
 
     const lifecyclePhase =
       evt.stream === "lifecycle" && typeof evt.data?.phase === "string" ? evt.data.phase : "";
@@ -1399,7 +1407,7 @@ export class EmbeddedTuiBackend implements TuiBackend {
     }
 
     const phase = lifecyclePhase;
-    const aborted = evt.data?.aborted === true || run.controller.signal.aborted;
+    const aborted = evt.data?.aborted === true || turn.signal.aborted;
     const toolErrorSummary = readToolValidationErrorSummary(evt.data?.toolErrorSummary);
     if (phase === "finishing") {
       run.finishing = true;
@@ -1433,6 +1441,10 @@ export class EmbeddedTuiBackend implements TuiBackend {
     }
   }
 
+  private getCurrentTurnState(runId: string, state: LocalRunState): LocalRunState | undefined {
+    return this.turns.get(runId)?.state === state ? state : undefined;
+  }
+
   private async runTurn(params: {
     runId: string;
     sessionKey: string;
@@ -1441,15 +1453,24 @@ export class EmbeddedTuiBackend implements TuiBackend {
     thinking?: string;
     deliver?: boolean;
     timeoutMs?: number;
-    controller: AbortController;
+    signal: AbortSignal;
+    state: LocalRunState;
     queuedAfter?: QueuedSessionRun;
   }) {
     try {
+      const activeRun = this.getCurrentTurnState(params.runId, params.state);
+      if (!activeRun) {
+        return;
+      }
+      if (params.signal.aborted) {
+        this.emitChatAborted(params.runId, activeRun);
+        return;
+      }
       if (params.queuedAfter) {
         try {
           await waitForQueuedLocalRun(params.queuedAfter, params.runId);
         } catch (error) {
-          const run = this.runs.get(params.runId);
+          const run = this.getCurrentTurnState(params.runId, params.state);
           if (run) {
             const errorMessage = error instanceof Error ? error.message : String(error);
             this.emitChatError(
@@ -1460,19 +1481,21 @@ export class EmbeddedTuiBackend implements TuiBackend {
           }
           return;
         }
-        if (params.controller.signal.aborted) {
-          const run = this.runs.get(params.runId);
+        if (params.signal.aborted) {
+          const run = this.getCurrentTurnState(params.runId, params.state);
           if (run) {
             this.emitChatAborted(params.runId, run);
           }
           return;
         }
       }
-      const activeRun = this.runs.get(params.runId);
       let message = params.message;
-      if (activeRun?.pendingQueue) {
-        await waitForQueueDebounce(activeRun.pendingQueue, params.controller.signal);
-        if (params.controller.signal.aborted) {
+      if (activeRun.pendingQueue) {
+        await waitForQueueDebounce(activeRun.pendingQueue, params.signal);
+        if (!this.getCurrentTurnState(params.runId, params.state)) {
+          return;
+        }
+        if (params.signal.aborted) {
           this.emitChatAborted(params.runId, activeRun);
           return;
         }
@@ -1486,13 +1509,13 @@ export class EmbeddedTuiBackend implements TuiBackend {
           ...(params.agentId ? { agentId: params.agentId } : {}),
           question: activeRun.question,
           timeoutMs: params.timeoutMs,
-          controller: params.controller,
+          signal: params.signal,
         });
-        const run = this.runs.get(params.runId);
+        const run = this.getCurrentTurnState(params.runId, params.state);
         if (!run) {
           return;
         }
-        if (params.controller.signal.aborted) {
+        if (params.signal.aborted) {
           this.emitChatAborted(params.runId, run);
           return;
         }
@@ -1528,17 +1551,17 @@ export class EmbeddedTuiBackend implements TuiBackend {
           },
           timeout: timeoutSecondsFromMs(params.timeoutMs),
           runId: params.runId,
-          abortSignal: params.controller.signal,
+          abortSignal: params.signal,
           allowModelOverride: false,
         },
         silentRuntime,
         this.deps,
       );
-      const run = this.runs.get(params.runId);
+      const run = this.getCurrentTurnState(params.runId, params.state);
       if (!run) {
         return;
       }
-      if (params.controller.signal.aborted || result?.meta?.aborted === true) {
+      if (params.signal.aborted || result?.meta?.aborted === true) {
         this.emitChatAborted(params.runId, run);
         return;
       }
@@ -1571,19 +1594,18 @@ export class EmbeddedTuiBackend implements TuiBackend {
         this.emitChatFinal(params.runId, run, stopReason);
       }
     } catch (error) {
-      const run = this.runs.get(params.runId);
+      const run = this.getCurrentTurnState(params.runId, params.state);
       if (!run) {
         return;
       }
-      if (params.controller.signal.aborted) {
+      if (params.signal.aborted) {
         this.emitChatAborted(params.runId, run);
         return;
       }
       const errorMessage = error instanceof Error ? error.message : String(error);
       this.emitChatError(params.runId, run, errorMessage);
     } finally {
-      this.runs.get(params.runId)?.markQueuedRunReady();
-      this.runs.delete(params.runId);
+      this.getCurrentTurnState(params.runId, params.state)?.markQueuedRunReady();
     }
   }
 }
