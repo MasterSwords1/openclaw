@@ -1,7 +1,6 @@
 // Implements the embedded backend used by local TUI sessions.
 import { randomUUID } from "node:crypto";
 import type { SessionsPatchResult } from "../../packages/gateway-protocol/src/index.js";
-import { agentCommandFromIngress } from "../agents/agent-command.js";
 import { listAgentEntries } from "../agents/agent-scope-config.js";
 import {
   resolveAgentDir,
@@ -20,6 +19,7 @@ import {
   buildConfiguredModelCatalog,
   resolveThinkingDefault,
 } from "../agents/model-selection.js";
+import { openClawRuntime } from "../agents/openclaw-runtime.js";
 import { ensureRuntimePluginsLoaded } from "../agents/runtime-plugins.js";
 import { readToolValidationErrorSummary } from "../agents/tool-error-summary.js";
 import { resolveTextCommand } from "../auto-reply/commands-registry.js";
@@ -31,7 +31,6 @@ import {
   DEFAULT_QUEUE_DROP,
 } from "../auto-reply/reply/queue/state.js";
 import type { QueueSettings } from "../auto-reply/reply/queue/types.js";
-import { createDefaultDeps } from "../cli/deps.js";
 import { getRuntimeConfig } from "../config/config.js";
 import {
   clearSessionGoal,
@@ -363,7 +362,6 @@ export class EmbeddedTuiBackend implements TuiBackend {
   onDisconnected?: (reason: string) => void;
   onGap?: (info: { expected: number; received: number }) => void;
 
-  private readonly deps = createDefaultDeps();
   private readonly runs = new Map<string, LocalRunState>();
   private readonly runPromises = new Map<string, Promise<void>>();
   private unsubscribe?: () => void;
@@ -1480,30 +1478,22 @@ export class EmbeddedTuiBackend implements TuiBackend {
       }
       const loadOptions = params.agentId ? { agentId: params.agentId } : undefined;
       const { canonicalKey, entry } = loadSessionEntry(params.sessionKey, loadOptions);
-      const result = await agentCommandFromIngress(
-        {
-          // The per-message timestamp prefix is applied at the single LLM
-          // boundary (normalizeMessagesForLlmBoundary) from each message's own
-          // timestamp, so the current turn and historical turns carry identical
-          // bytes on the wire. See: https://github.com/openclaw/openclaw/issues/3658
-          message,
-          sessionKey: canonicalKey,
-          ...(params.agentId ? { agentId: params.agentId } : {}),
-          ...(entry?.sessionId ? { sessionId: entry.sessionId } : {}),
-          thinking: params.thinking,
-          deliver: params.deliver,
-          channel: INTERNAL_MESSAGE_CHANNEL,
-          runContext: {
-            messageChannel: INTERNAL_MESSAGE_CHANNEL,
-          },
-          timeout: timeoutSecondsFromMs(params.timeoutMs),
-          runId: params.runId,
-          abortSignal: params.controller.signal,
-          allowModelOverride: false,
-        },
-        silentRuntime,
-        this.deps,
-      );
+      const result = await openClawRuntime.startTurn({
+        // The per-message timestamp prefix is applied at the single LLM
+        // boundary (normalizeMessagesForLlmBoundary) from each message's own
+        // timestamp, so the current turn and historical turns carry identical
+        // bytes on the wire. See: https://github.com/openclaw/openclaw/issues/3658
+        message,
+        sessionKey: canonicalKey,
+        ...(params.agentId ? { agentId: params.agentId } : {}),
+        ...(entry?.sessionId ? { sessionId: entry.sessionId } : {}),
+        thinking: params.thinking,
+        deliver: params.deliver,
+        messageChannel: INTERNAL_MESSAGE_CHANNEL,
+        timeoutMs: params.timeoutMs,
+        runId: params.runId,
+        abortSignal: params.controller.signal,
+      });
       const run = this.runs.get(params.runId);
       if (!run) {
         return;

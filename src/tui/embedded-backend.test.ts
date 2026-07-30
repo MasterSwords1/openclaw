@@ -13,8 +13,9 @@ import { defaultRuntime } from "../runtime.js";
 import { AGENT_HARNESS_SESSION_KEY_RESERVED_MESSAGE } from "../sessions/agent-harness-session-key.js";
 import { notifyListeners } from "../shared/listeners.js";
 import { withEnvAsync } from "../test-utils/env.js";
+import { INTERNAL_MESSAGE_CHANNEL } from "../utils/message-channel.js";
 
-const agentCommandFromIngressMock = vi.fn();
+const startRuntimeTurnMock = vi.fn();
 const queueEmbeddedAgentMessageWithOutcomeAsyncMock = vi.fn();
 const resolveActiveEmbeddedRunSessionIdMock = vi.fn();
 const runBtwSideQuestionMock = vi.fn();
@@ -81,8 +82,10 @@ const loadSessionEntryMock = vi.fn(
 let registeredListener: ((evt: unknown) => void) | undefined;
 const embeddedEventTimestamp = Date.parse("2026-05-09T07:26:00.000Z");
 
-vi.mock("../agents/agent-command.js", () => ({
-  agentCommandFromIngress: (...args: unknown[]) => agentCommandFromIngressMock(...args),
+vi.mock("../agents/openclaw-runtime.js", () => ({
+  openClawRuntime: {
+    startTurn: (...args: unknown[]) => startRuntimeTurnMock(...args),
+  },
 }));
 
 vi.mock("../agents/embedded-agent-runner/runs.js", () => ({
@@ -108,10 +111,6 @@ vi.mock("../infra/agent-events.js", () => ({
       }
     };
   },
-}));
-
-vi.mock("../cli/deps.js", () => ({
-  createDefaultDeps: () => ({}),
 }));
 
 vi.mock("../config/sessions.js", () => ({
@@ -289,7 +288,7 @@ describe("EmbeddedTuiBackend", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(embeddedEventTimestamp);
-    agentCommandFromIngressMock.mockReset();
+    startRuntimeTurnMock.mockReset();
     queueEmbeddedAgentMessageWithOutcomeAsyncMock.mockReset();
     resolveActiveEmbeddedRunSessionIdMock.mockReset();
     resolveActiveEmbeddedRunSessionIdMock.mockReturnValue(undefined);
@@ -431,7 +430,7 @@ describe("EmbeddedTuiBackend", () => {
       payloads: Array<{ text: string }>;
       meta: Record<string, unknown>;
     }>();
-    agentCommandFromIngressMock.mockReturnValueOnce(pending.promise);
+    startRuntimeTurnMock.mockReturnValueOnce(pending.promise);
 
     const backend = new EmbeddedTuiBackend();
     const events: Array<{ event: string; payload: unknown }> = [];
@@ -519,7 +518,7 @@ describe("EmbeddedTuiBackend", () => {
       payloads: Array<{ text: string }>;
       meta: Record<string, unknown>;
     }>();
-    agentCommandFromIngressMock.mockReturnValueOnce(pending.promise);
+    startRuntimeTurnMock.mockReturnValueOnce(pending.promise);
 
     const backend = new EmbeddedTuiBackend();
     backend.onEvent = () => {
@@ -1015,7 +1014,7 @@ describe("EmbeddedTuiBackend", () => {
   });
 
   it("passes selected-agent global scope into local chat turns", async () => {
-    agentCommandFromIngressMock.mockResolvedValueOnce({
+    startRuntimeTurnMock.mockResolvedValueOnce({
       payloads: [{ text: "done" }],
       meta: {},
     });
@@ -1033,15 +1032,58 @@ describe("EmbeddedTuiBackend", () => {
       await flushMicrotasks();
 
       expect(loadSessionEntryMock).toHaveBeenCalledWith("global", { agentId: "work" });
-      expect(agentCommandFromIngressMock).toHaveBeenCalledWith(
+      expect(startRuntimeTurnMock).toHaveBeenCalledWith(
         expect.objectContaining({
           sessionKey: "global",
           agentId: "work",
           message: expect.stringContaining("hello"),
         }),
-        expect.anything(),
-        expect.anything(),
       );
+    } finally {
+      await backend.stop();
+    }
+  });
+
+  it("passes canonical local turn context into the OpenClaw runtime", async () => {
+    loadSessionEntryMock.mockReturnValueOnce({
+      cfg: {},
+      canonicalKey: "agent:work:main",
+      storePath: "/tmp/openclaw-sessions.json",
+      store: {},
+      entry: { sessionId: "session-work" },
+    });
+    startRuntimeTurnMock.mockResolvedValueOnce({
+      payloads: [{ text: "done" }],
+      meta: {},
+    });
+
+    const { EmbeddedTuiBackend } = await import("./embedded-backend.js");
+    const backend = new EmbeddedTuiBackend();
+    backend.start();
+    try {
+      await backend.sendChat({
+        sessionKey: "agent:work:main",
+        agentId: "work",
+        message: "hello",
+        thinking: "high",
+        deliver: false,
+        timeoutMs: 12_345,
+        runId: "run-work",
+      });
+      await flushMicrotasks();
+
+      expect(startRuntimeTurnMock).toHaveBeenCalledWith({
+        runId: "run-work",
+        sessionKey: "agent:work:main",
+        message: expect.stringContaining("hello"),
+        messageChannel: INTERNAL_MESSAGE_CHANNEL,
+        abortSignal: expect.any(AbortSignal),
+        agentId: "work",
+        sessionId: "session-work",
+        thinking: "high",
+        deliver: false,
+        timeoutMs: 12_345,
+      });
     } finally {
       await backend.stop();
     }
@@ -1053,7 +1095,7 @@ describe("EmbeddedTuiBackend", () => {
       payloads: Array<{ text: string }>;
       meta: Record<string, unknown>;
     }>();
-    agentCommandFromIngressMock.mockReturnValueOnce(pending.promise);
+    startRuntimeTurnMock.mockReturnValueOnce(pending.promise);
 
     const backend = new EmbeddedTuiBackend();
     const events: Array<{ event: string; payload: unknown }> = [];
@@ -1104,7 +1146,7 @@ describe("EmbeddedTuiBackend", () => {
       meta: Record<string, unknown>;
     }>();
     const abortListener = vi.fn();
-    agentCommandFromIngressMock.mockImplementationOnce((opts: { abortSignal?: AbortSignal }) => {
+    startRuntimeTurnMock.mockImplementationOnce((opts: { abortSignal?: AbortSignal }) => {
       opts.abortSignal?.addEventListener("abort", abortListener);
       return pending.promise;
     });
@@ -1158,7 +1200,7 @@ describe("EmbeddedTuiBackend", () => {
         meta: Record<string, unknown>;
       }>();
       const abortListener = vi.fn();
-      agentCommandFromIngressMock.mockImplementationOnce((opts: { abortSignal?: AbortSignal }) => {
+      startRuntimeTurnMock.mockImplementationOnce((opts: { abortSignal?: AbortSignal }) => {
         opts.abortSignal?.addEventListener("abort", abortListener);
         return pending.promise;
       });
@@ -1204,7 +1246,7 @@ describe("EmbeddedTuiBackend", () => {
       meta: Record<string, unknown>;
     }>();
     const firstAbortListener = vi.fn();
-    agentCommandFromIngressMock
+    startRuntimeTurnMock
       .mockImplementationOnce((opts: { abortSignal?: AbortSignal }) => {
         opts.abortSignal?.addEventListener("abort", firstAbortListener);
         return first.promise;
@@ -1237,11 +1279,11 @@ describe("EmbeddedTuiBackend", () => {
     });
 
     expect(firstAbortListener).not.toHaveBeenCalled();
-    expect(agentCommandFromIngressMock).toHaveBeenCalledTimes(1);
+    expect(startRuntimeTurnMock).toHaveBeenCalledTimes(1);
 
     first.resolve({ payloads: [{ text: "first done" }], meta: {} });
     await vi.waitFor(() => {
-      expect(agentCommandFromIngressMock).toHaveBeenCalledTimes(2);
+      expect(startRuntimeTurnMock).toHaveBeenCalledTimes(2);
     });
 
     second.resolve({ payloads: [{ text: "second done" }], meta: {} });
@@ -1260,7 +1302,7 @@ describe("EmbeddedTuiBackend", () => {
         meta: Record<string, unknown>;
       }>();
       const firstAbortListener = vi.fn();
-      agentCommandFromIngressMock
+      startRuntimeTurnMock
         .mockImplementationOnce((opts: { abortSignal?: AbortSignal }) => {
           opts.abortSignal?.addEventListener("abort", firstAbortListener);
           return first.promise;
@@ -1290,11 +1332,11 @@ describe("EmbeddedTuiBackend", () => {
       await flushMicrotasks();
 
       expect(firstAbortListener).not.toHaveBeenCalled();
-      expect(agentCommandFromIngressMock).toHaveBeenCalledTimes(1);
+      expect(startRuntimeTurnMock).toHaveBeenCalledTimes(1);
 
       first.resolve({ payloads: [{ text: "first done" }], meta: {} });
       await vi.waitFor(() => {
-        expect(agentCommandFromIngressMock).toHaveBeenCalledTimes(2);
+        expect(startRuntimeTurnMock).toHaveBeenCalledTimes(2);
       });
 
       second.resolve({ payloads: [{ text: "second done" }], meta: {} });
@@ -1308,7 +1350,7 @@ describe("EmbeddedTuiBackend", () => {
       payloads: Array<{ text: string }>;
       meta: Record<string, unknown>;
     }>();
-    agentCommandFromIngressMock.mockReturnValueOnce(first.promise);
+    startRuntimeTurnMock.mockReturnValueOnce(first.promise);
     resolveActiveEmbeddedRunSessionIdMock.mockReturnValue("active-session");
     loadSessionEntryMock.mockImplementation((sessionKey: string) => ({
       cfg: {},
@@ -1344,7 +1386,7 @@ describe("EmbeddedTuiBackend", () => {
       "steer this turn",
       { steeringMode: "all", debounceMs: 500 },
     );
-    expect(agentCommandFromIngressMock).toHaveBeenCalledTimes(1);
+    expect(startRuntimeTurnMock).toHaveBeenCalledTimes(1);
 
     first.resolve({ payloads: [{ text: "done" }], meta: {} });
     await flushMicrotasks();
@@ -1360,9 +1402,7 @@ describe("EmbeddedTuiBackend", () => {
       payloads: Array<{ text: string }>;
       meta: Record<string, unknown>;
     }>();
-    agentCommandFromIngressMock
-      .mockReturnValueOnce(first.promise)
-      .mockReturnValueOnce(second.promise);
+    startRuntimeTurnMock.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
     resolveActiveEmbeddedRunSessionIdMock.mockReturnValue("active-session");
     loadSessionEntryMock.mockImplementation((sessionKey: string) => ({
       cfg: {},
@@ -1391,10 +1431,10 @@ describe("EmbeddedTuiBackend", () => {
       runId: "run-local-second",
     });
 
-    expect(agentCommandFromIngressMock).toHaveBeenCalledTimes(1);
+    expect(startRuntimeTurnMock).toHaveBeenCalledTimes(1);
     first.resolve({ payloads: [{ text: "first done" }], meta: {} });
     await vi.waitFor(() => {
-      expect(agentCommandFromIngressMock).toHaveBeenCalledTimes(2);
+      expect(startRuntimeTurnMock).toHaveBeenCalledTimes(2);
     });
     second.resolve({ payloads: [{ text: "second done" }], meta: {} });
     await flushMicrotasks();
@@ -1410,9 +1450,7 @@ describe("EmbeddedTuiBackend", () => {
       payloads: Array<{ text: string }>;
       meta: Record<string, unknown>;
     }>();
-    agentCommandFromIngressMock
-      .mockReturnValueOnce(first.promise)
-      .mockReturnValueOnce(second.promise);
+    startRuntimeTurnMock.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
     loadSessionEntryMock.mockImplementation((sessionKey: string) => ({
       cfg: { messages: { queue: { mode: "steer" } } },
       canonicalKey: sessionKey,
@@ -1437,10 +1475,10 @@ describe("EmbeddedTuiBackend", () => {
 
     expect(resolveActiveEmbeddedRunSessionIdMock).not.toHaveBeenCalled();
     expect(queueEmbeddedAgentMessageWithOutcomeAsyncMock).not.toHaveBeenCalled();
-    expect(agentCommandFromIngressMock).toHaveBeenCalledTimes(1);
+    expect(startRuntimeTurnMock).toHaveBeenCalledTimes(1);
     first.resolve({ payloads: [{ text: "first done" }], meta: {} });
     await vi.waitFor(() => {
-      expect(agentCommandFromIngressMock).toHaveBeenCalledTimes(2);
+      expect(startRuntimeTurnMock).toHaveBeenCalledTimes(2);
     });
     second.resolve({ payloads: [{ text: "second done" }], meta: {} });
     await flushMicrotasks();
@@ -1456,9 +1494,7 @@ describe("EmbeddedTuiBackend", () => {
       payloads: Array<{ text: string }>;
       meta: Record<string, unknown>;
     }>();
-    agentCommandFromIngressMock
-      .mockReturnValueOnce(first.promise)
-      .mockReturnValueOnce(collected.promise);
+    startRuntimeTurnMock.mockReturnValueOnce(first.promise).mockReturnValueOnce(collected.promise);
     loadSessionEntryMock.mockImplementation((sessionKey: string) => ({
       cfg: { messages: { queue: { mode: "collect" } } },
       canonicalKey: sessionKey,
@@ -1487,12 +1523,12 @@ describe("EmbeddedTuiBackend", () => {
 
     expect(second).toEqual({ runId: "run-local-second" });
     expect(third).toEqual({ runId: "run-local-second" });
-    expect(agentCommandFromIngressMock).toHaveBeenCalledTimes(1);
+    expect(startRuntimeTurnMock).toHaveBeenCalledTimes(1);
     first.resolve({ payloads: [{ text: "first done" }], meta: {} });
     await vi.waitFor(() => {
-      expect(agentCommandFromIngressMock).toHaveBeenCalledTimes(2);
+      expect(startRuntimeTurnMock).toHaveBeenCalledTimes(2);
     });
-    const collectedCall = agentCommandFromIngressMock.mock.calls[1];
+    const collectedCall = startRuntimeTurnMock.mock.calls[1];
     if (!collectedCall) {
       throw new Error("expected collected local followup call");
     }
@@ -1514,9 +1550,7 @@ describe("EmbeddedTuiBackend", () => {
       payloads: Array<{ text: string }>;
       meta: Record<string, unknown>;
     }>();
-    agentCommandFromIngressMock
-      .mockReturnValueOnce(first.promise)
-      .mockReturnValueOnce(second.promise);
+    startRuntimeTurnMock.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
     loadSessionEntryMock.mockImplementation((sessionKey: string) => ({
       cfg: {
         messages: { queue: { mode: "followup", cap: 1, drop: "new" } },
@@ -1548,9 +1582,9 @@ describe("EmbeddedTuiBackend", () => {
     expect(dropped).toEqual({ runId: "run-local-second" });
     first.resolve({ payloads: [{ text: "first done" }], meta: {} });
     await vi.waitFor(() => {
-      expect(agentCommandFromIngressMock).toHaveBeenCalledTimes(2);
+      expect(startRuntimeTurnMock).toHaveBeenCalledTimes(2);
     });
-    expect(agentCommandFromIngressMock.mock.calls[1]?.[0]).toEqual(
+    expect(startRuntimeTurnMock.mock.calls[1]?.[0]).toEqual(
       expect.objectContaining({ message: "kept followup" }),
     );
     second.resolve({ payloads: [{ text: "second done" }], meta: {} });
@@ -1566,7 +1600,7 @@ describe("EmbeddedTuiBackend", () => {
     const firstAbortListener = vi.fn(() => {
       first.resolve({ payloads: [{ text: "first aborted" }], meta: {} });
     });
-    agentCommandFromIngressMock
+    startRuntimeTurnMock
       .mockImplementationOnce((opts: { abortSignal?: AbortSignal }) => {
         opts.abortSignal?.addEventListener("abort", firstAbortListener);
         return first.promise;
@@ -1595,7 +1629,7 @@ describe("EmbeddedTuiBackend", () => {
 
     expect(firstAbortListener).toHaveBeenCalledTimes(1);
     await vi.waitFor(() => {
-      expect(agentCommandFromIngressMock).toHaveBeenCalledTimes(2);
+      expect(startRuntimeTurnMock).toHaveBeenCalledTimes(2);
     });
   });
 
@@ -1606,7 +1640,7 @@ describe("EmbeddedTuiBackend", () => {
       meta: Record<string, unknown>;
     }>();
     const firstAbortListener = vi.fn();
-    agentCommandFromIngressMock
+    startRuntimeTurnMock
       .mockImplementationOnce((opts: { abortSignal?: AbortSignal }) => {
         opts.abortSignal?.addEventListener("abort", firstAbortListener);
         return first.promise;
@@ -1636,7 +1670,7 @@ describe("EmbeddedTuiBackend", () => {
 
     expect(queueEmbeddedAgentMessageWithOutcomeAsyncMock).not.toHaveBeenCalled();
     expect(firstAbortListener).not.toHaveBeenCalled();
-    expect(agentCommandFromIngressMock).toHaveBeenCalledTimes(2);
+    expect(startRuntimeTurnMock).toHaveBeenCalledTimes(2);
     first.resolve({ payloads: [{ text: "first done" }], meta: {} });
     await flushMicrotasks();
   });
@@ -1650,7 +1684,7 @@ describe("EmbeddedTuiBackend", () => {
     const firstAbortListener = vi.fn(() => {
       first.resolve({ payloads: [{ text: "first aborted" }], meta: {} });
     });
-    agentCommandFromIngressMock.mockImplementationOnce((opts: { abortSignal?: AbortSignal }) => {
+    startRuntimeTurnMock.mockImplementationOnce((opts: { abortSignal?: AbortSignal }) => {
       opts.abortSignal?.addEventListener("abort", firstAbortListener);
       return first.promise;
     });
@@ -1676,7 +1710,7 @@ describe("EmbeddedTuiBackend", () => {
     });
 
     expect(firstAbortListener).toHaveBeenCalledTimes(1);
-    expect(agentCommandFromIngressMock).toHaveBeenCalledTimes(1);
+    expect(startRuntimeTurnMock).toHaveBeenCalledTimes(1);
     await flushMicrotasks();
   });
 
@@ -1689,7 +1723,7 @@ describe("EmbeddedTuiBackend", () => {
     const firstAbortListener = vi.fn(() => {
       first.resolve({ payloads: [{ text: "first aborted" }], meta: {} });
     });
-    agentCommandFromIngressMock.mockImplementationOnce((opts: { abortSignal?: AbortSignal }) => {
+    startRuntimeTurnMock.mockImplementationOnce((opts: { abortSignal?: AbortSignal }) => {
       opts.abortSignal?.addEventListener("abort", firstAbortListener);
       return first.promise;
     });
@@ -1719,7 +1753,7 @@ describe("EmbeddedTuiBackend", () => {
     });
 
     expect(firstAbortListener).toHaveBeenCalledTimes(1);
-    expect(agentCommandFromIngressMock).toHaveBeenCalledTimes(1);
+    expect(startRuntimeTurnMock).toHaveBeenCalledTimes(1);
     await flushMicrotasks();
     expect(events).toContainEqual({
       event: "chat",
@@ -1737,7 +1771,7 @@ describe("EmbeddedTuiBackend", () => {
       payloads: Array<{ text: string }>;
       meta: Record<string, unknown>;
     }>();
-    agentCommandFromIngressMock.mockImplementationOnce(() => pending.promise);
+    startRuntimeTurnMock.mockImplementationOnce(() => pending.promise);
 
     const backend = new EmbeddedTuiBackend();
     const events: Array<{ event: string; payload: unknown }> = [];
@@ -1791,7 +1825,7 @@ describe("EmbeddedTuiBackend", () => {
         payloads: Array<{ text: string }>;
         meta: Record<string, unknown>;
       }>();
-      agentCommandFromIngressMock.mockImplementationOnce(() => pending.promise);
+      startRuntimeTurnMock.mockImplementationOnce(() => pending.promise);
 
       const backend = new EmbeddedTuiBackend();
       const events: Array<{ event: string; payload: unknown }> = [];
@@ -1842,7 +1876,7 @@ describe("EmbeddedTuiBackend", () => {
       payloads: Array<{ text: string }>;
       meta: Record<string, unknown>;
     }>();
-    agentCommandFromIngressMock.mockImplementationOnce(() => pending.promise);
+    startRuntimeTurnMock.mockImplementationOnce(() => pending.promise);
 
     const backend = new EmbeddedTuiBackend();
     const events: Array<{ event: string; payload: unknown }> = [];
@@ -1883,7 +1917,7 @@ describe("EmbeddedTuiBackend", () => {
       payloads: Array<{ text: string }>;
       meta: Record<string, unknown>;
     }>();
-    agentCommandFromIngressMock.mockReturnValueOnce(pending.promise);
+    startRuntimeTurnMock.mockReturnValueOnce(pending.promise);
 
     const backend = new EmbeddedTuiBackend();
     backend.start();
@@ -1893,7 +1927,7 @@ describe("EmbeddedTuiBackend", () => {
       runId: "run-local-normal-stop-like-text",
     });
 
-    expect(agentCommandFromIngressMock).toHaveBeenCalledTimes(1);
+    expect(startRuntimeTurnMock).toHaveBeenCalledTimes(1);
 
     pending.resolve({ payloads: [{ text: "normal prompt" }], meta: {} });
     await flushMicrotasks();
@@ -1905,7 +1939,7 @@ describe("EmbeddedTuiBackend", () => {
       payloads: Array<{ text: string }>;
       meta: Record<string, unknown>;
     }>();
-    agentCommandFromIngressMock.mockReturnValueOnce(pending.promise);
+    startRuntimeTurnMock.mockReturnValueOnce(pending.promise);
 
     const backend = new EmbeddedTuiBackend();
     const events: Array<{ event: string; payload: unknown }> = [];
@@ -1919,7 +1953,7 @@ describe("EmbeddedTuiBackend", () => {
       runId: "run-local-idle-stop",
     });
 
-    expect(agentCommandFromIngressMock).toHaveBeenCalledTimes(1);
+    expect(startRuntimeTurnMock).toHaveBeenCalledTimes(1);
 
     pending.resolve({ payloads: [{ text: "idle stop prompt" }], meta: {} });
     await flushMicrotasks();
@@ -1949,9 +1983,7 @@ describe("EmbeddedTuiBackend", () => {
       payloads: Array<{ text: string }>;
       meta: Record<string, unknown>;
     }>();
-    agentCommandFromIngressMock
-      .mockReturnValueOnce(first.promise)
-      .mockReturnValueOnce(second.promise);
+    startRuntimeTurnMock.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
 
     const backend = new EmbeddedTuiBackend();
     backend.start();
@@ -1972,11 +2004,11 @@ describe("EmbeddedTuiBackend", () => {
       message: "second",
       runId: "run-local-second",
     });
-    expect(agentCommandFromIngressMock).toHaveBeenCalledTimes(1);
+    expect(startRuntimeTurnMock).toHaveBeenCalledTimes(1);
 
     first.resolve({ payloads: [{ text: "first done" }], meta: {} });
     await vi.waitFor(() => {
-      expect(agentCommandFromIngressMock).toHaveBeenCalledTimes(2);
+      expect(startRuntimeTurnMock).toHaveBeenCalledTimes(2);
     });
 
     second.resolve({ payloads: [{ text: "second done" }], meta: {} });
@@ -1993,9 +2025,7 @@ describe("EmbeddedTuiBackend", () => {
       payloads: Array<{ text: string }>;
       meta: Record<string, unknown>;
     }>();
-    agentCommandFromIngressMock
-      .mockReturnValueOnce(first.promise)
-      .mockReturnValueOnce(second.promise);
+    startRuntimeTurnMock.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
 
     const backend = new EmbeddedTuiBackend();
     backend.start();
@@ -2012,7 +2042,7 @@ describe("EmbeddedTuiBackend", () => {
       runId: "run-local-work-global",
     });
 
-    expect(agentCommandFromIngressMock).toHaveBeenCalledTimes(2);
+    expect(startRuntimeTurnMock).toHaveBeenCalledTimes(2);
 
     first.resolve({ payloads: [{ text: "main done" }], meta: {} });
     second.resolve({ payloads: [{ text: "work done" }], meta: {} });
@@ -2032,7 +2062,7 @@ describe("EmbeddedTuiBackend", () => {
     const firstAbortListener = vi.fn(() => {
       first.resolve({ payloads: [{ text: "main aborted" }], meta: {} });
     });
-    agentCommandFromIngressMock
+    startRuntimeTurnMock
       .mockImplementationOnce((opts: { abortSignal?: AbortSignal }) => {
         opts.abortSignal?.addEventListener("abort", firstAbortListener);
         return first.promise;
@@ -2055,7 +2085,7 @@ describe("EmbeddedTuiBackend", () => {
     });
 
     expect(firstAbortListener).not.toHaveBeenCalled();
-    expect(agentCommandFromIngressMock).toHaveBeenCalledTimes(2);
+    expect(startRuntimeTurnMock).toHaveBeenCalledTimes(2);
 
     first.resolve({ payloads: [{ text: "main done" }], meta: {} });
     stop.resolve({ payloads: [{ text: "work stop" }], meta: {} });
@@ -2081,7 +2111,7 @@ describe("EmbeddedTuiBackend", () => {
     const workAbortListener = vi.fn(() => {
       workRun.resolve({ payloads: [{ text: "work aborted" }], meta: {} });
     });
-    agentCommandFromIngressMock
+    startRuntimeTurnMock
       .mockImplementationOnce((opts: { abortSignal?: AbortSignal }) => {
         opts.abortSignal?.addEventListener("abort", defaultAbortListener);
         return defaultRun.promise;
@@ -2157,7 +2187,7 @@ describe("EmbeddedTuiBackend", () => {
         payloads: Array<{ text: string }>;
         meta: Record<string, unknown>;
       }>();
-      agentCommandFromIngressMock.mockReturnValueOnce(first.promise);
+      startRuntimeTurnMock.mockReturnValueOnce(first.promise);
 
       const backend = new EmbeddedTuiBackend();
       const events: Array<{ event: string; payload: unknown }> = [];
@@ -2191,7 +2221,7 @@ describe("EmbeddedTuiBackend", () => {
       await vi.advanceTimersByTimeAsync(5);
       await flushMicrotasks();
 
-      expect(agentCommandFromIngressMock).toHaveBeenCalledTimes(1);
+      expect(startRuntimeTurnMock).toHaveBeenCalledTimes(1);
       expect(
         events.some(
           (entry) =>
@@ -2214,7 +2244,7 @@ describe("EmbeddedTuiBackend", () => {
         payloads: Array<{ text: string }>;
         meta: Record<string, unknown>;
       }>();
-      agentCommandFromIngressMock.mockReturnValueOnce(first.promise);
+      startRuntimeTurnMock.mockReturnValueOnce(first.promise);
 
       const backend = new EmbeddedTuiBackend();
       const events: Array<{ event: string; payload: unknown }> = [];
@@ -2241,7 +2271,7 @@ describe("EmbeddedTuiBackend", () => {
       });
       await flushMicrotasks();
 
-      expect(agentCommandFromIngressMock).toHaveBeenCalledTimes(1);
+      expect(startRuntimeTurnMock).toHaveBeenCalledTimes(1);
       expect(
         events.some(
           (entry) =>
@@ -2259,7 +2289,7 @@ describe("EmbeddedTuiBackend", () => {
 
   it("clears local finishing state before surfacing a post-turn failure", async () => {
     const { EmbeddedTuiBackend } = await import("./embedded-backend.js");
-    agentCommandFromIngressMock
+    startRuntimeTurnMock
       .mockImplementationOnce(() => {
         registeredListener?.({
           runId: "run-local-first",
@@ -2299,7 +2329,7 @@ describe("EmbeddedTuiBackend", () => {
     });
     await sentDuringError;
     await flushMicrotasks();
-    expect(agentCommandFromIngressMock).toHaveBeenCalledTimes(2);
+    expect(startRuntimeTurnMock).toHaveBeenCalledTimes(2);
   });
 
   it.each([
@@ -2329,7 +2359,7 @@ describe("EmbeddedTuiBackend", () => {
       payloads: Array<{ text: string }>;
       meta: Record<string, unknown>;
     }>();
-    agentCommandFromIngressMock.mockReturnValueOnce(pending.promise);
+    startRuntimeTurnMock.mockReturnValueOnce(pending.promise);
 
     const backend = new EmbeddedTuiBackend();
     const events: Array<{ event: string; payload: unknown }> = [];
@@ -2381,7 +2411,7 @@ describe("EmbeddedTuiBackend", () => {
       payloads: Array<{ text: string }>;
       meta: Record<string, unknown>;
     }>();
-    agentCommandFromIngressMock.mockReturnValueOnce(pending.promise);
+    startRuntimeTurnMock.mockReturnValueOnce(pending.promise);
 
     const backend = new EmbeddedTuiBackend();
     const events: Array<{ event: string; payload: unknown }> = [];
@@ -2445,7 +2475,7 @@ describe("EmbeddedTuiBackend", () => {
       payloads: Array<{ text: string }>;
       meta: Record<string, unknown>;
     }>();
-    agentCommandFromIngressMock.mockReturnValueOnce(pending.promise);
+    startRuntimeTurnMock.mockReturnValueOnce(pending.promise);
 
     const backend = new EmbeddedTuiBackend();
     const events: Array<{ event: string; payload: unknown }> = [];
@@ -2504,7 +2534,7 @@ describe("EmbeddedTuiBackend", () => {
       payloads: Array<{ text: string }>;
       meta: Record<string, unknown>;
     }>();
-    agentCommandFromIngressMock.mockReturnValueOnce(pending.promise);
+    startRuntimeTurnMock.mockReturnValueOnce(pending.promise);
 
     const backend = new EmbeddedTuiBackend();
     const events: Array<{ event: string; payload: unknown }> = [];
@@ -2554,7 +2584,7 @@ describe("EmbeddedTuiBackend", () => {
       payloads: Array<{ text: string }>;
       meta: Record<string, unknown>;
     }>();
-    agentCommandFromIngressMock.mockReturnValueOnce(pending.promise);
+    startRuntimeTurnMock.mockReturnValueOnce(pending.promise);
 
     const backend = new EmbeddedTuiBackend();
     const events: Array<{ event: string; payload: unknown }> = [];
@@ -2656,7 +2686,7 @@ describe("EmbeddedTuiBackend", () => {
     await vi.waitFor(() => {
       expect(runBtwSideQuestionMock).toHaveBeenCalledTimes(1);
     });
-    expect(agentCommandFromIngressMock).not.toHaveBeenCalled();
+    expect(startRuntimeTurnMock).not.toHaveBeenCalled();
     expect(runBtwSideQuestionMock).toHaveBeenCalledWith(
       expect.objectContaining({
         provider: "openai",
@@ -2727,7 +2757,7 @@ describe("EmbeddedTuiBackend", () => {
     await vi.waitFor(() => {
       expect(runBtwSideQuestionMock).toHaveBeenCalledTimes(1);
     });
-    expect(agentCommandFromIngressMock).not.toHaveBeenCalled();
+    expect(startRuntimeTurnMock).not.toHaveBeenCalled();
     expect(runBtwSideQuestionMock).toHaveBeenCalledWith(
       expect.objectContaining({
         question: "what changed?",
@@ -2762,7 +2792,7 @@ describe("EmbeddedTuiBackend", () => {
       payloads: Array<{ text: string }>;
       meta: Record<string, unknown>;
     }>();
-    agentCommandFromIngressMock.mockReturnValueOnce(pending.promise);
+    startRuntimeTurnMock.mockReturnValueOnce(pending.promise);
 
     const backend = new EmbeddedTuiBackend();
     const events: Array<{ event: string; payload: unknown }> = [];
@@ -2827,7 +2857,7 @@ describe("EmbeddedTuiBackend", () => {
   it("aborts active local runs", async () => {
     const { EmbeddedTuiBackend } = await import("./embedded-backend.js");
     let capturedSignal: AbortSignal | undefined;
-    agentCommandFromIngressMock.mockImplementationOnce((opts: { abortSignal?: AbortSignal }) => {
+    startRuntimeTurnMock.mockImplementationOnce((opts: { abortSignal?: AbortSignal }) => {
       capturedSignal = opts.abortSignal;
       return new Promise((_, reject) => {
         opts.abortSignal?.addEventListener("abort", () => reject(new Error("aborted")), {
@@ -2867,7 +2897,7 @@ describe("EmbeddedTuiBackend", () => {
     const btwRun = deferred<{ text: string }>();
     let mainSignal: AbortSignal | undefined;
     let btwSignal: AbortSignal | undefined;
-    agentCommandFromIngressMock.mockImplementationOnce((opts: { abortSignal?: AbortSignal }) => {
+    startRuntimeTurnMock.mockImplementationOnce((opts: { abortSignal?: AbortSignal }) => {
       mainSignal = opts.abortSignal;
       opts.abortSignal?.addEventListener(
         "abort",
@@ -2896,7 +2926,7 @@ describe("EmbeddedTuiBackend", () => {
       runId: "run-btw-survives",
     });
     await vi.waitFor(() => {
-      expect(agentCommandFromIngressMock).toHaveBeenCalledTimes(1);
+      expect(startRuntimeTurnMock).toHaveBeenCalledTimes(1);
       expect(runBtwSideQuestionMock).toHaveBeenCalledTimes(1);
     });
 
@@ -2910,9 +2940,9 @@ describe("EmbeddedTuiBackend", () => {
     await flushMicrotasks();
   });
 
-  it("passes explicit chat timeouts to the agent command as seconds", async () => {
+  it("passes explicit chat timeouts to the OpenClaw runtime as milliseconds", async () => {
     const { EmbeddedTuiBackend } = await import("./embedded-backend.js");
-    agentCommandFromIngressMock.mockResolvedValueOnce({
+    startRuntimeTurnMock.mockResolvedValueOnce({
       payloads: [{ text: "hello" }],
       meta: {},
     });
@@ -2928,11 +2958,11 @@ describe("EmbeddedTuiBackend", () => {
       });
       await flushMicrotasks();
 
-      expect(agentCommandFromIngressMock).toHaveBeenCalledTimes(1);
-      const ingressOptions = agentCommandFromIngressMock.mock.calls.at(0)?.[0] as
-        | { timeout?: unknown }
+      expect(startRuntimeTurnMock).toHaveBeenCalledTimes(1);
+      const turnInput = startRuntimeTurnMock.mock.calls.at(0)?.[0] as
+        | { timeoutMs?: unknown }
         | undefined;
-      expect(ingressOptions?.timeout).toBe("300");
+      expect(turnInput?.timeoutMs).toBe(300_000);
     } finally {
       await backend.stop();
     }
