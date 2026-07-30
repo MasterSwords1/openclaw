@@ -151,7 +151,7 @@ function resolveAgentOption(
   command: Command | undefined,
   opts?: { agent?: string },
 ): string | undefined {
-  return resolveOptionFromCommand<string>(command, "agent") ?? opts?.agent;
+  return opts?.agent ?? resolveOptionFromCommand<string>(command, "agent");
 }
 
 async function loadGatewaySkillsStatusReport(
@@ -895,10 +895,10 @@ export function registerSkillsCli(program: Command) {
     .description("Inspect and manage skill lifecycle curation")
     .option("--json", "Output as JSON", false);
 
-  const showCuratorStatus = async () => {
+  const showCuratorStatus = async (_opts: { json?: boolean }, command: Command) => {
     try {
       const status = await loadSkillCuratorStatus();
-      if (curator.opts<{ json?: boolean }>().json) {
+      if (resolveOptionFromCommand<boolean>(command, "json")) {
         defaultRuntime.writeJson(status);
         return;
       }
@@ -919,10 +919,10 @@ export function registerSkillsCli(program: Command) {
       .command(action)
       .description(`${action} a curated skill`)
       .argument("<skill>", "Skill name or key")
-      .action(async (skill: string) => {
+      .action(async (skill: string, _opts: { json?: boolean }, command: Command) => {
         try {
           const result = await runSkillCuratorMutation(action, skill);
-          if (curator.opts<{ json?: boolean }>().json) {
+          if (resolveOptionFromCommand<boolean>(command, "json")) {
             defaultRuntime.writeJson(result);
             return;
           }
@@ -934,6 +934,9 @@ export function registerSkillsCli(program: Command) {
           defaultRuntime.exit(1);
         }
       });
+  }
+  for (const command of curator.commands) {
+    command.option("--json", "Output as JSON");
   }
 
   curator.action(showCuratorStatus);
@@ -1285,6 +1288,12 @@ export function registerSkillsCli(program: Command) {
         }
       },
     );
+  for (const command of workshop.commands) {
+    command.option(
+      "--agent <id>",
+      "Target agent workspace (defaults to cwd-inferred, then default agent)",
+    );
+  }
 
   skills
     .command("list")

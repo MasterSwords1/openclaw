@@ -36,6 +36,7 @@ const mocks = vi.hoisted(() => {
   };
   return {
     defaultRuntime,
+    resolvedAgentIds: [] as string[],
     runtimeStdout,
     runtimeErrors,
     workspaceDir: "",
@@ -83,12 +84,15 @@ vi.mock("../config/config.js", () => ({
 vi.mock("../agents/agent-scope.js", () => ({
   resolveAgentIdByWorkspacePath: () => undefined,
   resolveDefaultAgentId: () => "main",
-  resolveAgentWorkspaceDir: () => mocks.workspaceDir,
+  resolveAgentWorkspaceDir: (_config: unknown, agentId: string) => {
+    mocks.resolvedAgentIds.push(agentId);
+    return mocks.workspaceDir;
+  },
 }));
 
 describe("skills workshop cli", () => {
   const createProgram = () => {
-    const program = new Command();
+    const program = new Command().enablePositionalOptions();
     program.exitOverride();
     registerSkillsCli(program);
     return program;
@@ -111,6 +115,7 @@ describe("skills workshop cli", () => {
       prefix: "openclaw-skills-cli-workshop-state-",
     });
     mocks.workspaceDir = await tempDirs.make("openclaw-skills-cli-workshop-");
+    mocks.resolvedAgentIds.length = 0;
     stateDir = testState.stateDir;
     mocks.runtimeStdout.length = 0;
     mocks.runtimeErrors.length = 0;
@@ -124,6 +129,27 @@ describe("skills workshop cli", () => {
   afterEach(async () => {
     await testState.cleanup();
     await tempDirs.cleanup();
+  });
+
+  it.each([
+    {
+      label: "parent placement",
+      argv: ["skills", "workshop", "--agent", "parent-agent", "list"],
+      expectedAgent: "parent-agent",
+    },
+    {
+      label: "leaf placement",
+      argv: ["skills", "workshop", "list", "--agent", "leaf-agent"],
+      expectedAgent: "leaf-agent",
+    },
+    {
+      label: "leaf precedence",
+      argv: ["skills", "workshop", "--agent", "parent-agent", "list", "--agent", "leaf-agent"],
+      expectedAgent: "leaf-agent",
+    },
+  ])("resolves workshop --agent with $label", async ({ argv, expectedAgent }) => {
+    await runCommand(argv);
+    expect(mocks.resolvedAgentIds.at(-1)).toBe(expectedAgent);
   });
 
   it("creates, lists, inspects, and applies a skill proposal", async () => {

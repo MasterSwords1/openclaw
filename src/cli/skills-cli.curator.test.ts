@@ -61,7 +61,7 @@ const status = {
 };
 
 function createProgram(): Command {
-  const program = new Command();
+  const program = new Command().enablePositionalOptions();
   program.exitOverride();
   registerSkillsCli(program);
   return program;
