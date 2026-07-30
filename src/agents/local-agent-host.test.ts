@@ -1,6 +1,8 @@
+import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { collectModuleReferencesFromSource } from "../../scripts/lib/guard-inventory-utils.mjs";
 import { emitAgentEvent, resetAgentEventsForTest } from "../infra/agent-events.js";
-import { AgentTurnRegistry } from "./agent-turn-registry.js";
+import { LocalAgentHost } from "./local-agent-host.js";
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -12,43 +14,43 @@ function deferred<T>() {
   return { promise, reject, resolve };
 }
 
-describe("AgentTurnRegistry", () => {
+describe("LocalAgentHost", () => {
   beforeEach(() => {
     resetAgentEventsForTest();
   });
 
   it("registers the handle before execution and removes it after settlement", async () => {
-    const registry = new AgentTurnRegistry<{ phase: string }, string>();
+    const host = new LocalAgentHost<{ phase: string }, string>();
     const gate = deferred<string>();
     let registeredDuringExecution = false;
     const execute = vi.fn(async () => {
-      registeredDuringExecution = registry.get("run-1") !== undefined;
+      registeredDuringExecution = host.get("run-1") !== undefined;
       return await gate.promise;
     });
 
-    const handle = registry.submit({
+    const handle = host.startTurn({
       runId: "run-1",
       sessionKey: "agent:main:main",
-      state: { phase: "queued" },
+      adapterState: { phase: "queued" },
       execute,
     });
 
-    expect(registry.get("run-1")).toBe(handle);
+    expect(host.get("run-1")).toBe(handle);
     expect(execute).toHaveBeenCalledOnce();
     expect(registeredDuringExecution).toBe(true);
 
     gate.resolve("done");
     await expect(handle.result).resolves.toBe("done");
-    expect(registry.get("run-1")).toBeUndefined();
+    expect(host.get("run-1")).toBeUndefined();
   });
 
   it("routes only turn-owned events to the adapter", async () => {
-    const registry = new AgentTurnRegistry<Record<string, never>, void>();
+    const host = new LocalAgentHost<Record<string, never>, void>();
     const events: string[] = [];
-    const handle = registry.submit({
+    const handle = host.startTurn({
       runId: "owned-run",
       sessionKey: "agent:main:main",
-      state: {},
+      adapterState: {},
       onEvent: (event) => events.push(`${event.runId}:${String(event.data.delta)}`),
       execute: async () => {
         emitAgentEvent({
@@ -69,12 +71,12 @@ describe("AgentTurnRegistry", () => {
   });
 
   it("keeps the handle active after lifecycle end until execution settles", async () => {
-    const registry = new AgentTurnRegistry<Record<string, never>, void>();
+    const host = new LocalAgentHost<Record<string, never>, void>();
     const gate = deferred<void>();
-    const handle = registry.submit({
+    const handle = host.startTurn({
       runId: "maintenance-run",
       sessionKey: "agent:main:main",
-      state: {},
+      adapterState: {},
       execute: async () => {
         emitAgentEvent({
           runId: "maintenance-run",
@@ -85,7 +87,7 @@ describe("AgentTurnRegistry", () => {
       },
     });
 
-    await vi.waitFor(() => expect(registry.get("maintenance-run")).toBe(handle));
+    await vi.waitFor(() => expect(host.get("maintenance-run")).toBe(handle));
     expect(handle.cancel("stop maintenance")).toBe(true);
     expect(handle.signal.aborted).toBe(true);
     gate.resolve();
@@ -93,36 +95,36 @@ describe("AgentTurnRegistry", () => {
   });
 
   it("cancels each handle at most once", async () => {
-    const registry = new AgentTurnRegistry<Record<string, never>, void>();
+    const host = new LocalAgentHost<Record<string, never>, void>();
     const gate = deferred<void>();
-    const handle = registry.submit({
+    const handle = host.startTurn({
       runId: "cancel-run",
       sessionKey: "agent:main:main",
-      state: {},
+      adapterState: {},
       execute: async (signal) => {
         signal.addEventListener("abort", () => gate.resolve(), { once: true });
         await gate.promise;
       },
     });
-    await vi.waitFor(() => expect(registry.get("cancel-run")).toBe(handle));
+    await vi.waitFor(() => expect(host.get("cancel-run")).toBe(handle));
 
     expect(handle.cancel("first")).toBe(true);
     expect(handle.cancel("second")).toBe(false);
     await handle.result;
   });
 
-  it("isolates registries even when adapters reuse a run id", async () => {
-    const first = new AgentTurnRegistry<Record<string, never>, void>();
-    const second = new AgentTurnRegistry<Record<string, never>, void>();
+  it("isolates hosts even when adapters reuse a run id", async () => {
+    const first = new LocalAgentHost<Record<string, never>, void>();
+    const second = new LocalAgentHost<Record<string, never>, void>();
     const firstGate = deferred<void>();
     const secondGate = deferred<void>();
     const firstEvents: string[] = [];
     const secondEvents: string[] = [];
 
-    const firstHandle = first.submit({
+    const firstHandle = first.startTurn({
       runId: "shared-run",
       sessionKey: "agent:main:first",
-      state: {},
+      adapterState: {},
       onEvent: (event) => firstEvents.push(String(event.data.owner)),
       execute: async () => {
         await Promise.resolve();
@@ -134,10 +136,10 @@ describe("AgentTurnRegistry", () => {
         await firstGate.promise;
       },
     });
-    const secondHandle = second.submit({
+    const secondHandle = second.startTurn({
       runId: "shared-run",
       sessionKey: "agent:main:second",
-      state: {},
+      adapterState: {},
       onEvent: (event) => secondEvents.push(String(event.data.owner)),
       execute: async () => {
         await Promise.resolve();
@@ -160,11 +162,11 @@ describe("AgentTurnRegistry", () => {
   });
 
   it("isolates adapter event failures from execution", async () => {
-    const registry = new AgentTurnRegistry<Record<string, never>, string>();
-    const handle = registry.submit({
+    const host = new LocalAgentHost<Record<string, never>, string>();
+    const handle = host.startTurn({
       runId: "listener-error",
       sessionKey: "agent:main:main",
-      state: {},
+      adapterState: {},
       onEvent: () => {
         throw new Error("render failed");
       },
@@ -182,13 +184,13 @@ describe("AgentTurnRegistry", () => {
   });
 
   it("detaches unsettled turns and ignores their late events", async () => {
-    const registry = new AgentTurnRegistry<Record<string, never>, void>();
+    const host = new LocalAgentHost<Record<string, never>, void>();
     const gate = deferred<void>();
     const events: string[] = [];
-    const handle = registry.submit({
+    const handle = host.startTurn({
       runId: "detached-run",
       sessionKey: "agent:main:main",
-      state: {},
+      adapterState: {},
       onEvent: (event) => events.push(String(event.data.delta)),
       execute: async () => {
         await gate.promise;
@@ -200,9 +202,9 @@ describe("AgentTurnRegistry", () => {
       },
     });
 
-    expect(registry.detachAll("shutdown")).toEqual([handle]);
+    expect(host.detachAll("shutdown")).toEqual([handle]);
     expect(handle.signal.aborted).toBe(true);
-    expect(registry.list()).toEqual([]);
+    expect(host.list()).toEqual([]);
 
     gate.resolve();
     await handle.result;
@@ -210,14 +212,14 @@ describe("AgentTurnRegistry", () => {
   });
 
   it("does not route stale async events to a replacement handle with the same run id", async () => {
-    const registry = new AgentTurnRegistry<Record<string, never>, void>();
+    const host = new LocalAgentHost<Record<string, never>, void>();
     const staleEventGate = deferred<void>();
     const replacementGate = deferred<void>();
     const events: string[] = [];
-    const first = registry.submit({
+    const first = host.startTurn({
       runId: "reused-run",
       sessionKey: "agent:main:first",
-      state: {},
+      adapterState: {},
       onEvent: (event) => events.push(String(event.data.delta)),
       execute: async () => {
         void staleEventGate.promise.then(() => {
@@ -231,10 +233,10 @@ describe("AgentTurnRegistry", () => {
     });
     await first.result;
 
-    const replacement = registry.submit({
+    const replacement = host.startTurn({
       runId: "reused-run",
       sessionKey: "agent:main:replacement",
-      state: {},
+      adapterState: {},
       onEvent: (event) => events.push(String(event.data.delta)),
       execute: async () => {
         emitAgentEvent({
@@ -255,12 +257,12 @@ describe("AgentTurnRegistry", () => {
   });
 
   it("rejects duplicate active ids and submissions after sealing", async () => {
-    const registry = new AgentTurnRegistry<Record<string, never>, void>();
+    const host = new LocalAgentHost<Record<string, never>, void>();
     const gate = deferred<void>();
-    registry.submit({
+    host.startTurn({
       runId: "duplicate-run",
       sessionKey: "agent:main:main",
-      state: {},
+      adapterState: {},
       execute: async (signal) => {
         if (signal.aborted) {
           return;
@@ -271,27 +273,60 @@ describe("AgentTurnRegistry", () => {
     });
 
     expect(() =>
-      registry.submit({
+      host.startTurn({
         runId: "duplicate-run",
         sessionKey: "agent:main:main",
-        state: {},
+        adapterState: {},
         execute: async () => undefined,
       }),
-    ).toThrow('Agent turn "duplicate-run" is already active');
+    ).toThrow('Local agent turn "duplicate-run" is already active');
 
-    const sealed = registry.seal();
+    const sealed = host.seal();
     expect(sealed.map((handle) => handle.runId)).toEqual(["duplicate-run"]);
     expect(() =>
-      registry.submit({
+      host.startTurn({
         runId: "late-run",
         sessionKey: "agent:main:main",
-        state: {},
+        adapterState: {},
         execute: async () => undefined,
       }),
-    ).toThrow("Agent turn registry is sealed");
+    ).toThrow("Local agent host is sealed");
 
-    expect(registry.cancelAll("shutdown")).toEqual(["duplicate-run"]);
+    expect(host.cancelAll("shutdown")).toEqual(["duplicate-run"]);
     await Promise.all(sealed.map((handle) => handle.result));
-    expect(registry.list()).toEqual([]);
+    expect(host.list()).toEqual([]);
+  });
+
+  it("composes caller cancellation with host cancellation", async () => {
+    const host = new LocalAgentHost<Record<string, never>, void>();
+    const parent = new AbortController();
+    const handle = host.startTurn({
+      runId: "parent-cancelled-run",
+      sessionKey: "agent:main:main",
+      adapterState: {},
+      abortSignal: parent.signal,
+      execute: async (signal) => {
+        await new Promise<void>((resolve) => {
+          signal.addEventListener("abort", () => resolve(), { once: true });
+        });
+      },
+    });
+
+    parent.abort("client cancelled");
+
+    expect(handle.signal.aborted).toBe(true);
+    expect(handle.signal.reason).toBe("client cancelled");
+    expect(handle.cancel("host cancelled")).toBe(false);
+    await handle.result;
+    expect(host.list()).toEqual([]);
+  });
+
+  it("depends only on the scoped agent-event transport", () => {
+    const source = readFileSync(new URL("./local-agent-host.ts", import.meta.url), "utf8");
+    const references = collectModuleReferencesFromSource(source) as Array<{ specifier: string }>;
+
+    expect(new Set(references.map((reference) => reference.specifier))).toEqual(
+      new Set(["../infra/agent-events.js"]),
+    );
   });
 });

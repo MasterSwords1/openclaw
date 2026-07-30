@@ -9,13 +9,13 @@ import {
   resolveDefaultAgentId,
   resolveSessionAgentId,
 } from "../agents/agent-scope.js";
-import { type AgentTurnHandle, AgentTurnRegistry } from "../agents/agent-turn-registry.js";
 import { ensureContextWindowCacheLoaded } from "../agents/context.js";
 import { DEFAULT_PROVIDER } from "../agents/defaults.js";
 import {
   queueEmbeddedAgentMessageWithOutcomeAsync,
   resolveActiveEmbeddedRunSessionId,
 } from "../agents/embedded-agent-runner/runs.js";
+import { type LocalAgentTurnHandle, LocalAgentHost } from "../agents/local-agent-host.js";
 import {
   buildAllowedModelSet,
   buildConfiguredModelCatalog,
@@ -143,7 +143,7 @@ type LocalRunState = {
   markQueuedRunReady: () => void;
 };
 
-type LocalTurnHandle = AgentTurnHandle<LocalRunState, void>;
+type LocalTurnHandle = LocalAgentTurnHandle<LocalRunState, void>;
 
 type QueuedSessionRun = {
   runId: string;
@@ -368,7 +368,7 @@ export class EmbeddedTuiBackend implements TuiBackend {
   onGap?: (info: { expected: number; received: number }) => void;
 
   private readonly deps = createDefaultDeps();
-  private turns = new AgentTurnRegistry<LocalRunState, void>();
+  private localAgentHost = new LocalAgentHost<LocalRunState, void>();
   private started = false;
   private previousRuntimeLog?: typeof defaultRuntime.log;
   private previousRuntimeError?: typeof defaultRuntime.error;
@@ -416,9 +416,9 @@ export class EmbeddedTuiBackend implements TuiBackend {
     this.unsubscribePluginApprovals?.();
     this.unsubscribePluginApprovals = undefined;
     const maintenancePromises: Promise<void>[] = [];
-    const activeTurns = this.turns.seal();
+    const activeTurns = this.localAgentHost.seal();
     for (const turn of activeTurns) {
-      const run = turn.state;
+      const run = turn.adapterState;
       if (run.finishing || run.lifecycleEnded) {
         maintenancePromises.push(turn.result);
         continue;
@@ -428,16 +428,16 @@ export class EmbeddedTuiBackend implements TuiBackend {
     this.pluginApprovalBroker.stop();
     const maintenanceCompleted = await waitForLocalRunShutdown(maintenancePromises);
     if (!maintenanceCompleted) {
-      for (const turn of this.turns.list()) {
-        const run = turn.state;
+      for (const turn of this.localAgentHost.list()) {
+        const run = turn.adapterState;
         if (run.finishing || run.lifecycleEnded) {
           turn.cancel();
         }
       }
     }
     this.clearPendingLifecycleErrors();
-    this.turns.detachAll("embedded TUI stopped");
-    this.turns = new AgentTurnRegistry<LocalRunState, void>();
+    this.localAgentHost.detachAll("embedded TUI stopped");
+    this.localAgentHost = new LocalAgentHost<LocalRunState, void>();
     this.started = false;
     defaultRuntime.log = this.previousRuntimeLog ?? defaultRuntime.log;
     defaultRuntime.error = this.previousRuntimeError ?? defaultRuntime.error;
@@ -526,11 +526,11 @@ export class EmbeddedTuiBackend implements TuiBackend {
       queuedRunReady: queuedRunReadiness.promise,
       markQueuedRunReady: queuedRunReadiness.markReady,
     };
-    const turn = this.turns.submit({
+    const turn = this.localAgentHost.startTurn({
       runId,
       sessionKey: opts.sessionKey,
       agentId,
-      state,
+      adapterState: state,
       onEvent: (event) => this.handleAgentEvent(event),
       execute: async (signal) =>
         await this.runTurn({
@@ -561,8 +561,8 @@ export class EmbeddedTuiBackend implements TuiBackend {
       // Session-scoped abort for local embedded: abort all matching runs.
       let aborted = false;
       const runIds: string[] = [];
-      for (const turn of this.turns.list()) {
-        const { runId, state: run } = turn;
+      for (const turn of this.localAgentHost.list()) {
+        const { runId, adapterState: run } = turn;
         if (run.isBtw) {
           continue;
         }
@@ -586,8 +586,8 @@ export class EmbeddedTuiBackend implements TuiBackend {
       }
       return { ok: true, aborted, runIds };
     }
-    const turn = this.turns.get(opts.runId);
-    const run = turn?.state;
+    const turn = this.localAgentHost.get(opts.runId);
+    const run = turn?.adapterState;
     if (!turn || !run || run.sessionKey !== opts.sessionKey) {
       return { ok: true, aborted: false, runIds: [] };
     }
@@ -664,12 +664,12 @@ export class EmbeddedTuiBackend implements TuiBackend {
     const capped = capArrayByJsonBytes(replaced.messages, maxHistoryBytes).items;
     const bounded = enforceChatHistoryFinalBudget({ messages: capped, maxBytes: maxHistoryBytes });
     const messages = bounded.messages;
-    const newestInFlightRun = this.turns
+    const newestInFlightRun = this.localAgentHost
       .list()
       .findLast(
         (turn) =>
-          !turn.state.isBtw &&
-          !turn.state.finalSent &&
+          !turn.adapterState.isBtw &&
+          !turn.adapterState.finalSent &&
           agentSessionKeysMatchByRequestKey(turn.sessionKey, opts.sessionKey) &&
           normalizeAgentId(turn.agentId) === normalizeAgentId(sessionAgentId),
       );
@@ -677,7 +677,7 @@ export class EmbeddedTuiBackend implements TuiBackend {
       ? {
           runId: newestInFlightRun.runId,
           text: projectLiveAssistantBufferedText(
-            normalizeLiveAssistantBufferedText(newestInFlightRun.state.buffer).trim(),
+            normalizeLiveAssistantBufferedText(newestInFlightRun.adapterState.buffer).trim(),
             { suppressLeadFragments: true },
           ).text.trim(),
         }
@@ -896,7 +896,7 @@ export class EmbeddedTuiBackend implements TuiBackend {
   }
 
   async getGatewayStatus() {
-    const activeCount = this.turns.list().length;
+    const activeCount = this.localAgentHost.list().length;
     return `local embedded mode${activeCount > 0 ? ` (${String(activeCount)} active run${activeCount === 1 ? "" : "s"})` : ""}`;
   }
 
@@ -1074,7 +1074,7 @@ export class EmbeddedTuiBackend implements TuiBackend {
     }
     const inheritedSummaryLines: string[] = [];
     for (const [turn, indices] of droppedByTurn) {
-      const run = turn.state;
+      const run = turn.adapterState;
       for (const index of indices.toSorted((a, b) => b - a)) {
         run.pendingQueue?.messages.splice(index, 1);
       }
@@ -1090,8 +1090,8 @@ export class EmbeddedTuiBackend implements TuiBackend {
     }
 
     const enqueuedAt = Date.now();
-    for (const turn of this.turns.list()) {
-      const run = turn.state;
+    for (const turn of this.localAgentHost.list()) {
+      const run = turn.adapterState;
       if (!this.isSameRunScope(run, params.runScope) || !run.pendingQueue) {
         continue;
       }
@@ -1100,12 +1100,14 @@ export class EmbeddedTuiBackend implements TuiBackend {
     }
 
     if (params.settings.mode === "collect") {
-      const target = this.turns
+      const target = this.localAgentHost
         .list()
         .findLast(
-          (turn) => this.isSameRunScope(turn.state, params.runScope) && turn.state.pendingQueue,
+          (turn) =>
+            this.isSameRunScope(turn.adapterState, params.runScope) &&
+            turn.adapterState.pendingQueue,
         );
-      const targetQueue = target?.state.pendingQueue;
+      const targetQueue = target?.adapterState.pendingQueue;
       if (target && targetQueue?.mode === "collect" && !target.signal.aborted) {
         targetQueue.messages.push(params.message);
         targetQueue.dropPolicy = params.settings.dropPolicy ?? DEFAULT_QUEUE_DROP;
@@ -1134,8 +1136,8 @@ export class EmbeddedTuiBackend implements TuiBackend {
     agentId?: string;
   }): LocalPendingMessage[] {
     const pending: LocalPendingMessage[] = [];
-    for (const turn of this.turns.list()) {
-      const run = turn.state;
+    for (const turn of this.localAgentHost.list()) {
+      const run = turn.adapterState;
       if (!this.isSameRunScope(run, params) || !run.pendingQueue) {
         continue;
       }
@@ -1151,8 +1153,8 @@ export class EmbeddedTuiBackend implements TuiBackend {
     agentId?: string;
   }): QueuedSessionRun | undefined {
     let queuedAfter: QueuedSessionRun | undefined;
-    for (const turn of this.turns.list()) {
-      const run = turn.state;
+    for (const turn of this.localAgentHost.list()) {
+      const run = turn.adapterState;
       if (this.isSameRunScope(run, params) && !run.isBtw) {
         queuedAfter = { runId: turn.runId, run, promise: turn.result };
       }
@@ -1161,8 +1163,8 @@ export class EmbeddedTuiBackend implements TuiBackend {
   }
 
   private abortSessionRuns(params: { sessionKey: string; agentId?: string }) {
-    for (const turn of this.turns.list()) {
-      const run = turn.state;
+    for (const turn of this.localAgentHost.list()) {
+      const run = turn.adapterState;
       if (this.isSameRunScope(run, params) && !run.isBtw && this.isAbortableRun(turn.runId, run)) {
         turn.cancel();
       }
@@ -1170,8 +1172,8 @@ export class EmbeddedTuiBackend implements TuiBackend {
   }
 
   private hasAbortableSessionRun(params: { sessionKey: string; agentId?: string }): boolean {
-    for (const turn of this.turns.list()) {
-      const run = turn.state;
+    for (const turn of this.localAgentHost.list()) {
+      const run = turn.adapterState;
       if (this.isSameRunScope(run, params) && !run.isBtw && this.isAbortableRun(turn.runId, run)) {
         return true;
       }
@@ -1190,7 +1192,7 @@ export class EmbeddedTuiBackend implements TuiBackend {
   }
 
   private isAbortableRun(runId: string, run: LocalRunState): boolean {
-    return !run.lifecycleEnded || this.turns.get(runId) !== undefined;
+    return !run.lifecycleEnded || this.localAgentHost.get(runId) !== undefined;
   }
 
   private nextSeq() {
@@ -1361,11 +1363,11 @@ export class EmbeddedTuiBackend implements TuiBackend {
   }
 
   private handleAgentEvent(evt: AgentEventPayload) {
-    const turn = this.turns.get(evt.runId);
+    const turn = this.localAgentHost.get(evt.runId);
     if (!turn) {
       return;
     }
-    const run = turn.state;
+    const run = turn.adapterState;
 
     const lifecyclePhase =
       evt.stream === "lifecycle" && typeof evt.data?.phase === "string" ? evt.data.phase : "";
@@ -1447,7 +1449,7 @@ export class EmbeddedTuiBackend implements TuiBackend {
   }
 
   private getCurrentTurnState(runId: string, state: LocalRunState): LocalRunState | undefined {
-    return this.turns.get(runId)?.state === state ? state : undefined;
+    return this.localAgentHost.get(runId)?.adapterState === state ? state : undefined;
   }
 
   private async runTurn(params: {

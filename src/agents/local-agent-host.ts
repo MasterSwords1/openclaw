@@ -1,44 +1,50 @@
 import type { AgentEventPayload } from "../infra/agent-events.js";
 import { withAgentEventSink } from "../infra/agent-events.js";
 
-export type AgentTurnHandle<TState, TResult> = {
+export type LocalAgentTurnHandle<TAdapterState, TResult> = {
   readonly runId: string;
   readonly sessionKey: string;
   readonly agentId?: string;
-  readonly state: TState;
+  readonly adapterState: TAdapterState;
   readonly signal: AbortSignal;
   readonly result: Promise<TResult>;
   cancel: (reason?: unknown) => boolean;
 };
 
-type AgentTurnSubmission<TState, TResult> = {
+export type LocalAgentTurnStart<TAdapterState, TResult> = {
   runId: string;
   sessionKey: string;
   agentId?: string;
-  state: TState;
+  adapterState: TAdapterState;
+  abortSignal?: AbortSignal;
   execute: (signal: AbortSignal) => Promise<TResult>;
   onEvent?: (event: AgentEventPayload) => void;
 };
 
 /**
- * Owns process-local turn handles above the model runner.
+ * Owns process-local turn handles above an injected agent executor.
  *
- * Queue policy and presentation state stay with adapters; this registry owns
- * registration, cancellation, scoped events, and terminal cleanup.
+ * Adapter state stays opaque. Queue, delivery, presentation, and session policy
+ * remain outside this host.
  */
-export class AgentTurnRegistry<TState, TResult> {
-  private readonly active = new Map<string, AgentTurnHandle<TState, TResult>>();
+export class LocalAgentHost<TAdapterState, TResult> {
+  private readonly active = new Map<string, LocalAgentTurnHandle<TAdapterState, TResult>>();
   private sealed = false;
 
-  submit(input: AgentTurnSubmission<TState, TResult>): AgentTurnHandle<TState, TResult> {
+  startTurn(
+    input: LocalAgentTurnStart<TAdapterState, TResult>,
+  ): LocalAgentTurnHandle<TAdapterState, TResult> {
     if (this.sealed) {
-      throw new Error("Agent turn registry is sealed");
+      throw new Error("Local agent host is sealed");
     }
     if (this.active.has(input.runId)) {
-      throw new Error(`Agent turn "${input.runId}" is already active`);
+      throw new Error(`Local agent turn "${input.runId}" is already active`);
     }
 
     const controller = new AbortController();
+    const signal = input.abortSignal
+      ? AbortSignal.any([controller.signal, input.abortSignal])
+      : controller.signal;
     let resolveResult!: (value: TResult | PromiseLike<TResult>) => void;
     let rejectResult!: (reason?: unknown) => void;
     const result = new Promise<TResult>((resolve, reject) => {
@@ -46,15 +52,15 @@ export class AgentTurnRegistry<TState, TResult> {
       rejectResult = reject;
     });
 
-    const handle: AgentTurnHandle<TState, TResult> = {
+    const handle: LocalAgentTurnHandle<TAdapterState, TResult> = {
       runId: input.runId,
       sessionKey: input.sessionKey,
       agentId: input.agentId,
-      state: input.state,
-      signal: controller.signal,
+      adapterState: input.adapterState,
+      signal,
       result,
       cancel: (reason) => {
-        if (controller.signal.aborted) {
+        if (signal.aborted) {
           return false;
         }
         controller.abort(reason);
@@ -75,7 +81,7 @@ export class AgentTurnRegistry<TState, TResult> {
             input.onEvent?.(event);
           }
         },
-        () => input.execute(controller.signal),
+        () => input.execute(signal),
       );
       void Promise.resolve(execution).then(
         (value) => {
@@ -95,15 +101,15 @@ export class AgentTurnRegistry<TState, TResult> {
     return handle;
   }
 
-  get(runId: string): AgentTurnHandle<TState, TResult> | undefined {
+  get(runId: string): LocalAgentTurnHandle<TAdapterState, TResult> | undefined {
     return this.active.get(runId);
   }
 
-  list(): AgentTurnHandle<TState, TResult>[] {
+  list(): LocalAgentTurnHandle<TAdapterState, TResult>[] {
     return [...this.active.values()];
   }
 
-  seal(): AgentTurnHandle<TState, TResult>[] {
+  seal(): LocalAgentTurnHandle<TAdapterState, TResult>[] {
     this.sealed = true;
     return this.list();
   }
@@ -118,7 +124,7 @@ export class AgentTurnRegistry<TState, TResult> {
     return cancelled;
   }
 
-  detachAll(reason?: unknown): AgentTurnHandle<TState, TResult>[] {
+  detachAll(reason?: unknown): LocalAgentTurnHandle<TAdapterState, TResult>[] {
     const detached = this.list();
     this.active.clear();
     for (const handle of detached) {
