@@ -154,7 +154,10 @@ describe("live transport suite runtime", () => {
 
   it("uses the same Discord selection for listing and execution", async () => {
     const stdoutWrite = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
-    const selectScenarioIds = vi.fn(() => ["channel-canary", "thread-follow-up"]);
+    const selectScenarioIds = vi.fn((_selection: unknown) => [
+      "channel-canary",
+      "thread-follow-up",
+    ]);
     const base = {
       channelId: "discord",
       defaultProviderMode: "mock-openai" as const,
