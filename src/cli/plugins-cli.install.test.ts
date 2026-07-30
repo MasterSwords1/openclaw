@@ -363,6 +363,7 @@ type MockWithCalls = {
 };
 
 type PluginInstallCall = {
+  acknowledgeInstallPolicyWarning?: boolean;
   allowSourceTypeScriptEntries?: boolean;
   archivePath?: string;
   dangerouslyForceUnsafeInstall?: boolean;
@@ -638,8 +639,8 @@ describe("plugins cli install", () => {
     const helpText = installCommand?.helpInformation() ?? "";
 
     expect(helpText.match(/--force/g)).toHaveLength(1);
-    expect(helpText).toContain("Confirm non-ClawHub sources and overwrite");
-    expect(helpText).toContain("an existing plugin or hook pack");
+    expect(helpText).toMatch(/Confirm non-ClawHub sources and\s+overwrite/u);
+    expect(helpText).toMatch(/an existing plugin or hook\s+pack/u);
   });
 
   it("refuses plugin installs in Nix mode before installer side effects", async () => {
@@ -1617,7 +1618,7 @@ describe("plugins cli install", () => {
     expect(reportClawHubPluginInstallTelemetry).not.toHaveBeenCalled();
   });
 
-  it("passes ClawHub risk acknowledgement to explicit ClawHub installs", async () => {
+  it("passes explicit acknowledgements to ClawHub installs", async () => {
     primeSuccessfulClawHubPluginInstall({
       trust: {
         disposition: "review-required",
@@ -1628,12 +1629,19 @@ describe("plugins cli install", () => {
       },
     });
 
-    await runPluginsCommand(["plugins", "install", "clawhub:demo", "--acknowledge-clawhub-risk"]);
+    await runPluginsCommand([
+      "plugins",
+      "install",
+      "clawhub:demo",
+      "--acknowledge-clawhub-risk",
+      "--acknowledge-install-policy-warning",
+    ]);
 
     expect(installPluginFromClawHub).toHaveBeenCalledWith(
       expect.objectContaining({
         spec: "clawhub:demo",
         acknowledgeClawHubRisk: true,
+        acknowledgeInstallPolicyWarning: true,
       }),
     );
     const record = persistedInstallRecord("demo");

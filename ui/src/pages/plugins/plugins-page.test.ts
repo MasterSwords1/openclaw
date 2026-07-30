@@ -2,6 +2,7 @@
 
 import { expectDefined } from "@openclaw/normalization-core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { GatewayRequestError } from "../../api/gateway.ts";
 import type { ApplicationContext } from "../../app/context.ts";
 import { i18n } from "../../i18n/index.ts";
 import { createRuntimeConfigCapability } from "../../lib/config/index.ts";
@@ -433,6 +434,61 @@ describe("PluginsPage", () => {
       runtimeConfig.dispose();
     },
   );
+
+  it("retries install-policy warnings with explicit acknowledgement", async () => {
+    const installedPlugin = createPlugin({ installed: true, enabled: true, state: "enabled" });
+    let installAttempts = 0;
+    const { client, request } = createClient(async (method) => {
+      if (method === "plugins.install") {
+        installAttempts += 1;
+        if (installAttempts === 1) {
+          throw new GatewayRequestError({
+            code: "INVALID_REQUEST",
+            message: "Install policy warning",
+            details: {
+              installPolicyWarning: {
+                reason: "Manual review recommended.",
+                findings: [
+                  {
+                    ruleId: "dangerous-exec",
+                    severity: "warn",
+                    message: "The package launches a child process.",
+                  },
+                ],
+              },
+            },
+          });
+        }
+        return { ok: true, plugin: installedPlugin, restartRequired: true };
+      }
+      if (method === "plugins.list") {
+        return createResult(installedPlugin);
+      }
+      throw new Error(`Unexpected method ${method}`);
+    });
+    const harness = createGateway(client);
+    const { page } = await mountPage(
+      createContext(harness.gateway),
+      createPluginsRouteData(harness.gateway),
+    );
+
+    await page.install("plugin:workboard", {
+      source: "official",
+      pluginId: "workboard",
+    });
+
+    const warning = page.querySelector<HTMLElement>('[data-plugin-id="workboard"] [role="alert"]');
+    expect(warning?.textContent).toContain("Manual review recommended.");
+    expect(warning?.textContent).toContain("The package launches a child process.");
+    warning?.querySelector<HTMLButtonElement>("button")?.click();
+
+    await waitForFast(() => expect(installAttempts).toBe(2));
+    expect(request).toHaveBeenCalledWith("plugins.install", {
+      source: "official",
+      pluginId: "workboard",
+      acknowledgeInstallPolicyWarning: true,
+    });
+  });
 
   it("keeps the enable action retryable after a failed enable", async () => {
     const { client, request } = createClient(async (method) => {

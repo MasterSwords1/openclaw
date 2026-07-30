@@ -739,6 +739,10 @@ describe("skills cli commands", () => {
   it.each([
     { flag: "--force-install", option: "forceInstall" },
     { flag: "--acknowledge-clawhub-risk", option: "acknowledgeClawHubRisk" },
+    {
+      flag: "--acknowledge-install-policy-warning",
+      option: "acknowledgeInstallPolicyWarning",
+    },
   ])("passes $flag through for ClawHub skill installs", async ({ flag, option }) => {
     primeCalendarInstall();
 
@@ -840,6 +844,10 @@ describe("skills cli commands", () => {
   it.each([
     { flag: "--force-install", option: "forceInstall" },
     { flag: "--acknowledge-clawhub-risk", option: "acknowledgeClawHubRisk" },
+    {
+      flag: "--acknowledge-install-policy-warning",
+      option: "acknowledgeInstallPolicyWarning",
+    },
   ])("passes $flag through for ClawHub skill updates", async ({ flag, option }) => {
     primeCalendarUpdate();
 

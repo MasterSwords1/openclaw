@@ -9,6 +9,7 @@ import { installPackageDir } from "../../infra/install-package-dir.js";
 import { resolveSafeInstallDir } from "../../infra/install-safe-path.js";
 import {
   evaluateSkillInstallPolicy,
+  type InstallPolicyWarning,
   type InstallSecurityScanResult,
 } from "../../plugins/install-security-scan.js";
 import type { InstallPolicyOrigin, InstallPolicySource } from "../../security/install-policy.js";
@@ -39,19 +40,29 @@ function hasNonAscii(value: string): boolean {
 }
 
 type SkillArchiveInstallPolicy = {
+  acknowledgeInstallPolicyWarning?: boolean;
   config?: OpenClawConfig;
   installId?: string;
   origin: InstallPolicyOrigin;
   requestedSpecifier?: string;
+  onInstallPolicyWarning?: (warning: InstallPolicyWarning) => boolean | Promise<boolean>;
   source?: InstallPolicySource;
 };
 
 /** Result shape for installing a skill archive into a workspace skills dir. */
-type SkillArchiveInstallResult =
+export type SkillArchiveInstallResult =
   | { ok: true; targetDir: string }
-  | { ok: false; error: string; failureKind: SkillArchiveInstallFailureKind };
+  | {
+      ok: false;
+      error: string;
+      failureKind: SkillArchiveInstallFailureKind;
+      installPolicyWarning?: InstallPolicyWarning;
+    };
 
-export type SkillArchiveInstallFailureKind = "invalid-request" | "unavailable";
+export type SkillArchiveInstallFailureKind =
+  | "acknowledgement-required"
+  | "invalid-request"
+  | "unavailable";
 
 /** Normalizes a tracked slug without accepting traversal or path separators. */
 export function normalizeTrackedSkillSlug(raw: string): string {
@@ -86,8 +97,14 @@ export function resolveWorkspaceSkillInstallDir(workspaceDir: string, slug: stri
 function installFailure(
   error: string,
   failureKind: SkillArchiveInstallFailureKind,
+  installPolicyWarning?: InstallPolicyWarning,
 ): SkillArchiveInstallResult {
-  return { ok: false, error, failureKind };
+  return {
+    ok: false,
+    error,
+    failureKind,
+    ...(installPolicyWarning ? { installPolicyWarning } : {}),
+  };
 }
 
 async function hasSkillArchiveRoot(
@@ -187,10 +204,12 @@ export async function installExtractedSkillRoot(params: {
 
     if (params.policy) {
       const scanResult = await evaluateSkillInstallPolicy({
+        acknowledgeInstallPolicyWarning: params.policy.acknowledgeInstallPolicyWarning,
         config: params.policy.config,
         installId: params.policy.installId ?? "archive",
         logger: params.logger ?? {},
         origin: params.policy.origin,
+        onInstallPolicyWarning: params.policy.onInstallPolicyWarning,
         requestedSpecifier: params.policy.requestedSpecifier,
         source: params.policy.source,
         mode: effectiveMode,
@@ -201,6 +220,13 @@ export async function installExtractedSkillRoot(params: {
         return installFailure(
           scanResult.blocked.reason,
           scanBlockedFailureKind(scanResult.blocked),
+        );
+      }
+      if (scanResult?.warning) {
+        return installFailure(
+          scanResult.warning.reason,
+          "acknowledgement-required",
+          scanResult.warning,
         );
       }
     }
@@ -273,10 +299,16 @@ export async function installSkillArchiveFromPath(params: {
       : result.error;
     const failureKind =
       "failureKind" in result &&
-      (result.failureKind === "invalid-request" || result.failureKind === "unavailable")
+      (result.failureKind === "acknowledgement-required" ||
+        result.failureKind === "invalid-request" ||
+        result.failureKind === "unavailable")
         ? result.failureKind
         : archiveFailureKind(error);
-    return installFailure(error, failureKind);
+    return installFailure(
+      error,
+      failureKind,
+      "installPolicyWarning" in result ? result.installPolicyWarning : undefined,
+    );
   }
   return result;
 }

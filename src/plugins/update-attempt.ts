@@ -4,6 +4,7 @@ import type { UpdateChannel } from "../infra/update-channels.js";
 import { CLAWHUB_INSTALL_ERROR_CODE } from "./clawhub-error-codes.js";
 import { installPluginFromClawHub, type ClawHubRiskAcknowledgementRequest } from "./clawhub.js";
 import { installPluginFromGitSpec } from "./git-install.js";
+import type { InstallPolicyWarning } from "./install-security-scan.js";
 import { installPluginFromNpmSpec, PLUGIN_INSTALL_ERROR_CODE } from "./install.js";
 import { installPluginFromMarketplace } from "./marketplace.js";
 import { shouldFallbackClawHubBridgeToNpm } from "./update-config.js";
@@ -340,6 +341,10 @@ export async function runPluginUpdateAttempt(params: {
     acknowledgeClawHubRisk?: boolean;
     onClawHubRisk?: (request: ClawHubRiskAcknowledgementRequest) => boolean | Promise<boolean>;
   };
+  installPolicyAcknowledgementOptions: {
+    acknowledgeInstallPolicyWarning?: boolean;
+    onInstallPolicyWarning?: (warning: InstallPolicyWarning) => boolean | Promise<boolean>;
+  };
 }): Promise<PluginUpdateAttemptResult> {
   const dryRunOption = params.dryRun ? { dryRun: true } : {};
   const phase = params.dryRun ? "check" : "update";
@@ -356,6 +361,7 @@ export async function runPluginUpdateAttempt(params: {
             timeoutMs: params.timeoutMs,
             ...dryRunOption,
             dangerouslyForceUnsafeInstall: params.dangerouslyForceUnsafeInstall,
+            ...params.installPolicyAcknowledgementOptions,
             trustedSourceLinkedOfficialInstall: params.trustedSourceLinkedOfficialInstall,
             expectedPluginId: params.pluginId,
             expectedIntegrity: params.expectedIntegrity,
@@ -377,6 +383,7 @@ export async function runPluginUpdateAttempt(params: {
               timeoutMs: params.timeoutMs,
               ...dryRunOption,
               dangerouslyForceUnsafeInstall: params.dangerouslyForceUnsafeInstall,
+              ...params.installPolicyAcknowledgementOptions,
               expectedPluginId: params.pluginId,
               ...params.clawHubRiskAcknowledgementOptions,
               logger: params.logger,
@@ -390,6 +397,7 @@ export async function runPluginUpdateAttempt(params: {
                 timeoutMs: params.timeoutMs,
                 ...dryRunOption,
                 dangerouslyForceUnsafeInstall: params.dangerouslyForceUnsafeInstall,
+                ...params.installPolicyAcknowledgementOptions,
                 expectedPluginId: params.pluginId,
                 logger: params.logger,
               })
@@ -402,6 +410,7 @@ export async function runPluginUpdateAttempt(params: {
                 timeoutMs: params.timeoutMs,
                 ...dryRunOption,
                 dangerouslyForceUnsafeInstall: params.dangerouslyForceUnsafeInstall,
+                ...params.installPolicyAcknowledgementOptions,
                 expectedPluginId: params.pluginId,
                 logger: params.logger,
               });
@@ -451,6 +460,7 @@ export async function runPluginUpdateAttempt(params: {
       timeoutMs: params.timeoutMs,
       ...dryRunOption,
       dangerouslyForceUnsafeInstall: params.dangerouslyForceUnsafeInstall,
+      ...params.installPolicyAcknowledgementOptions,
       trustedSourceLinkedOfficialInstall: params.trustedSourceLinkedOfficialInstall,
       expectedPluginId: params.pluginId,
       expectedIntegrity: await params.getFallbackExpectedIntegrity(),
@@ -487,6 +497,7 @@ export async function runPluginUpdateAttempt(params: {
       timeoutMs: params.timeoutMs,
       ...dryRunOption,
       dangerouslyForceUnsafeInstall: params.dangerouslyForceUnsafeInstall,
+      ...params.installPolicyAcknowledgementOptions,
       expectedPluginId: params.pluginId,
       ...params.clawHubRiskAcknowledgementOptions,
       logger: params.logger,
@@ -524,6 +535,7 @@ export async function runPluginUpdateAttempt(params: {
       timeoutMs: params.timeoutMs,
       ...dryRunOption,
       dangerouslyForceUnsafeInstall: params.dangerouslyForceUnsafeInstall,
+      ...params.installPolicyAcknowledgementOptions,
       trustedSourceLinkedOfficialInstall: true,
       expectedPluginId: params.pluginId,
       logger: params.logger,

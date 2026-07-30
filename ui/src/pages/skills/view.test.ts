@@ -733,6 +733,7 @@ describe("renderSkills", () => {
             text: "REVIEW REQUIRED - ClawHub found suspicious behavior.",
             acknowledgeSlug: "github",
             acknowledgeVersion: "1.2.3",
+            acknowledgeClawHubRisk: true,
           },
           onClawHubInstall,
         }),
@@ -748,7 +749,37 @@ describe("renderSkills", () => {
     retryButton!.click();
 
     expect(onClawHubInstall).toHaveBeenCalledTimes(1);
-    expect(onClawHubInstall).toHaveBeenCalledWith("github", true, "1.2.3");
+    expect(onClawHubInstall).toHaveBeenCalledWith("github", true, "1.2.3", undefined);
+  });
+
+  it("renders install-policy acknowledgement retry actions", async () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    dialogRestores.push(() => container.remove());
+    const onClawHubInstall = vi.fn();
+
+    render(
+      renderSkills(
+        createProps({
+          clawhubInstallMessage: {
+            kind: "error",
+            text: "Manual review recommended.",
+            acknowledgeSlug: "github",
+            acknowledgeVersion: "1.2.3",
+            acknowledgeClawHubRisk: true,
+            acknowledgeInstallPolicyWarning: true,
+          },
+          onClawHubInstall,
+        }),
+      ),
+      container,
+    );
+
+    const retryButton = container.querySelector<HTMLButtonElement>(".callout button");
+    expect(retryButton).toBeInstanceOf(HTMLButtonElement);
+    retryButton!.click();
+
+    expect(onClawHubInstall).toHaveBeenCalledWith("github", true, "1.2.3", true);
   });
 
   it("renders installed ClawHub verdicts and the local Skill Card tab", async () => {

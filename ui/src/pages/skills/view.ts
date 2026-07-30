@@ -88,6 +88,8 @@ type SkillsProps = {
     acknowledgeSlug?: string;
     acknowledgeVersion?: string;
     acknowledgeLabel?: string;
+    acknowledgeClawHubRisk?: boolean;
+    acknowledgeInstallPolicyWarning?: boolean;
   } | null;
   onFilterChange: (next: string) => void;
   onAgentChange: (agentId: string) => void;
@@ -96,14 +98,24 @@ type SkillsProps = {
   onToggle: (skillKey: string, enabled: boolean) => void;
   onEdit: (skillKey: string, value: string) => void;
   onSaveKey: (skillKey: string) => void;
-  onInstall: (skillKey: string, name: string, installId: string) => void;
+  onInstall: (
+    skillKey: string,
+    name: string,
+    installId: string,
+    acknowledgeInstallPolicyWarning?: boolean,
+  ) => void;
   onDetailOpen: (skillKey: string) => void;
   onDetailClose: () => void;
   onDetailTabChange: (tab: SkillDetailTab) => void;
   onClawHubQueryChange: (query: string) => void;
   onClawHubDetailOpen: (slug: string) => void;
   onClawHubDetailClose: () => void;
-  onClawHubInstall: (slug: string, acknowledgeClawHubRisk?: boolean, version?: string) => void;
+  onClawHubInstall: (
+    slug: string,
+    acknowledgeClawHubRisk?: boolean,
+    version?: string,
+    acknowledgeInstallPolicyWarning?: boolean,
+  ) => void;
 };
 
 type StatusTabDef = { id: SkillsStatusFilter; labelKey: string };
@@ -419,8 +431,9 @@ function renderClawHubSection(props: SkillsProps) {
                   @click=${() =>
                     props.onClawHubInstall(
                       props.clawhubInstallMessage?.acknowledgeSlug ?? "",
-                      true,
+                      props.clawhubInstallMessage?.acknowledgeClawHubRisk,
                       props.clawhubInstallMessage?.acknowledgeVersion,
+                      props.clawhubInstallMessage?.acknowledgeInstallPolicyWarning,
                     )}
                 >
                   ${props.clawhubInstallMessage.acknowledgeLabel ?? t("skillsPage.acknowledgeRisk")}
@@ -722,7 +735,26 @@ function renderSkillDetail(skill: SkillStatusEntry, props: SkillsProps) {
 
           ${message
             ? html`<div class="callout ${message.kind === "error" ? "danger" : "success"}">
-                ${message.message}
+                <div style="white-space: pre-wrap;">${message.message}</div>
+                ${message.acknowledgeInstallPolicyWarning
+                  ? html`<button
+                      type="button"
+                      class="btn btn--sm"
+                      style="margin-top: 10px;"
+                      ?disabled=${locked}
+                      @click=${() =>
+                        message.acknowledgeInstallPolicyWarning
+                          ? props.onInstall(
+                              skill.skillKey,
+                              message.acknowledgeInstallPolicyWarning.name,
+                              message.acknowledgeInstallPolicyWarning.installId,
+                              true,
+                            )
+                          : undefined}
+                    >
+                      ${t("skillsPage.acknowledgeRisk")}
+                    </button>`
+                  : nothing}
               </div>`
             : nothing}
           ${skill.primaryEnv

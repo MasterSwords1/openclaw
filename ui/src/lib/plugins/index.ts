@@ -4,6 +4,10 @@ import {
   readClawHubTrustErrorDetails,
   type ClawHubTrustErrorDetails,
 } from "../../../../packages/gateway-protocol/src/clawhub-trust-error-details.js";
+import {
+  readInstallPolicyWarningDetails,
+  type InstallPolicyWarningDetails,
+} from "../../../../packages/gateway-protocol/src/install-policy-warning-details.js";
 import type {
   PluginCatalogEntry,
   PluginsInstallParams,
@@ -62,4 +66,13 @@ export function pluginInstallNeedsRiskAcknowledgement(error: unknown): boolean {
     readPluginInstallTrustError(error)?.clawhubTrustCode ===
     ClawHubTrustErrorCodes.RISK_ACKNOWLEDGEMENT_REQUIRED
   );
+}
+
+export function readPluginInstallPolicyWarning(
+  error: unknown,
+): InstallPolicyWarningDetails["installPolicyWarning"] | undefined {
+  if (!(error instanceof GatewayRequestError)) {
+    return undefined;
+  }
+  return readInstallPolicyWarningDetails(error.details)?.installPolicyWarning;
 }

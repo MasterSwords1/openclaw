@@ -2,6 +2,7 @@
 import { normalizeOptionalString } from "@openclaw/normalization-core/string-coerce";
 import {
   buildClawHubTrustErrorDetails,
+  buildInstallPolicyWarningDetails,
   ErrorCodes,
   errorShape,
   validateSkillsBinsParams,
@@ -90,6 +91,7 @@ function installClawHubSkillDeduped(params: ClawHubInstallParams): Promise<ClawH
     params.version ?? null,
     params.force ?? false,
     params.acknowledgeClawHubRisk ?? false,
+    params.acknowledgeInstallPolicyWarning ?? false,
   ]);
   const active = clawHubInstallsInFlight.get(key);
   if (active) {
@@ -661,6 +663,7 @@ export const skillsHandlers: GatewayRequestHandlers = {
         version?: string;
         force?: boolean;
         acknowledgeClawHubRisk?: boolean;
+        acknowledgeInstallPolicyWarning?: boolean;
       };
       const result = await installClawHubSkillDeduped({
         workspaceDir: workspaceDirRaw,
@@ -668,10 +671,20 @@ export const skillsHandlers: GatewayRequestHandlers = {
         version: p.version,
         force: Boolean(p.force),
         ...(p.acknowledgeClawHubRisk ? { acknowledgeClawHubRisk: true } : {}),
+        ...(p.acknowledgeInstallPolicyWarning ? { acknowledgeInstallPolicyWarning: true } : {}),
         logger: context.logGateway,
         config: cfg,
       });
       const errorDetails = result.ok ? undefined : buildClawHubTrustErrorDetails(result);
+      const installPolicyDetails = result.ok
+        ? undefined
+        : buildInstallPolicyWarningDetails({
+            warning: result.installPolicyWarning,
+          });
+      const details =
+        errorDetails || installPolicyDetails
+          ? { ...errorDetails, ...installPolicyDetails }
+          : undefined;
       respond(
         result.ok,
         result.ok
@@ -689,11 +702,7 @@ export const skillsHandlers: GatewayRequestHandlers = {
           : result,
         result.ok
           ? undefined
-          : errorShape(
-              ErrorCodes.UNAVAILABLE,
-              result.error,
-              errorDetails ? { details: errorDetails } : undefined,
-            ),
+          : errorShape(ErrorCodes.UNAVAILABLE, result.error, details ? { details } : undefined),
       );
       return;
     }
@@ -705,6 +714,7 @@ export const skillsHandlers: GatewayRequestHandlers = {
         force?: boolean;
         sha256?: string;
         timeoutMs?: number;
+        acknowledgeInstallPolicyWarning?: boolean;
       };
       const result = await installUploadedSkillArchive({
         uploadId: p.uploadId,
@@ -715,6 +725,7 @@ export const skillsHandlers: GatewayRequestHandlers = {
         workspaceDir: workspaceDirRaw,
         config: cfg,
         log: context.logGateway,
+        ...(p.acknowledgeInstallPolicyWarning ? { acknowledgeInstallPolicyWarning: true } : {}),
       });
       const errorCode =
         !result.ok && result.errorKind === "invalid-request"
@@ -727,10 +738,21 @@ export const skillsHandlers: GatewayRequestHandlers = {
             error: result.error,
             errorCode,
           };
+      const installPolicyDetails = result.ok
+        ? undefined
+        : buildInstallPolicyWarningDetails({
+            warning: result.installPolicyWarning,
+          });
       respond(
         result.ok,
         responseResult,
-        result.ok ? undefined : errorShape(errorCode, result.error),
+        result.ok
+          ? undefined
+          : errorShape(
+              errorCode,
+              result.error,
+              installPolicyDetails ? { details: installPolicyDetails } : undefined,
+            ),
       );
       return;
     }
@@ -738,6 +760,7 @@ export const skillsHandlers: GatewayRequestHandlers = {
       name: string;
       installId: string;
       timeoutMs?: number;
+      acknowledgeInstallPolicyWarning?: boolean;
     };
     const result = await installSkill({
       workspaceDir: workspaceDirRaw,
@@ -745,11 +768,23 @@ export const skillsHandlers: GatewayRequestHandlers = {
       installId: p.installId,
       timeoutMs: p.timeoutMs,
       config: cfg,
+      ...(p.acknowledgeInstallPolicyWarning ? { acknowledgeInstallPolicyWarning: true } : {}),
     });
+    const installPolicyDetails = result.ok
+      ? undefined
+      : buildInstallPolicyWarningDetails({
+          warning: result.installPolicyWarning,
+        });
     respond(
       result.ok,
       result,
-      result.ok ? undefined : errorShape(ErrorCodes.UNAVAILABLE, result.message),
+      result.ok
+        ? undefined
+        : errorShape(
+            ErrorCodes.UNAVAILABLE,
+            result.message,
+            installPolicyDetails ? { details: installPolicyDetails } : undefined,
+          ),
     );
   },
   "skills.update": async ({ params, respond, context }) => {
@@ -762,6 +797,7 @@ export const skillsHandlers: GatewayRequestHandlers = {
         slug?: string;
         all?: boolean;
         acknowledgeClawHubRisk?: boolean;
+        acknowledgeInstallPolicyWarning?: boolean;
       };
       if (!p.slug && !p.all) {
         respond(
@@ -791,11 +827,21 @@ export const skillsHandlers: GatewayRequestHandlers = {
         workspaceDir: resolved.workspaceDir,
         slug: p.slug,
         ...(p.acknowledgeClawHubRisk ? { acknowledgeClawHubRisk: true } : {}),
+        ...(p.acknowledgeInstallPolicyWarning ? { acknowledgeInstallPolicyWarning: true } : {}),
         logger: context.logGateway,
         config: resolved.cfg,
       });
       const errors = results.filter((result) => !result.ok);
       const warnings = collectClawHubTrustWarnings(results);
+      const installPolicyWarningResult = results.find(
+        (result) => !result.ok && result.installPolicyWarning,
+      );
+      const installPolicyDetails =
+        installPolicyWarningResult && !installPolicyWarningResult.ok
+          ? buildInstallPolicyWarningDetails({
+              warning: installPolicyWarningResult.installPolicyWarning,
+            })
+          : undefined;
       respond(
         errors.length === 0,
         {
@@ -812,6 +858,7 @@ export const skillsHandlers: GatewayRequestHandlers = {
               details: {
                 results,
                 ...(warnings.length > 0 ? { warnings } : {}),
+                ...installPolicyDetails,
               },
             }),
       );

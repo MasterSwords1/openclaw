@@ -509,6 +509,58 @@ describe("skill upload gateway handlers", () => {
     expect(skillUploadExists(stateDir, upload.uploadId)).toBe(false);
   });
 
+  it("retains uploads while install-policy acknowledgement is required", async () => {
+    const { handlers, stateDir } = await makeHarness();
+    installSecurityScanState.evaluateSkillInstallPolicy.mockResolvedValueOnce({
+      warning: {
+        reason: "Manual review recommended.",
+        findings: [
+          {
+            ruleId: "dangerous-exec",
+            severity: "warn",
+            message: "The skill launches a child process.",
+          },
+        ],
+      },
+    });
+    const upload = await uploadArchive(handlers, {
+      archive: await makeSkillArchive({}),
+      slug: "scan-warning",
+    });
+
+    const warning = await call(handlers, "skills.install", {
+      source: "upload",
+      uploadId: upload.uploadId,
+      slug: "scan-warning",
+    });
+
+    expect(warning.ok).toBe(false);
+    expect(warning.error).toMatchObject({
+      code: "UNAVAILABLE",
+      details: {
+        installPolicyWarning: {
+          reason: "Manual review recommended.",
+        },
+      },
+    });
+    expect(skillUploadExists(stateDir, upload.uploadId)).toBe(true);
+
+    const acknowledged = await call(handlers, "skills.install", {
+      source: "upload",
+      uploadId: upload.uploadId,
+      slug: "scan-warning",
+      acknowledgeInstallPolicyWarning: true,
+    });
+
+    expect(acknowledged.ok).toBe(true);
+    expect(installSecurityScanState.evaluateSkillInstallPolicy).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        acknowledgeInstallPolicyWarning: true,
+      }),
+    );
+    expect(skillUploadExists(stateDir, upload.uploadId)).toBe(false);
+  });
+
   it("preserves existing installs unless force was bound at begin", async () => {
     const { handlers, stateDir, workspaceDir } = await makeHarness();
     const first = await uploadArchive(handlers, {

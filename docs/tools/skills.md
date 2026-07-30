@@ -269,8 +269,9 @@ publish and sync.
     Configure `security.installPolicy` to run a trusted local policy command
     before skill installs continue. The policy receives metadata and the staged
     source path, applies to ClawHub, uploaded, Git, local, update, and
-    dependency-installer paths, and fails closed when the command cannot return
-    a valid decision.
+    dependency-installer paths, and can allow, warn, or block. Warnings require
+    explicit user acknowledgement; blocks remain terminal. The install fails
+    closed when the command cannot return a valid decision.
   </Accordion>
   <Accordion title="Secret injection scope">
     `skills.entries.*.env` and `skills.entries.*.apiKey` inject secrets into the

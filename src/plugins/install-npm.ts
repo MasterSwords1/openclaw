@@ -228,8 +228,10 @@ export async function installPluginFromNpmSpec(
       sourceFamily: "npm",
       scan: async () =>
         await preflightPluginNpmInstallPolicy({
+          acknowledgeInstallPolicyWarning: params.acknowledgeInstallPolicyWarning,
           config: params.config,
           logger,
+          onInstallPolicyWarning: params.onInstallPolicyWarning,
           mode: policyMode,
           packageName: parsedSpec.name,
           ...(expectedPluginId ? { pluginId: expectedPluginId } : {}),
@@ -247,9 +249,11 @@ export async function installPluginFromNpmSpec(
   }
 
   const result = await installPluginFromManagedNpmRoot({
+    acknowledgeInstallPolicyWarning: params.acknowledgeInstallPolicyWarning,
     dangerouslyForceUnsafeInstall: params.dangerouslyForceUnsafeInstall,
     trustedSourceLinkedOfficialInstall: params.trustedSourceLinkedOfficialInstall,
     config: params.config,
+    onInstallPolicyWarning: params.onInstallPolicyWarning,
     packageName: parsedSpec.name,
     dependencySpec: resolveManagedNpmRootDependencySpec({
       parsedSpec,

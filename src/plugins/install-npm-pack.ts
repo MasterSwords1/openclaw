@@ -231,9 +231,11 @@ export async function installPluginFromNpmPackArchive(
         : targetMode;
 
   const result = await installPluginFromManagedNpmRoot({
+    acknowledgeInstallPolicyWarning: params.acknowledgeInstallPolicyWarning,
     dangerouslyForceUnsafeInstall: params.dangerouslyForceUnsafeInstall,
     trustedSourceLinkedOfficialInstall: params.trustedSourceLinkedOfficialInstall,
     config: params.config,
+    onInstallPolicyWarning: params.onInstallPolicyWarning,
     packageName,
     prepareDependencySpec: async ({ npmRoot }) => {
       try {

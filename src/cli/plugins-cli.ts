@@ -10,6 +10,7 @@ import { applyParentDefaultHelpAction } from "./program/parent-default-help.js";
 type PluginUpdateOptions = {
   all?: boolean;
   acknowledgeClawhubRisk?: boolean;
+  acknowledgeInstallPolicyWarning?: boolean;
   dryRun?: boolean;
   dangerouslyForceUnsafeInstall?: boolean;
 };
@@ -190,6 +191,11 @@ export function registerPluginsCli(program: Command) {
       false,
     )
     .option(
+      "--acknowledge-install-policy-warning",
+      "Acknowledge operator install policy warnings without prompting",
+      false,
+    )
+    .option(
       "--marketplace <source>",
       "Install a Claude marketplace plugin from a local repo/path or git/GitHub source",
     )
@@ -198,6 +204,7 @@ export function registerPluginsCli(program: Command) {
         raw: string,
         opts: CommanderClawHubRiskOptions & {
           dangerouslyForceUnsafeInstall?: boolean;
+          acknowledgeInstallPolicyWarning?: boolean;
           force?: boolean;
           link?: boolean;
           pin?: boolean;
@@ -226,6 +233,11 @@ export function registerPluginsCli(program: Command) {
     .option(
       "--acknowledge-clawhub-risk",
       "Acknowledge ClawHub release trust warnings without prompting",
+      false,
+    )
+    .option(
+      "--acknowledge-install-policy-warning",
+      "Acknowledge operator install policy warnings without prompting",
       false,
     )
     .action(async (id: string | undefined, opts: PluginUpdateOptions) => {

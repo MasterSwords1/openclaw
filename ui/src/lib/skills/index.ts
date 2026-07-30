@@ -9,6 +9,11 @@ import type {
   SkillStatusEntry,
   SkillStatusReport,
 } from "../../api/types.ts";
+import {
+  type ClawHubInstallMessage,
+  readInstallPolicyWarningText,
+  type SkillMessage,
+} from "./messages.ts";
 
 export type ClawHubSearchResult = {
   score: number;
@@ -94,13 +99,7 @@ type SkillsState = {
   clawhubDetailSlug: string | null;
   clawhubDetailLoading: boolean;
   clawhubDetailError: string | null;
-  clawhubInstallMessage: {
-    kind: "success" | "error";
-    text: string;
-    acknowledgeSlug?: string;
-    acknowledgeVersion?: string;
-    acknowledgeLabel?: string;
-  } | null;
+  clawhubInstallMessage: ClawHubInstallMessage | null;
   clawhubVerdicts: Record<string, ClawHubSkillSecurityVerdict>;
   clawhubVerdictsLoading: boolean;
   clawhubVerdictsError: string | null;
@@ -133,11 +132,6 @@ function releaseSkillOperation(state: SkillsState, operation: ActiveSkillOperati
     state.skillOperation = null;
   }
 }
-
-type SkillMessage = {
-  kind: "success" | "error";
-  message: string;
-};
 
 export type SkillMessageMap = Record<string, SkillMessage>;
 
@@ -586,19 +580,33 @@ export async function installSkill(
   name: string,
   installId: string,
   dangerouslyForceUnsafeInstall = false,
+  acknowledgeInstallPolicyWarning = false,
 ) {
   await runSkillMutation(state, skillKey, async (client) => {
-    const result = await client.request<{ message?: string }>("skills.install", {
-      ...stateSkillsAgentParams(state),
-      name,
-      installId,
-      dangerouslyForceUnsafeInstall,
-      timeoutMs: 120000,
-    });
-    return {
-      kind: "success",
-      message: result?.message ?? "Installed",
-    };
+    try {
+      const result = await client.request<{ message?: string }>("skills.install", {
+        ...stateSkillsAgentParams(state),
+        name,
+        installId,
+        dangerouslyForceUnsafeInstall,
+        ...(acknowledgeInstallPolicyWarning ? { acknowledgeInstallPolicyWarning: true } : {}),
+        timeoutMs: 120000,
+      });
+      return {
+        kind: "success",
+        message: result?.message ?? "Installed",
+      };
+    } catch (error) {
+      const warningText = readInstallPolicyWarningText(error);
+      if (!warningText) {
+        throw error;
+      }
+      return {
+        kind: "error",
+        message: warningText,
+        acknowledgeInstallPolicyWarning: { name, installId },
+      };
+    }
   });
 }
 
@@ -659,6 +667,7 @@ export async function installFromClawHub(
   slug: string,
   acknowledgeClawHubRisk = false,
   version?: string,
+  acknowledgeInstallPolicyWarning = false,
 ) {
   const client = state.client;
   if (!client || !state.connected || state.skillsLoading || state.skillOperation) {
@@ -675,6 +684,7 @@ export async function installFromClawHub(
       slug,
       ...(version ? { version } : {}),
       ...(acknowledgeClawHubRisk ? { acknowledgeClawHubRisk: true } : {}),
+      ...(acknowledgeInstallPolicyWarning ? { acknowledgeInstallPolicyWarning: true } : {}),
     });
     if (!ownsSkillOperation(state, client, operation)) {
       return;
@@ -699,6 +709,18 @@ export async function installFromClawHub(
       isSkillsAgentScopeCurrent(state, agentScope)
     ) {
       const trustDetails = getClawHubTrustDetailsFromError(err);
+      const installPolicyWarningText = readInstallPolicyWarningText(err);
+      if (installPolicyWarningText) {
+        state.clawhubInstallMessage = {
+          kind: "error",
+          text: installPolicyWarningText,
+          acknowledgeSlug: slug,
+          ...(version ? { acknowledgeVersion: version } : {}),
+          ...(acknowledgeClawHubRisk ? { acknowledgeClawHubRisk: true } : {}),
+          acknowledgeInstallPolicyWarning: true,
+        };
+        return;
+      }
       const needsAcknowledgement =
         trustDetails?.clawhubTrustCode === ClawHubTrustErrorCodes.RISK_ACKNOWLEDGEMENT_REQUIRED;
       state.clawhubInstallMessage = {
@@ -711,6 +733,7 @@ export async function installFromClawHub(
           ? { acknowledgeVersion: trustDetails.version }
           : {}),
         ...(needsAcknowledgement ? { acknowledgeLabel: "Acknowledge risk and install" } : {}),
+        ...(needsAcknowledgement ? { acknowledgeClawHubRisk: true } : {}),
       };
     }
   } finally {

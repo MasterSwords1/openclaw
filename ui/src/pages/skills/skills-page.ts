@@ -87,6 +87,8 @@ class SkillsPage extends OpenClawLightDomElement {
     acknowledgeSlug?: string;
     acknowledgeVersion?: string;
     acknowledgeLabel?: string;
+    acknowledgeClawHubRisk?: boolean;
+    acknowledgeInstallPolicyWarning?: boolean;
   } | null = null;
   @state() clawhubVerdicts: Record<string, ClawHubSkillSecurityVerdict> = {};
   @state() clawhubVerdictsLoading = false;
@@ -455,8 +457,15 @@ class SkillsPage extends OpenClawLightDomElement {
             onToggle: (key, enabled) => void updateSkillEnabled(this, key, enabled),
             onEdit: (key, value) => updateSkillEdit(this, key, value),
             onSaveKey: (key) => void saveSkillApiKey(this, key),
-            onInstall: (skillKey, name, installId) =>
-              void installSkill(this, skillKey, name, installId),
+            onInstall: (skillKey, name, installId, acknowledgeInstallPolicyWarning) =>
+              void installSkill(
+                this,
+                skillKey,
+                name,
+                installId,
+                false,
+                acknowledgeInstallPolicyWarning,
+              ),
             onDetailOpen: (key) => {
               this.skillsDetailKey = key;
               this.skillsDetailTab = "overview";
@@ -466,8 +475,19 @@ class SkillsPage extends OpenClawLightDomElement {
             onClawHubQueryChange: (query) => this.changeClawHubQuery(query),
             onClawHubDetailOpen: (slug) => void loadClawHubDetail(this, slug),
             onClawHubDetailClose: () => closeClawHubDetail(this),
-            onClawHubInstall: (slug, acknowledgeClawHubRisk, version) =>
-              void installFromClawHub(this, slug, acknowledgeClawHubRisk, version),
+            onClawHubInstall: (
+              slug,
+              acknowledgeClawHubRisk,
+              version,
+              acknowledgeInstallPolicyWarning,
+            ) =>
+              void installFromClawHub(
+                this,
+                slug,
+                acknowledgeClawHubRisk,
+                version,
+                acknowledgeInstallPolicyWarning,
+              ),
           })}
         </wa-tab-panel>
       `)}

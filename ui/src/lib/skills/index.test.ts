@@ -954,6 +954,64 @@ describe("skill mutations", () => {
     });
   });
 
+  it("surfaces install-policy warnings and sends explicit acknowledgement on retry", async () => {
+    const { state, request } = createState();
+    const warningError = new Error("Install policy warning") as Error & { details?: unknown };
+    warningError.details = {
+      installPolicyWarning: {
+        reason: "Manual review recommended.",
+        findings: [
+          {
+            ruleId: "dangerous-exec",
+            severity: "warn",
+            message: "The package launches a child process.",
+          },
+        ],
+      },
+    };
+    request.mockImplementation(async (method, payload) => {
+      if (method === "skills.install") {
+        if (
+          !(payload as { acknowledgeInstallPolicyWarning?: boolean })
+            .acknowledgeInstallPolicyWarning
+        ) {
+          throw warningError;
+        }
+        return { message: "Installed" };
+      }
+      return {
+        workspaceDir: "/tmp/workspace",
+        managedSkillsDir: "/tmp/skills",
+        skills: [],
+      };
+    });
+
+    await installSkill(state, "github", "GitHub", "install-123");
+
+    expect(state.skillMessages.github).toEqual({
+      kind: "error",
+      message: "Manual review recommended.\n• The package launches a child process.",
+      acknowledgeInstallPolicyWarning: {
+        name: "GitHub",
+        installId: "install-123",
+      },
+    });
+
+    await installSkill(state, "github", "GitHub", "install-123", false, true);
+
+    expect(request).toHaveBeenCalledWith("skills.install", {
+      name: "GitHub",
+      installId: "install-123",
+      dangerouslyForceUnsafeInstall: false,
+      acknowledgeInstallPolicyWarning: true,
+      timeoutMs: 120000,
+    });
+    expect(state.skillMessages.github).toEqual({
+      kind: "success",
+      message: "Installed",
+    });
+  });
+
   it("routes selected agent ClawHub installs through the selected workspace", async () => {
     const { state, request } = createState();
     state.skillsAgentId = "research";
@@ -1048,6 +1106,7 @@ describe("skill mutations", () => {
       acknowledgeSlug: "github",
       acknowledgeVersion: "1.2.3",
       acknowledgeLabel: "Acknowledge risk and install",
+      acknowledgeClawHubRisk: true,
     });
 
     await installFromClawHub(
@@ -1066,6 +1125,28 @@ describe("skill mutations", () => {
     expect(state.clawhubInstallMessage).toEqual({
       kind: "success",
       text: "Installed github@1.2.3",
+    });
+  });
+
+  it("preserves ClawHub trust acknowledgement when install policy also warns", async () => {
+    const { state, request } = createState();
+    const error = new Error("Install policy warning") as Error & { details?: unknown };
+    error.details = {
+      installPolicyWarning: {
+        reason: "Manual review recommended.",
+      },
+    };
+    request.mockRejectedValue(error);
+
+    await installFromClawHub(state, "github", true, "1.2.3");
+
+    expect(state.clawhubInstallMessage).toEqual({
+      kind: "error",
+      text: "Manual review recommended.",
+      acknowledgeSlug: "github",
+      acknowledgeVersion: "1.2.3",
+      acknowledgeClawHubRisk: true,
+      acknowledgeInstallPolicyWarning: true,
     });
   });
 

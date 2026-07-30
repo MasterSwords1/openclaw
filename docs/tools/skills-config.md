@@ -95,7 +95,7 @@ Most skills configuration lives under `skills` in
 ## Operator Install Policy (`security.installPolicy`)
 
 Use `security.installPolicy` when operators need a trusted local command to
-approve or block skill and plugin installs with host-specific policy. The
+allow, warn about, or block skill and plugin installs with host-specific policy. The
 policy runs after OpenClaw has staged source material and before the install
 or update continues. It applies to ClawHub skills, uploaded skills, Git/local
 skills, skill dependency installers, and plugin install/update sources.
@@ -182,10 +182,31 @@ skills, skill dependency installers, and plugin install/update sources.
 The policy receives one JSON object on stdin with `protocolVersion: 1`,
 `openclawVersion`, `targetType`, `targetName`, `sourcePath`, `sourcePathKind`,
 optional structured `source`, structured `origin`, and `request`. It must
-write one JSON object on stdout: `{ "protocolVersion": 1, "decision": "allow" }`
-or `{ "protocolVersion": 1, "decision": "block", "reason": "..." }`. Non-zero
-exit, timeout, malformed JSON, missing fields, or unsupported protocol
-versions fail closed.
+write one JSON object on stdout using one of these decisions:
+
+```json
+{ "protocolVersion": 1, "decision": "allow" }
+{ "protocolVersion": 1, "decision": "warn", "reason": "Manual review recommended" }
+{ "protocolVersion": 1, "decision": "block", "reason": "Unapproved registry" }
+```
+
+`warn` and `block` require a non-empty `reason`. Any decision may include up
+to 100 structured `findings` with `ruleId`, `severity` (`info`, `warn`, or
+`critical`), and `message`; `file`, `line`, and `evidence` are optional.
+Unknown finding fields and malformed finding entries are ignored.
+
+A warning stops that install request until the user confirms it. Interactive
+CLI commands prompt; Gateway clients receive structured warning details and
+retry the same request with `acknowledgeInstallPolicyWarning: true`.
+Noninteractive CLI commands use
+`--acknowledge-install-policy-warning`. OpenClaw reruns the policy on the
+acknowledged request, so an updated `block` decision still cannot be
+overridden. The acknowledgement applies only to warnings returned during
+that install or update request. It is request-scoped, not stored or bound to a
+warning or artifact fingerprint.
+
+Non-zero exit, timeout, malformed JSON, missing required fields, unknown
+decisions, or unsupported protocol versions fail closed.
 
 OpenClaw does not execute install policy during normal Gateway startup.
 Installs and updates fail closed when policy is enabled but unavailable.

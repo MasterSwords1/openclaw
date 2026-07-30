@@ -10,6 +10,7 @@ import { detectBundleManifestFormat } from "../plugins/bundle-manifest.js";
 import {
   scanPackageInstallSource,
   scanInstalledPackageDependencyTree,
+  type InstallPolicyWarning,
   type InstallSafetyOverrides,
 } from "../plugins/install-security-scan.js";
 import { PLUGIN_MANIFEST_FILENAME } from "../plugins/manifest.js";
@@ -51,6 +52,7 @@ export type InstallHooksResult =
       ok: false;
       error: string;
       code?: string;
+      installPolicyWarning?: InstallPolicyWarning;
     };
 
 export const HOOK_INSTALL_ERROR_CODE = {
@@ -92,8 +94,10 @@ type HookPathInstallParams = { path: string } & HookInstallForwardParams;
 
 function buildHookInstallForwardParams(params: HookInstallForwardParams): HookInstallForwardParams {
   return {
+    acknowledgeInstallPolicyWarning: params.acknowledgeInstallPolicyWarning,
     config: params.config,
     dangerouslyForceUnsafeInstall: params.dangerouslyForceUnsafeInstall,
+    onInstallPolicyWarning: params.onInstallPolicyWarning,
     trustedSourceLinkedOfficialInstall: params.trustedSourceLinkedOfficialInstall,
     hooksDir: params.hooksDir,
     timeoutMs: params.timeoutMs,
@@ -119,8 +123,16 @@ async function runHookInstallScan(params: {
 }): Promise<Extract<InstallHooksResult, { ok: false }> | null> {
   try {
     const result = await params.scan();
-    if (!result?.blocked) {
+    if (!result) {
       return null;
+    }
+    if (result.warning) {
+      return {
+        ok: false,
+        error: result.warning.reason,
+        code: "install_policy_acknowledgement_required",
+        installPolicyWarning: result.warning,
+      };
     }
     return {
       ok: false,
@@ -154,8 +166,10 @@ async function runHookInstallPolicy(params: {
     hookPackId: params.hookPackId,
     scan: async () =>
       await scanPackageInstallSource({
+        acknowledgeInstallPolicyWarning: params.forward.acknowledgeInstallPolicyWarning,
         config: params.forward.config,
         dangerouslyForceUnsafeInstall: params.forward.dangerouslyForceUnsafeInstall,
+        onInstallPolicyWarning: params.forward.onInstallPolicyWarning,
         trustedSourceLinkedOfficialInstall: params.forward.trustedSourceLinkedOfficialInstall,
         packageDir: params.packageDir,
         pluginId: params.hookPackId,
@@ -186,8 +200,10 @@ async function runHookInstalledDependencyPolicy(params: {
     hookPackId: params.hookPackId,
     scan: async () =>
       await scanInstalledPackageDependencyTree({
+        acknowledgeInstallPolicyWarning: params.forward.acknowledgeInstallPolicyWarning,
         config: params.forward.config,
         dangerouslyForceUnsafeInstall: params.forward.dangerouslyForceUnsafeInstall,
+        onInstallPolicyWarning: params.forward.onInstallPolicyWarning,
         trustedSourceLinkedOfficialInstall: params.forward.trustedSourceLinkedOfficialInstall,
         packageDir: params.installedDir,
         pluginId: params.hookPackId,

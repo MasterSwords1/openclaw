@@ -222,6 +222,17 @@ function buildBlockedInstallResult(params: {
   };
 }
 
+function buildInstallPolicyWarningResult(params: {
+  warning: NonNullable<NonNullable<InstallSecurityScanResult>["warning"]>;
+}): Extract<InstallPluginResult, { ok: false }> {
+  return {
+    ok: false,
+    error: params.warning.reason,
+    code: PLUGIN_INSTALL_ERROR_CODE.INSTALL_POLICY_ACKNOWLEDGEMENT_REQUIRED,
+    installPolicyWarning: params.warning,
+  };
+}
+
 export function sourceFamilyForInstallPolicyKind(
   kind: PluginInstallPolicyRequest["kind"] | undefined,
   fallback: PluginSecuritySourceFamily,
@@ -334,6 +345,9 @@ export async function runInstallSourceScan(params: {
         sourceFamily: params.sourceFamily,
       });
       return buildBlockedInstallResult({ blocked: scanResult.blocked });
+    }
+    if (scanResult?.warning) {
+      return buildInstallPolicyWarningResult({ warning: scanResult.warning });
     }
     return null;
   } catch (err) {

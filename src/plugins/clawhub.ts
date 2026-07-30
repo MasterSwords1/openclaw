@@ -1434,11 +1434,13 @@ export async function installPluginFromClawHub(
       `Downloading ${detail.package?.family === "bundle-plugin" ? "bundle" : "plugin"} ${releaseLabel} from ClawHub…`,
     );
     const installResult = await installPluginFromArchive({
+      acknowledgeInstallPolicyWarning: params.acknowledgeInstallPolicyWarning,
       archivePath: archive.archivePath,
       dangerouslyForceUnsafeInstall: params.dangerouslyForceUnsafeInstall,
       trustedSourceLinkedOfficialInstall:
         officialClawHubPackage || isTrustedSourceLinkedOfficialPackage(detail.package!),
       config: params.config,
+      onInstallPolicyWarning: params.onInstallPolicyWarning,
       logger: params.logger,
       mode: params.mode,
       extensionsDir: params.extensionsDir,

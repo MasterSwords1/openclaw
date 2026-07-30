@@ -1,6 +1,7 @@
 // Gateway control-plane handlers for cold plugin catalog and lifecycle operations.
 import {
   buildClawHubTrustErrorDetails,
+  buildInstallPolicyWarningDetails,
   ErrorCodes,
   errorShape,
   isClawHubTrustErrorCode,
@@ -135,13 +136,20 @@ export const pluginsHandlers: GatewayRequestHandlers = {
         lifecycleError?.code && isClawHubTrustErrorCode(lifecycleError.code)
           ? lifecycleError.code
           : undefined;
-      const details = lifecycleError
+      const trustDetails = lifecycleError
         ? buildClawHubTrustErrorDetails({
             ...(trustCode ? { code: trustCode } : {}),
             ...(lifecycleError.version ? { version: lifecycleError.version } : {}),
             ...(lifecycleError.warning ? { warning: lifecycleError.warning } : {}),
           })
         : undefined;
+      const installPolicyDetails = buildInstallPolicyWarningDetails({
+        warning: lifecycleError?.installPolicyWarning,
+      });
+      const details =
+        trustDetails || installPolicyDetails
+          ? { ...trustDetails, ...installPolicyDetails }
+          : undefined;
       respond(
         false,
         undefined,

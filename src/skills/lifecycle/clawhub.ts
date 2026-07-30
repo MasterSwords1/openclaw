@@ -10,6 +10,7 @@ import {
 } from "../../infra/clawhub.js";
 import { formatErrorMessage } from "../../infra/errors.js";
 import { pathExists } from "../../infra/fs-safe.js";
+import type { InstallPolicyWarning } from "../../plugins/install-security-scan.js";
 import { withClawPackageLifecycleLease } from "../../state/claw-package-lifecycle-lease.js";
 import {
   normalizeTrackedSkillSlug,
@@ -62,7 +63,14 @@ type UpdateClawHubSkillResult =
       targetDir: string;
       warning?: string;
     }
-  | { ok: false; error: string; code?: ClawHubTrustErrorCode; version?: string; warning?: string };
+  | {
+      ok: false;
+      error: string;
+      code?: ClawHubTrustErrorCode;
+      version?: string;
+      warning?: string;
+      installPolicyWarning?: InstallPolicyWarning;
+    };
 
 type TrackedUpdateTarget =
   | {
@@ -311,7 +319,9 @@ export async function installSkillFromClawHub(params: {
   baseUrl?: string;
   force?: boolean;
   forceInstall?: boolean;
+  acknowledgeInstallPolicyWarning?: boolean;
   acknowledgeClawHubRisk?: boolean;
+  onInstallPolicyWarning?: (warning: InstallPolicyWarning) => boolean | Promise<boolean>;
   onClawHubRisk?: (request: ClawHubRiskAcknowledgementRequest) => boolean | Promise<boolean>;
   logger?: Logger;
   config?: OpenClawConfig;
@@ -332,7 +342,9 @@ export async function updateSkillsFromClawHub(params: {
   slug?: string;
   baseUrl?: string;
   forceInstall?: boolean;
+  acknowledgeInstallPolicyWarning?: boolean;
   acknowledgeClawHubRisk?: boolean;
+  onInstallPolicyWarning?: (warning: InstallPolicyWarning) => boolean | Promise<boolean>;
   onClawHubRisk?: (request: ClawHubRiskAcknowledgementRequest) => boolean | Promise<boolean>;
   logger?: Logger;
   config?: OpenClawConfig;
@@ -372,7 +384,9 @@ export async function updateSkillsFromClawHub(params: {
           force: true,
           forceInstall: params.forceInstall,
           acknowledgeClawHubRisk: params.acknowledgeClawHubRisk,
+          acknowledgeInstallPolicyWarning: params.acknowledgeInstallPolicyWarning,
           onClawHubRisk: params.onClawHubRisk,
+          onInstallPolicyWarning: params.onInstallPolicyWarning,
           logger: params.logger,
           config: params.config,
         }),

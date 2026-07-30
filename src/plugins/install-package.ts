@@ -39,8 +39,10 @@ function pickPackageInstallCommonParams(
   params: InternalPackageInstallCommonParams,
 ): InternalPackageInstallCommonParams {
   return {
+    acknowledgeInstallPolicyWarning: params.acknowledgeInstallPolicyWarning,
     config: params.config,
     dangerouslyForceUnsafeInstall: params.dangerouslyForceUnsafeInstall,
+    onInstallPolicyWarning: params.onInstallPolicyWarning,
     trustedSourceLinkedOfficialInstall: params.trustedSourceLinkedOfficialInstall,
     extensionsDir: params.extensionsDir,
     npmDir: params.npmDir,
@@ -154,8 +156,10 @@ async function installBundleFromSourceDir(
     sourceFamily: sourceFamilyForInstallPolicyKind(params.installPolicyRequest?.kind, "archive"),
     scan: async () =>
       await runtime.scanBundleInstallSource({
+        acknowledgeInstallPolicyWarning: params.acknowledgeInstallPolicyWarning,
         dangerouslyForceUnsafeInstall: params.dangerouslyForceUnsafeInstall,
         config: params.config,
+        onInstallPolicyWarning: params.onInstallPolicyWarning,
         sourceDir: params.sourceDir,
         pluginId,
         logger,
@@ -259,9 +263,11 @@ async function installPluginFromPackageDir(
     expectedPluginId: params.expectedPluginId,
     requirePluginManifest: params.requirePluginManifest,
     allowSourceTypeScriptEntries: params.allowSourceTypeScriptEntries,
+    acknowledgeInstallPolicyWarning: params.acknowledgeInstallPolicyWarning,
     dangerouslyForceUnsafeInstall: params.dangerouslyForceUnsafeInstall,
     trustedSourceLinkedOfficialInstall: params.trustedSourceLinkedOfficialInstall,
     config: params.config,
+    onInstallPolicyWarning: params.onInstallPolicyWarning,
     installPolicyRequest: params.installPolicyRequest,
     logger,
     mode,
@@ -302,6 +308,7 @@ async function installPluginFromPackageDir(
     nameEncoder: encodePluginInstallDirName,
     afterInstall: async (installedDir) => {
       return await scanAndLinkInstalledPackage({
+        acknowledgeInstallPolicyWarning: params.acknowledgeInstallPolicyWarning,
         runtime,
         installedDir,
         pluginId: plugin.pluginId,
@@ -309,6 +316,7 @@ async function installPluginFromPackageDir(
         dangerouslyForceUnsafeInstall: params.dangerouslyForceUnsafeInstall,
         trustedSourceLinkedOfficialInstall: params.trustedSourceLinkedOfficialInstall,
         config: params.config,
+        onInstallPolicyWarning: params.onInstallPolicyWarning,
         mode: effectiveMode,
         ...(params.installPolicyRequest?.kind
           ? { requestKind: params.installPolicyRequest.kind }
@@ -352,6 +360,7 @@ export async function installPluginFromArchive(
       await installPluginFromSourceDir({
         sourceDir,
         ...pickPackageInstallCommonParams({
+          acknowledgeInstallPolicyWarning: params.acknowledgeInstallPolicyWarning,
           dangerouslyForceUnsafeInstall: params.dangerouslyForceUnsafeInstall,
           extensionsDir: params.extensionsDir,
           timeoutMs,
@@ -359,6 +368,7 @@ export async function installPluginFromArchive(
           mode,
           dryRun: params.dryRun,
           config: params.config,
+          onInstallPolicyWarning: params.onInstallPolicyWarning,
           expectedPluginId: params.expectedPluginId,
           trustedSourceLinkedOfficialInstall: params.trustedSourceLinkedOfficialInstall,
           requirePluginManifest: true,

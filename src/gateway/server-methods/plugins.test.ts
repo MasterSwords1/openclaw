@@ -9,6 +9,14 @@ const managementMocks = vi.hoisted(() => {
     readonly code?: string;
     readonly version?: string;
     readonly warning?: string;
+    readonly installPolicyWarning?: {
+      reason: string;
+      findings?: Array<{
+        ruleId: string;
+        severity: "info" | "warn" | "critical";
+        message: string;
+      }>;
+    };
 
     constructor(
       message: string,
@@ -17,6 +25,14 @@ const managementMocks = vi.hoisted(() => {
         code?: string;
         version?: string;
         warning?: string;
+        installPolicyWarning?: {
+          reason: string;
+          findings?: Array<{
+            ruleId: string;
+            severity: "info" | "warn" | "critical";
+            message: string;
+          }>;
+        };
       },
     ) {
       super(message);
@@ -24,6 +40,7 @@ const managementMocks = vi.hoisted(() => {
       this.code = details?.code;
       this.version = details?.version;
       this.warning = details?.warning;
+      this.installPolicyWarning = details?.installPolicyWarning;
     }
   }
   return {
@@ -288,6 +305,7 @@ describe("plugin management Gateway handlers", () => {
       packageName: "@openclaw/diffs",
       version: "1.2.3",
       acknowledgeClawHubRisk: true,
+      acknowledgeInstallPolicyWarning: true,
     });
 
     expect(managementMocks.install).toHaveBeenCalledWith({
@@ -296,6 +314,7 @@ describe("plugin management Gateway handlers", () => {
         packageName: "@openclaw/diffs",
         version: "1.2.3",
         acknowledgeClawHubRisk: true,
+        acknowledgeInstallPolicyWarning: true,
       },
     });
   });
@@ -323,6 +342,47 @@ describe("plugin management Gateway handlers", () => {
         clawhubTrustCode: "clawhub_risk_acknowledgement_required",
         version: "1.2.3",
         warning: "Suspicious release",
+      },
+    });
+  });
+
+  it("returns structured install-policy warning details", async () => {
+    managementMocks.install.mockRejectedValue(
+      new managementMocks.ManagedPluginLifecycleError("Manual review recommended.", {
+        kind: "invalid-request",
+        code: "install_policy_acknowledgement_required",
+        installPolicyWarning: {
+          reason: "Manual review recommended.",
+          findings: [
+            {
+              ruleId: "dangerous-exec",
+              severity: "warn",
+              message: "The package launches a child process.",
+            },
+          ],
+        },
+      }),
+    );
+
+    const result = await callHandler("plugins.install", {
+      source: "official",
+      pluginId: "workboard",
+    });
+
+    expect(result.error).toMatchObject({
+      code: "INVALID_REQUEST",
+      message: "Manual review recommended.",
+      details: {
+        installPolicyWarning: {
+          reason: "Manual review recommended.",
+          findings: [
+            {
+              ruleId: "dangerous-exec",
+              severity: "warn",
+              message: "The package launches a child process.",
+            },
+          ],
+        },
       },
     });
   });

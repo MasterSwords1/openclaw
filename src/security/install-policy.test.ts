@@ -160,7 +160,7 @@ describe("runInstallPolicy", () => {
       request: baseRequest(sourceDir),
     });
 
-    expect(result).toEqual({});
+    expect(result).toEqual({ decision: "allow" });
     const captured = JSON.parse(await fs.readFile(capturePath, "utf8")) as Record<string, unknown>;
     expect(captured.protocolVersion).toBe(1);
     expect(captured.openclawVersion).toEqual(expect.any(String));
@@ -213,7 +213,7 @@ describe("runInstallPolicy", () => {
       request: baseRequest(sourceDir),
     });
 
-    expect(result).toEqual({});
+    expect(result).toEqual({ decision: "allow" });
   });
 
   it.runIf(process.platform !== "win32")(
@@ -265,7 +265,10 @@ describe("runInstallPolicy", () => {
         noOutputTimeouts.at(-1)?.();
         const result = await resultPromise;
 
-        expect(result?.blocked?.reason).toContain("policy command produced no output");
+        expect(result).toMatchObject({
+          decision: "block",
+          reason: expect.stringContaining("policy command produced no output"),
+        });
         expect(await waitForPidToExit(childPid, 5_000)).toBe(true);
       } finally {
         setTimeoutSpy.mockRestore();
@@ -289,7 +292,7 @@ describe("runInstallPolicy", () => {
       request: baseRequest(sourceDir),
     });
 
-    expect(result).toEqual({});
+    expect(result).toEqual({ decision: "allow" });
     const captured = JSON.parse(await fs.readFile(envPath, "utf8")) as {
       PATH?: string;
       Path?: string;
@@ -336,7 +339,8 @@ describe("runInstallPolicy", () => {
       request: baseRequest(sourceDir),
     });
 
-    expect(result?.blocked).toEqual({
+    expect(result).toEqual({
+      decision: "block",
       code: "security_scan_blocked",
       reason: "blocked by install policy: unapproved registry",
     });
@@ -358,7 +362,8 @@ describe("runInstallPolicy", () => {
       request: baseRequest(sourceDir),
     });
 
-    expect(result?.blocked).toEqual({
+    expect(result).toEqual({
+      decision: "block",
       code: "security_scan_blocked",
       reason: `blocked by install policy: ${reasonPrefix}...`,
     });
@@ -383,6 +388,7 @@ describe("runInstallPolicy", () => {
     });
 
     expect(result).toEqual({
+      decision: "allow",
       findings: [
         {
           ruleId: "registry-review",
@@ -413,10 +419,9 @@ describe("runInstallPolicy", () => {
     });
 
     expect(result).toEqual({
-      blocked: {
-        code: "security_scan_blocked",
-        reason: "blocked by install policy: unapproved registry",
-      },
+      decision: "block",
+      code: "security_scan_blocked",
+      reason: "blocked by install policy: unapproved registry",
       findings: [
         {
           ruleId: "registry-review",
@@ -424,6 +429,58 @@ describe("runInstallPolicy", () => {
           message: "Registry is not approved.",
         },
       ],
+    });
+  });
+
+  it("returns warnings with a reason and optional findings", async () => {
+    const result = await runInstallPolicy({
+      config: configWithPolicy(scriptPath, {
+        POLICY_RESPONSE: JSON.stringify({
+          protocolVersion: 1,
+          decision: "warn",
+          reason: "manual review recommended",
+          findings: [
+            {
+              ruleId: "registry-review",
+              severity: "warn",
+              message: "Registry requires review.",
+            },
+          ],
+        }),
+      }),
+      request: baseRequest(sourceDir),
+    });
+
+    expect(result).toEqual({
+      decision: "warn",
+      reason: "manual review recommended",
+      findings: [
+        {
+          ruleId: "registry-review",
+          severity: "warn",
+          message: "Registry requires review.",
+        },
+      ],
+    });
+  });
+
+  it("fails closed when warn has no reason", async () => {
+    const result = await runInstallPolicy({
+      config: configWithPolicy(scriptPath, {
+        POLICY_RESPONSE: JSON.stringify({
+          protocolVersion: 1,
+          decision: "warn",
+          findings: [],
+        }),
+      }),
+      request: baseRequest(sourceDir),
+    });
+
+    expect(result).toEqual({
+      decision: "block",
+      code: "security_scan_failed",
+      reason:
+        'install policy failed closed: policy response decision "warn" requires a non-empty reason',
     });
   });
 
@@ -437,9 +494,11 @@ describe("runInstallPolicy", () => {
       request: baseRequest(sourceDir),
     });
 
-    expect(result?.blocked?.code).toBe("security_scan_failed");
-    expect(result?.blocked?.reason).toContain("install policy failed closed");
-    expect(result?.blocked?.reason).toContain("invalid JSON");
+    expect(result).toMatchObject({
+      decision: "block",
+      code: "security_scan_failed",
+      reason: expect.stringMatching(/install policy failed closed.*invalid JSON/),
+    });
     expect(warnings.join("\n")).toContain("install policy failed closed");
   });
 
@@ -454,9 +513,14 @@ describe("runInstallPolicy", () => {
       request: baseRequest(sourceDir),
     });
 
-    expect(result?.blocked?.code).toBe("security_scan_failed");
-    expect(result?.blocked?.reason).toContain("policy command exited with code 7");
-    expect(result?.blocked?.reason).not.toContain("policy-secret-token");
+    expect(result).toMatchObject({
+      decision: "block",
+      code: "security_scan_failed",
+      reason: expect.stringMatching(/policy command exited with code 7/),
+    });
+    expect(result).not.toMatchObject({
+      reason: expect.stringContaining("policy-secret-token"),
+    });
     expect(warnings.join("\n")).not.toContain("policy-secret-token");
   });
 
@@ -477,10 +541,13 @@ describe("runInstallPolicy", () => {
       request: baseRequest(sourceDir),
     });
 
-    expect(result?.blocked?.code).toBe("security_scan_failed");
-    expect(result?.blocked?.reason).toContain(
-      "security.installPolicy.exec.command must be an absolute path",
-    );
+    expect(result).toMatchObject({
+      decision: "block",
+      code: "security_scan_failed",
+      reason: expect.stringContaining(
+        "security.installPolicy.exec.command must be an absolute path",
+      ),
+    });
   });
 
   it.runIf(process.platform !== "win32")(
@@ -502,10 +569,13 @@ describe("runInstallPolicy", () => {
         request: baseRequest(sourceDir),
       });
 
-      expect(result?.blocked?.code).toBe("security_scan_failed");
-      expect(result?.blocked?.reason).toContain(
-        "security.installPolicy.exec.command must be an absolute path",
-      );
+      expect(result).toMatchObject({
+        decision: "block",
+        code: "security_scan_failed",
+        reason: expect.stringContaining(
+          "security.installPolicy.exec.command must be an absolute path",
+        ),
+      });
     },
   );
 

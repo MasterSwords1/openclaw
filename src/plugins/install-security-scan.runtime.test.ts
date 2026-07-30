@@ -1,3 +1,6 @@
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const runInstallPolicyMock = vi.fn();
@@ -42,6 +45,7 @@ const {
   preflightPluginNpmInstallPolicyRuntime,
   scanBundleInstallSourceRuntime,
   scanFileInstallSourceRuntime,
+  scanInstalledPackageDependencyTreeRuntime,
 } = await import("./install-security-scan.runtime.js");
 
 function expectOnlyOperatorPolicyRan() {
@@ -79,6 +83,7 @@ describe("install security scan official bypass", () => {
 
   it("bypasses plugin install friction for official ClawHub sources", async () => {
     const result = await scanBundleInstallSourceRuntime({
+      acknowledgeInstallPolicyWarning: true,
       logger: {},
       pluginId: "@openclaw/matrix",
       sourceDir: "/tmp/openclaw-official-clawhub-plugin",
@@ -121,12 +126,11 @@ describe("install security scan official bypass", () => {
     expectOnlyOperatorPolicyRan();
   });
 
-  it("lets operator policy block official sources", async () => {
+  it("does not let warning acknowledgement override an operator block", async () => {
     runInstallPolicyMock.mockResolvedValueOnce({
-      blocked: {
-        code: "security_scan_blocked",
-        reason: "blocked by operator policy",
-      },
+      decision: "block",
+      code: "security_scan_blocked",
+      reason: "blocked by operator policy",
     });
 
     const result = await scanBundleInstallSourceRuntime({
@@ -147,10 +151,9 @@ describe("install security scan official bypass", () => {
 
   it("still runs install policy for mutable workspace skill sources", async () => {
     runInstallPolicyMock.mockResolvedValueOnce({
-      blocked: {
-        code: "security_scan_blocked",
-        reason: "blocked by operator policy",
-      },
+      decision: "block",
+      code: "security_scan_blocked",
+      reason: "blocked by operator policy",
     });
 
     const result = await evaluateSkillInstallPolicyRuntime({
@@ -174,6 +177,98 @@ describe("install security scan official bypass", () => {
     });
     expect(runInstallPolicyMock).toHaveBeenCalledTimes(1);
   });
+
+  it("returns an operator warning until the request acknowledges it", async () => {
+    const warning = {
+      decision: "warn",
+      reason: "scanner found risky behavior",
+      findings: [
+        {
+          ruleId: "dangerous-exec",
+          severity: "warn",
+          message: "The package launches a child process.",
+        },
+      ],
+    };
+    runInstallPolicyMock.mockResolvedValue(warning);
+
+    const firstResult = await scanBundleInstallSourceRuntime({
+      logger: {},
+      pluginId: "third-party",
+      source: { kind: "npm", authority: "official", mutable: false, network: true },
+      sourceDir: "/tmp/third-party",
+    });
+    const acknowledgedResult = await scanBundleInstallSourceRuntime({
+      acknowledgeInstallPolicyWarning: true,
+      logger: {},
+      pluginId: "third-party",
+      source: { kind: "npm", authority: "official", mutable: false, network: true },
+      sourceDir: "/tmp/third-party",
+    });
+
+    expect(firstResult).toEqual({
+      warning: {
+        reason: "scanner found risky behavior",
+        findings: warning.findings,
+      },
+    });
+    expect(acknowledgedResult).toBeUndefined();
+    expect(runInstallPolicyMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("uses the interactive acknowledgement callback for operator warnings", async () => {
+    runInstallPolicyMock.mockResolvedValue({
+      decision: "warn",
+      reason: "scanner found risky behavior",
+    });
+    const onInstallPolicyWarning = vi.fn().mockResolvedValue(true);
+
+    const result = await scanBundleInstallSourceRuntime({
+      logger: {},
+      onInstallPolicyWarning,
+      pluginId: "third-party",
+      source: { kind: "npm", authority: "official", mutable: false, network: true },
+      sourceDir: "/tmp/third-party",
+    });
+
+    expect(result).toBeUndefined();
+    expect(onInstallPolicyWarning).toHaveBeenCalledWith({
+      reason: "scanner found risky behavior",
+    });
+  });
+
+  it("returns operator warnings from the post-resolution dependency-tree scan", async () => {
+    const packageDir = await fs.mkdtemp(
+      path.join(os.tmpdir(), "openclaw-install-policy-dependency-tree-"),
+    );
+    runInstallPolicyMock.mockResolvedValue({
+      decision: "warn",
+      reason: "resolved dependencies need review",
+    });
+
+    try {
+      const result = await scanInstalledPackageDependencyTreeRuntime({
+        logger: {},
+        packageDir,
+        pluginId: "third-party",
+      });
+
+      expect(result).toEqual({
+        warning: {
+          reason: "resolved dependencies need review",
+        },
+      });
+      expect(runInstallPolicyMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          request: expect.objectContaining({
+            origin: { type: "plugin-dependency-tree" },
+          }),
+        }),
+      );
+    } finally {
+      await fs.rm(packageDir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("legacy file install scan compatibility", () => {
@@ -183,6 +278,7 @@ describe("legacy file install scan compatibility", () => {
     const runBeforeInstall = vi.fn().mockResolvedValue(undefined);
     getGlobalHookRunnerMock.mockReturnValue({ hasHooks, runBeforeInstall });
     runInstallPolicyMock.mockResolvedValueOnce({
+      decision: "allow",
       findings: [
         {
           ruleId: "registry-review",
@@ -261,10 +357,9 @@ describe("legacy file install scan compatibility", () => {
 
   it("returns operator policy blocks before invoking hooks", async () => {
     runInstallPolicyMock.mockResolvedValueOnce({
-      blocked: {
-        code: "security_scan_blocked",
-        reason: "blocked by operator policy",
-      },
+      decision: "block",
+      code: "security_scan_blocked",
+      reason: "blocked by operator policy",
     });
 
     const result = await scanFileInstallSourceRuntime({

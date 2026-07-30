@@ -141,8 +141,10 @@ export async function installPluginFromManagedNpmRoot(
       sourceFamily: sourceFamilyForInstallPolicySource(params.installPolicyRequest.source, "npm"),
       scan: async () =>
         await preflightPluginNpmInstallPolicy({
+          acknowledgeInstallPolicyWarning: params.acknowledgeInstallPolicyWarning,
           config: params.config,
           logger,
+          onInstallPolicyWarning: params.onInstallPolicyWarning,
           mode: policyMode,
           packageName: params.packageName,
           ...(expectedPluginId ? { pluginId: expectedPluginId } : {}),
@@ -554,6 +556,7 @@ export async function installPluginFromManagedNpmRoot(
       npmRoot,
     });
     const result = await installPluginFromInstalledPackageDir({
+      acknowledgeInstallPolicyWarning: params.acknowledgeInstallPolicyWarning,
       dangerouslyForceUnsafeInstall: params.dangerouslyForceUnsafeInstall,
       config: params.config,
       additionalDependencyPackageDirs: newRootPackageDirs,
@@ -564,6 +567,7 @@ export async function installPluginFromManagedNpmRoot(
       trustedSourceLinkedOfficialInstall: params.trustedSourceLinkedOfficialInstall,
       mode: policyMode,
       installPolicyRequest: params.installPolicyRequest,
+      onInstallPolicyWarning: params.onInstallPolicyWarning,
       emitSuccessSecurityEvent: false,
     });
     if (!result.ok) {

@@ -629,7 +629,12 @@ describe("renderPlugins", () => {
           [key]: {
             kind: "error",
             text: "Review required.",
-            acknowledge: { packageName, version: "2.0.0" },
+            acknowledge: {
+              source: "clawhub",
+              packageName,
+              version: "2.0.0",
+              acknowledgeClawHubRisk: true,
+            },
           },
         },
         onInstall,

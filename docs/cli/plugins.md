@@ -135,6 +135,7 @@ openclaw plugins install <plugin> --marketplace <name>      # marketplace (expli
 openclaw plugins install <package> --force                  # confirm source / overwrite existing
 openclaw plugins install <package> --pin                    # pin resolved npm version
 openclaw plugins install clawhub:<package> --acknowledge-clawhub-risk
+openclaw plugins install <package> --acknowledge-install-policy-warning
 openclaw plugins install <package> --dangerously-force-unsafe-install
 ```
 
@@ -155,7 +156,10 @@ flag overwrites an existing install target when needed. Normal updates of an
 already tracked install do not require it. This confirmation is separate from
 `--acknowledge-clawhub-risk`, which only applies to risky ClawHub release trust
 warnings. `--force` does not bypass `security.installPolicy` or remaining
-install safety checks.
+install safety checks. If `security.installPolicy` returns `warn`, interactive
+commands ask for confirmation; reviewed noninteractive installs use
+`--acknowledge-install-policy-warning`. The policy is rerun, and a `block`
+decision cannot be acknowledged or bypassed.
 </Warning>
 
 `plugins search` queries ClawHub for installable `code-plugin` and
@@ -208,6 +212,19 @@ non-npm sources are not rewritten.
     Community ClawHub installs check the selected release's trust record before downloading. If ClawHub disables download for the release, reports malicious scan findings, or puts the release in a blocking moderation state (quarantined, revoked), OpenClaw refuses it outright regardless of this flag. For non-blocking risky scan statuses or moderation states, OpenClaw shows the trust details and asks for confirmation before continuing.
 
     Use `--acknowledge-clawhub-risk` only after reviewing the ClawHub warning and deciding to continue without an interactive prompt. Pending or stale (not-yet-clean) scan results warn but do not require acknowledgement. Official ClawHub packages and bundled OpenClaw plugin sources bypass this release-trust check entirely.
+
+  </Accordion>
+  <Accordion title="--acknowledge-install-policy-warning">
+    When the operator-owned `security.installPolicy` command returns `warn`,
+    OpenClaw shows its reason and findings before asking whether to continue.
+    Use `--acknowledge-install-policy-warning` only for a reviewed
+    noninteractive install. OpenClaw reruns the policy, and the flag does not
+    override a `block` response. The flag applies only to that install or
+    update request; it is not stored or bound to a warning or artifact
+    fingerprint.
+
+    This is separate from `--acknowledge-clawhub-risk`: ClawHub release trust
+    and the local operator policy can both require acknowledgement.
 
   </Accordion>
   <Accordion title="Hook packs and npm specs">

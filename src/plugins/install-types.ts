@@ -1,6 +1,6 @@
 import type { NpmIntegrityDrift, NpmSpecResolution } from "../infra/install-source-utils.js";
 import type { InstallPolicySource } from "../security/install-policy.js";
-import type { InstallSafetyOverrides } from "./install-security-scan.js";
+import type { InstallPolicyWarning, InstallSafetyOverrides } from "./install-security-scan.js";
 import type { PackageManifest as PluginPackageManifest, PluginManifestSetup } from "./manifest.js";
 
 export type PluginInstallLogger = {
@@ -28,6 +28,7 @@ export const PLUGIN_INSTALL_ERROR_CODE = {
   NPM_METADATA_FAILURE: "npm_metadata_failure",
   NPM_PACKAGE_NOT_FOUND: "npm_package_not_found",
   PLUGIN_ID_MISMATCH: "plugin_id_mismatch",
+  INSTALL_POLICY_ACKNOWLEDGEMENT_REQUIRED: "install_policy_acknowledgement_required",
   SECURITY_SCAN_BLOCKED: "security_scan_blocked",
   SECURITY_SCAN_FAILED: "security_scan_failed",
   UNSUPPORTED_PLAIN_FILE_PLUGIN: "unsupported_plain_file_plugin",
@@ -48,7 +49,12 @@ export type InstallPluginResult =
       npmResolution?: NpmSpecResolution;
       integrityDrift?: NpmIntegrityDrift;
     }
-  | { ok: false; error: string; code?: PluginInstallErrorCode };
+  | {
+      ok: false;
+      error: string;
+      code?: PluginInstallErrorCode;
+      installPolicyWarning?: InstallPolicyWarning;
+    };
 
 export type PluginInstallFailureResult = Extract<InstallPluginResult, { ok: false }>;
 

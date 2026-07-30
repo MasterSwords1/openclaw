@@ -48,9 +48,11 @@ export async function validatePackagePluginInstallSource(params: {
   expectedPluginId?: string;
   requirePluginManifest?: boolean;
   allowSourceTypeScriptEntries?: boolean;
+  acknowledgeInstallPolicyWarning?: boolean;
   dangerouslyForceUnsafeInstall?: boolean;
   trustedSourceLinkedOfficialInstall?: boolean;
   config?: OpenClawConfig;
+  onInstallPolicyWarning?: PackageInstallCommonParams["onInstallPolicyWarning"];
   installPolicyRequest?: PluginInstallPolicyRequest;
   logger: PluginInstallLogger;
   mode: "install" | "update";
@@ -163,10 +165,12 @@ export async function validatePackagePluginInstallSource(params: {
     ),
     scan: async () =>
       await params.runtime.scanPackageInstallSource({
+        acknowledgeInstallPolicyWarning: params.acknowledgeInstallPolicyWarning,
         dangerouslyForceUnsafeInstall: params.dangerouslyForceUnsafeInstall,
         trustedSourceLinkedOfficialInstall: params.trustedSourceLinkedOfficialInstall,
         packageDir: params.packageDir,
         config: params.config,
+        onInstallPolicyWarning: params.onInstallPolicyWarning,
         pluginId,
         logger: params.logger,
         extensions,
@@ -202,6 +206,7 @@ export async function validatePackagePluginInstallSource(params: {
 }
 
 export async function scanAndLinkInstalledPackage(params: {
+  acknowledgeInstallPolicyWarning?: boolean;
   runtime: Awaited<ReturnType<typeof loadPluginInstallRuntime>>;
   installedDir: string;
   additionalDependencyPackageDirs?: string[];
@@ -214,6 +219,7 @@ export async function scanAndLinkInstalledPackage(params: {
   requestKind?: PluginInstallPolicyRequest["kind"];
   requestedSpecifier?: string;
   config?: OpenClawConfig;
+  onInstallPolicyWarning?: PackageInstallCommonParams["onInstallPolicyWarning"];
   source?: InstallPolicySource;
   logger: PluginInstallLogger;
 }): Promise<Extract<InstallPluginResult, { ok: false }> | null> {
@@ -227,6 +233,7 @@ export async function scanAndLinkInstalledPackage(params: {
     ),
     scan: async () =>
       await params.runtime.scanInstalledPackageDependencyTree({
+        acknowledgeInstallPolicyWarning: params.acknowledgeInstallPolicyWarning,
         ...(params.additionalDependencyPackageDirs
           ? { additionalPackageDirs: params.additionalDependencyPackageDirs }
           : {}),
@@ -240,6 +247,7 @@ export async function scanAndLinkInstalledPackage(params: {
         packageDir: params.installedDir,
         pluginId: params.pluginId,
         config: params.config,
+        onInstallPolicyWarning: params.onInstallPolicyWarning,
         ...(params.requestKind ? { requestKind: params.requestKind } : {}),
         requestedSpecifier: params.requestedSpecifier,
         source: params.source,
@@ -290,9 +298,11 @@ async function installPluginFromInstalledPackageDirInternal(
     expectedPluginId: params.expectedPluginId,
     requirePluginManifest: params.requirePluginManifest,
     allowSourceTypeScriptEntries: params.allowSourceTypeScriptEntries,
+    acknowledgeInstallPolicyWarning: params.acknowledgeInstallPolicyWarning,
     dangerouslyForceUnsafeInstall: params.dangerouslyForceUnsafeInstall,
     trustedSourceLinkedOfficialInstall: params.trustedSourceLinkedOfficialInstall,
     config: params.config,
+    onInstallPolicyWarning: params.onInstallPolicyWarning,
     installPolicyRequest: params.installPolicyRequest,
     logger,
     mode: params.mode ?? "install",
@@ -301,6 +311,7 @@ async function installPluginFromInstalledPackageDirInternal(
     return validated;
   }
   const postInstallError = await scanAndLinkInstalledPackage({
+    acknowledgeInstallPolicyWarning: params.acknowledgeInstallPolicyWarning,
     runtime,
     installedDir: params.packageDir,
     ...(params.additionalDependencyPackageDirs
@@ -312,6 +323,7 @@ async function installPluginFromInstalledPackageDirInternal(
     dangerouslyForceUnsafeInstall: params.dangerouslyForceUnsafeInstall,
     trustedSourceLinkedOfficialInstall: params.trustedSourceLinkedOfficialInstall,
     config: params.config,
+    onInstallPolicyWarning: params.onInstallPolicyWarning,
     mode: params.mode ?? "install",
     ...(params.installPolicyRequest?.kind ? { requestKind: params.installPolicyRequest.kind } : {}),
     requestedSpecifier: params.installPolicyRequest?.requestedSpecifier,

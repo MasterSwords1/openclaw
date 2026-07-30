@@ -55,17 +55,23 @@ async function collectInstallPolicyHealthLines(
       logger: {},
       sourcePath: probeDir,
     });
-    if (!result?.blocked) {
+    if (!result || result.decision === "allow") {
       lines.push("- Deep probe allowed the synthetic install request.");
       return lines;
     }
-    if (result.blocked.code === "security_scan_blocked") {
+    if (result.decision === "warn") {
       lines.push(
-        `- Deep probe reached the policy command and the policy blocked the synthetic request: ${result.blocked.reason}`,
+        `- Deep probe reached the policy command and the policy warned on the synthetic request: ${result.reason}`,
       );
       return lines;
     }
-    lines.push(`- ERROR: Deep probe failed closed: ${result.blocked.reason}`);
+    if (result.code === "security_scan_blocked") {
+      lines.push(
+        `- Deep probe reached the policy command and the policy blocked the synthetic request: ${result.reason}`,
+      );
+      return lines;
+    }
+    lines.push(`- ERROR: Deep probe failed closed: ${result.reason}`);
     lines.push("- Installs and updates for covered targets will fail closed until this is fixed.");
     return lines;
   } catch (err) {

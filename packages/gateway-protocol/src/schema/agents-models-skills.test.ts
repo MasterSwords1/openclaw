@@ -14,6 +14,7 @@ import {
   SkillProposalEvaluationSchema,
   SkillProposalLifecycleEventSchema,
   SkillsDetailResultSchema,
+  SkillsInstallParamsSchema,
   SkillsProposalEvaluateParamsSchema,
   SkillsProposalEvaluateResultSchema,
   SkillsProposalEventsListParamsSchema,
@@ -23,6 +24,26 @@ import {
   ToolsEffectiveResultSchema,
   ToolsInvokeParamsSchema,
 } from "./agents-models-skills.js";
+
+describe("SkillsInstallParamsSchema", () => {
+  it("accepts request-scoped install-policy acknowledgement", () => {
+    expect(
+      Value.Check(SkillsInstallParamsSchema, {
+        source: "clawhub",
+        slug: "weather",
+        acknowledgeInstallPolicyWarning: true,
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(SkillsInstallParamsSchema, {
+        source: "upload",
+        uploadId: "upload-1",
+        slug: "weather",
+        acknowledgeInstallPolicyWarning: true,
+      }),
+    ).toBe(true);
+  });
+});
 
 describe("AgentsDeleteResultSchema", () => {
   it("accepts per-path cleanup outcomes", () => {

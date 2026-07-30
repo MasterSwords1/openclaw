@@ -11,7 +11,7 @@ import { resolveArchiveKind } from "../infra/archive.js";
 import { formatErrorMessage } from "../infra/errors.js";
 import { findBundledPluginSource } from "../plugins/bundled-sources.js";
 import type { InstallSafetyOverrides } from "../plugins/install-security-scan.js";
-import { PLUGIN_INSTALL_ERROR_CODE } from "../plugins/install.js";
+import { PLUGIN_INSTALL_ERROR_CODE } from "../plugins/install-types.js";
 import { installManagedPluginSource } from "../plugins/management-service.js";
 import { defaultRuntime, type RuntimeEnv } from "../runtime.js";
 import { shortenHomePath } from "../utils.js";
@@ -32,8 +32,10 @@ export function resolveInstallSafetyOverrides(
   overrides: InstallSafetyOverrides,
 ): InstallSafetyOverrides {
   return {
+    acknowledgeInstallPolicyWarning: overrides.acknowledgeInstallPolicyWarning,
     config: overrides.config,
     dangerouslyForceUnsafeInstall: overrides.dangerouslyForceUnsafeInstall,
+    onInstallPolicyWarning: overrides.onInstallPolicyWarning,
     trustedSourceLinkedOfficialInstall: overrides.trustedSourceLinkedOfficialInstall,
   };
 }
@@ -62,6 +64,7 @@ export function isTerminalPluginInstallFailure(code?: string): boolean {
   return (
     code === PLUGIN_INSTALL_ERROR_CODE.SECURITY_SCAN_BLOCKED ||
     code === PLUGIN_INSTALL_ERROR_CODE.SECURITY_SCAN_FAILED ||
+    code === PLUGIN_INSTALL_ERROR_CODE.INSTALL_POLICY_ACKNOWLEDGEMENT_REQUIRED ||
     code === PLUGIN_INSTALL_ERROR_CODE.UNSUPPORTED_PLAIN_FILE_PLUGIN
   );
 }

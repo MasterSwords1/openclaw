@@ -1215,7 +1215,7 @@ describe("plugins cli update", () => {
     );
   });
 
-  it("passes ClawHub risk acknowledgement to plugin updates", async () => {
+  it("passes explicit acknowledgements to plugin updates", async () => {
     const config = createTrackedPluginConfig({
       pluginId: "openclaw-codex-app-server",
       spec: "openclaw-codex-app-server@beta",
@@ -1233,6 +1233,7 @@ describe("plugins cli update", () => {
       "update",
       "openclaw-codex-app-server",
       "--acknowledge-clawhub-risk",
+      "--acknowledge-install-policy-warning",
     ]);
 
     expect(updateNpmInstalledPlugins).toHaveBeenCalledWith(
@@ -1240,6 +1241,7 @@ describe("plugins cli update", () => {
         config,
         pluginIds: ["openclaw-codex-app-server"],
         acknowledgeClawHubRisk: true,
+        acknowledgeInstallPolicyWarning: true,
       }),
     );
   });

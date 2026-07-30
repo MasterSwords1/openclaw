@@ -118,12 +118,12 @@ type InstallPolicyRequest = {
 };
 
 type InstallPolicyResult =
-  | { blocked?: undefined; findings?: InstallPolicyFinding[] }
+  | { decision: "allow"; findings?: InstallPolicyFinding[] }
+  | { decision: "warn"; reason: string; findings?: InstallPolicyFinding[] }
   | {
-      blocked: {
-        code: "security_scan_blocked" | "security_scan_failed";
-        reason: string;
-      };
+      decision: "block";
+      code: "security_scan_blocked" | "security_scan_failed";
+      reason: string;
       findings?: InstallPolicyFinding[];
     };
 
@@ -387,19 +387,25 @@ function readPassEnvValue(env: NodeJS.ProcessEnv, key: string): string | undefin
 
 function blockedByFailure(message: string): InstallPolicyResult {
   return {
-    blocked: {
-      code: "security_scan_failed",
-      reason: `install policy failed closed: ${truncateText(message, MAX_REASON_CHARS)}`,
-    },
+    decision: "block",
+    code: "security_scan_failed",
+    reason: `install policy failed closed: ${truncateText(message, MAX_REASON_CHARS)}`,
   };
 }
 
 function blockedByPolicy(reason: string, findings?: InstallPolicyFinding[]): InstallPolicyResult {
   return {
-    blocked: {
-      code: "security_scan_blocked",
-      reason: `blocked by install policy: ${truncateText(reason, MAX_REASON_CHARS)}`,
-    },
+    decision: "block",
+    code: "security_scan_blocked",
+    reason: `blocked by install policy: ${truncateText(reason, MAX_REASON_CHARS)}`,
+    ...(findings && findings.length > 0 ? { findings } : {}),
+  };
+}
+
+function warnedByPolicy(reason: string, findings?: InstallPolicyFinding[]): InstallPolicyResult {
+  return {
+    decision: "warn",
+    reason: truncateText(reason, MAX_REASON_CHARS),
     ...(findings && findings.length > 0 ? { findings } : {}),
   };
 }
@@ -551,21 +557,26 @@ function parsePolicyResponse(stdout: string): InstallPolicyResult {
     return blockedByFailure("policy response protocolVersion must be 1");
   }
   const decision = record.decision;
-  if (decision !== "allow" && decision !== "block") {
-    return blockedByFailure('policy response decision must be "allow" or "block"');
+  if (decision !== "allow" && decision !== "warn" && decision !== "block") {
+    return blockedByFailure('policy response decision must be "allow", "warn", or "block"');
   }
   const findings = Array.isArray(record.findings)
     ? record.findings.slice(0, MAX_FINDINGS).map(normalizeFinding).filter(Boolean)
     : [];
   const normalizedFindings = findings as InstallPolicyFinding[];
   if (decision === "allow") {
-    return normalizedFindings.length > 0 ? { findings: normalizedFindings } : {};
+    return {
+      decision: "allow",
+      ...(normalizedFindings.length > 0 ? { findings: normalizedFindings } : {}),
+    };
   }
   const reason = typeof record.reason === "string" ? record.reason.trim() : "";
   if (!reason) {
-    return blockedByFailure('policy response decision "block" requires a non-empty reason');
+    return blockedByFailure(`policy response decision "${decision}" requires a non-empty reason`);
   }
-  return blockedByPolicy(reason, normalizedFindings);
+  return decision === "warn"
+    ? warnedByPolicy(reason, normalizedFindings)
+    : blockedByPolicy(reason, normalizedFindings);
 }
 
 export async function runInstallPolicy(params: {
@@ -580,8 +591,8 @@ export async function runInstallPolicy(params: {
 }): Promise<InstallPolicyResult | undefined> {
   const decisionContext = formatDecisionContext(params.request);
   const logBlocked = (result: InstallPolicyResult): InstallPolicyResult => {
-    if (result.blocked) {
-      params.logger?.warn?.(`Install policy ${decisionContext}: ${result.blocked.reason}`);
+    if (result.decision === "block") {
+      params.logger?.warn?.(`Install policy ${decisionContext}: ${result.reason}`);
     }
     return result;
   };
@@ -689,10 +700,10 @@ export async function runInstallPolicy(params: {
   }
 
   const parsed = parsePolicyResponse(result.stdout);
-  if (parsed.blocked) {
+  if (parsed.decision === "block") {
     return logBlocked(parsed);
   }
-  params.logger?.debug?.(`Install policy ${decisionContext}: allowed`);
+  params.logger?.debug?.(`Install policy ${decisionContext}: ${parsed.decision}`);
   return parsed;
 }
 

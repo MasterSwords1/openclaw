@@ -1315,8 +1315,10 @@ export async function installPluginFromMarketplace(
     installCleanup = resolved.cleanup;
 
     const result = await installPluginFromPath({
+      acknowledgeInstallPolicyWarning: params.acknowledgeInstallPolicyWarning,
       dangerouslyForceUnsafeInstall: params.dangerouslyForceUnsafeInstall,
       config: params.config,
+      onInstallPolicyWarning: params.onInstallPolicyWarning,
       path: resolved.path,
       logger: params.logger,
       mode: params.mode,

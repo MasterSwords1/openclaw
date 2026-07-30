@@ -12,6 +12,8 @@ import { resolveBundledPluginSources } from "./bundled-sources.js";
 import { buildClawHubPluginInstallRecordFields } from "./clawhub-install-records.js";
 import type { ClawHubRiskAcknowledgementRequest } from "./clawhub.js";
 import { normalizePluginsConfig, resolveEffectiveEnableState } from "./config-state.js";
+import { buildInstallPolicyAcknowledgementOptions } from "./install-security-scan.js";
+import type { InstallSafetyOverrides } from "./install-security-scan.js";
 import { PLUGIN_INSTALL_ERROR_CODE, resolvePluginInstallDir } from "./install.js";
 import {
   buildNpmResolutionInstallFields,
@@ -77,25 +79,27 @@ import {
   type PluginUpdateSummary,
 } from "./update-source.js";
 
-export async function updateNpmInstalledPlugins(params: {
-  config: OpenClawConfig;
-  logger?: PluginUpdateLogger;
-  pluginIds?: string[];
-  skipIds?: Set<string>;
-  skipDisabledPlugins?: boolean;
-  syncOfficialPluginInstalls?: boolean;
-  disableOnFailure?: boolean;
-  timeoutMs?: number;
-  dryRun?: boolean;
-  updateChannel?: UpdateChannel;
-  officialPluginUpdateChannel?: UpdateChannel;
-  coreVersion?: string;
-  dangerouslyForceUnsafeInstall?: boolean;
-  specOverrides?: Record<string, string>;
-  onIntegrityDrift?: (params: PluginUpdateIntegrityDriftParams) => boolean | Promise<boolean>;
-  acknowledgeClawHubRisk?: boolean;
-  onClawHubRisk?: (request: ClawHubRiskAcknowledgementRequest) => boolean | Promise<boolean>;
-}): Promise<PluginUpdateSummary> {
+export async function updateNpmInstalledPlugins(
+  params: InstallSafetyOverrides & {
+    config: OpenClawConfig;
+    logger?: PluginUpdateLogger;
+    pluginIds?: string[];
+    skipIds?: Set<string>;
+    skipDisabledPlugins?: boolean;
+    syncOfficialPluginInstalls?: boolean;
+    disableOnFailure?: boolean;
+    timeoutMs?: number;
+    dryRun?: boolean;
+    updateChannel?: UpdateChannel;
+    officialPluginUpdateChannel?: UpdateChannel;
+    coreVersion?: string;
+    dangerouslyForceUnsafeInstall?: boolean;
+    specOverrides?: Record<string, string>;
+    onIntegrityDrift?: (params: PluginUpdateIntegrityDriftParams) => boolean | Promise<boolean>;
+    acknowledgeClawHubRisk?: boolean;
+    onClawHubRisk?: (request: ClawHubRiskAcknowledgementRequest) => boolean | Promise<boolean>;
+  },
+): Promise<PluginUpdateSummary> {
   const logger = params.logger ?? {};
   const installs = params.config.plugins?.installs ?? {};
   const targets = params.pluginIds?.length ? params.pluginIds : Object.keys(installs);
@@ -525,6 +529,7 @@ export async function updateNpmInstalledPlugins(params: {
         logger,
         onIntegrityDrift: params.onIntegrityDrift,
         clawHubRiskAcknowledgementOptions,
+        installPolicyAcknowledgementOptions: buildInstallPolicyAcknowledgementOptions(params),
       });
     const attempt = await runPluginUpdateWithClawHubLease({
       pluginId,

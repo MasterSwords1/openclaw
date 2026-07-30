@@ -8,6 +8,7 @@ import { isContainerEnvironment as defaultIsContainerEnvironment } from "../../i
 import { formatErrorMessage } from "../../infra/errors.js";
 import {
   evaluateSkillInstallPolicy,
+  type InstallPolicyWarning,
   type SkillInstallSpecMetadata,
 } from "../../plugins/install-security-scan.js";
 import { runCommandWithTimeout, type CommandOptions } from "../../process/exec.js";
@@ -29,6 +30,8 @@ type SkillInstallRequest = {
   installId: string;
   timeoutMs?: number;
   config?: OpenClawConfig;
+  acknowledgeInstallPolicyWarning?: boolean;
+  onInstallPolicyWarning?: (warning: InstallPolicyWarning) => boolean | Promise<boolean>;
 };
 export type { SkillInstallSkipReason } from "./install-types.js";
 
@@ -697,6 +700,7 @@ export async function installSkill(params: SkillInstallRequest): Promise<SkillIn
   const skillSource = resolveSkillSource(entry.skill);
   const normalizedSpec = spec ? normalizeSkillInstallSpec(spec) : undefined;
   const scanResult = await evaluateSkillInstallPolicy({
+    acknowledgeInstallPolicyWarning: params.acknowledgeInstallPolicyWarning,
     config: params.config,
     installId: params.installId,
     ...(normalizedSpec ? { installSpec: normalizedSpec } : {}),
@@ -708,6 +712,7 @@ export async function installSkill(params: SkillInstallRequest): Promise<SkillIn
       skillName: params.skillName,
       installId: params.installId,
     },
+    onInstallPolicyWarning: params.onInstallPolicyWarning,
     source:
       skillSource === "openclaw-bundled"
         ? { kind: "bundled", authority: "openclaw", mutable: false, network: false }
@@ -726,6 +731,19 @@ export async function installSkill(params: SkillInstallRequest): Promise<SkillIn
         stdout: "",
         stderr: "",
         code: null,
+      },
+      warnings,
+    );
+  }
+  if (scanResult?.warning) {
+    return withWarnings(
+      {
+        ok: false,
+        message: scanResult.warning.reason,
+        stdout: "",
+        stderr: "",
+        code: null,
+        installPolicyWarning: scanResult.warning,
       },
       warnings,
     );

@@ -46,6 +46,7 @@ import {
 import { defaultRuntime } from "../runtime.js";
 import { VERSION } from "../version.js";
 import { resolveClawHubRiskAcknowledgementCliOptions } from "./clawhub-risk-acknowledgement.js";
+import { resolveInstallPolicyAcknowledgementCliOptions } from "./install-policy-acknowledgement.js";
 import { notifyGatewayPluginMetadataChanged } from "./plugins-update-gateway-signal.js";
 import { logPluginUpdateOutcomes } from "./plugins-update-outcomes.js";
 import {
@@ -177,6 +178,7 @@ type RunPluginUpdateCommandParams = {
   opts: {
     all?: boolean;
     acknowledgeClawHubRisk?: boolean;
+    acknowledgeInstallPolicyWarning?: boolean;
     dryRun?: boolean;
     dangerouslyForceUnsafeInstall?: boolean;
   };
@@ -231,6 +233,11 @@ async function runPluginUpdateCommandUnlocked(params: RunPluginUpdateCommandPara
   if (params.opts.dangerouslyForceUnsafeInstall) {
     defaultRuntime.log(theme.warn(DEPRECATED_DANGEROUS_FORCE_UNSAFE_UPDATE_WARNING));
   }
+  const installPolicyAcknowledgement = resolveInstallPolicyAcknowledgementCliOptions({
+    acknowledgeInstallPolicyWarning: params.opts.acknowledgeInstallPolicyWarning,
+    action: "update",
+    allowPrompt: !params.opts.dryRun,
+  });
   const pluginSelection = resolvePluginUpdateSelection({
     installs: pluginInstallRecords,
     rawId: params.id,
@@ -353,6 +360,7 @@ async function runPluginUpdateCommandUnlocked(params: RunPluginUpdateCommandPara
           syncOfficialPluginInstalls: params.opts.all ? true : undefined,
           coreVersion: VERSION,
           dangerouslyForceUnsafeInstall: params.opts.dangerouslyForceUnsafeInstall,
+          ...installPolicyAcknowledgement,
           ...resolveClawHubRiskAcknowledgementCliOptions({
             acknowledgeClawHubRisk: params.opts.acknowledgeClawHubRisk,
             action: "updating",
@@ -382,6 +390,7 @@ async function runPluginUpdateCommandUnlocked(params: RunPluginUpdateCommandPara
           hookIds: hookSelection.hookIds,
           specOverrides: hookSelection.specOverrides,
           dryRun: params.opts.dryRun,
+          ...installPolicyAcknowledgement,
           logger,
           onIntegrityDrift: async (drift) => {
             const specLabel = drift.resolvedSpec ?? drift.spec;

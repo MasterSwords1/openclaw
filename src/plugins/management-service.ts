@@ -36,7 +36,7 @@ import {
   type ConfigSnapshotForInstallPersist,
 } from "./install-persistence.js";
 import { commitPluginInstallRecordsWithConfig } from "./install-record-commit.js";
-import type { InstallSafetyOverrides } from "./install-security-scan.js";
+import type { InstallPolicyWarning, InstallSafetyOverrides } from "./install-security-scan.js";
 import type { PluginInstallLogger } from "./install-types.js";
 import {
   installPluginFromNpmPackArchive,
@@ -120,8 +120,13 @@ type ManagedPluginInstallRequest =
       packageName: string;
       version?: string;
       acknowledgeClawHubRisk?: boolean;
+      acknowledgeInstallPolicyWarning?: boolean;
     }
-  | { source: "official"; pluginId: string };
+  | {
+      source: "official";
+      pluginId: string;
+      acknowledgeInstallPolicyWarning?: boolean;
+    };
 
 export type ManagedPluginSourceInstallRequest =
   | {
@@ -183,10 +188,24 @@ type ManagedPluginSourceInstallResult =
       npmResolution?: NpmSpecResolution;
       clawhub?: ClawHubPluginInstallRecordFields;
     }
-  | { ok: false; error: string; code?: string; version?: string; warning?: string };
+  | {
+      ok: false;
+      error: string;
+      code?: string;
+      version?: string;
+      warning?: string;
+      installPolicyWarning?: InstallPolicyWarning;
+    };
 
 type SourceInstallerResult =
-  | { ok: false; error: string; code?: string; version?: string; warning?: string }
+  | {
+      ok: false;
+      error: string;
+      code?: string;
+      version?: string;
+      warning?: string;
+      installPolicyWarning?: InstallPolicyWarning;
+    }
   | {
       ok: true;
       pluginId: string;
@@ -200,6 +219,7 @@ export class ManagedPluginLifecycleError extends Error {
   readonly code?: string;
   readonly version?: string;
   readonly warning?: string;
+  readonly installPolicyWarning?: InstallPolicyWarning;
 
   constructor(
     message: string,
@@ -208,6 +228,7 @@ export class ManagedPluginLifecycleError extends Error {
       code?: string;
       version?: string;
       warning?: string;
+      installPolicyWarning?: InstallPolicyWarning;
       cause?: unknown;
     },
   ) {
@@ -217,6 +238,7 @@ export class ManagedPluginLifecycleError extends Error {
     this.code = details?.code;
     this.version = details?.version;
     this.warning = details?.warning;
+    this.installPolicyWarning = details?.installPolicyWarning;
   }
 }
 
@@ -958,6 +980,7 @@ function throwInstallFailure(result: {
   code?: string;
   version?: string;
   warning?: string;
+  installPolicyWarning?: InstallPolicyWarning;
 }): never {
   const unavailable =
     !result.code ||
@@ -969,6 +992,7 @@ function throwInstallFailure(result: {
     code: result.code,
     version: result.version,
     warning: result.warning,
+    installPolicyWarning: result.installPolicyWarning,
     cause: result,
   });
 }
@@ -1044,6 +1068,7 @@ function throwPersistenceFailureWithCleanupWarnings(error: unknown, warnings: st
       code: error.code,
       version: error.version,
       warning: [error.warning, cleanupWarning].filter(Boolean).join("\n"),
+      installPolicyWarning: error.installPolicyWarning,
       cause: error,
     });
   }
@@ -1396,6 +1421,9 @@ export async function installManagedPlugin(params: {
       env,
       logger: createInstallLogger(warnings),
       cleanupOnPersistenceFailure: true,
+      safetyOverrides: {
+        acknowledgeInstallPolicyWarning: params.request.acknowledgeInstallPolicyWarning,
+      },
     });
     if (!installed.ok) {
       return throwInstallFailure(installed);
