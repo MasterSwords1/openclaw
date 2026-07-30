@@ -2,7 +2,10 @@
 import { registerQuestionChannelDelivery } from "../infra/question-channel-runtime.js";
 // The pre-release named resolver exports were replaced wholesale by this
 // runtime object before any tagged release shipped them; no compat aliases.
-import { resolveQuestionOverGateway } from "../infra/question-gateway-resolver.js";
+import {
+  buildQuestionOptionToken,
+  resolveQuestionOverGateway,
+} from "../infra/question-gateway-resolver.js";
 import {
   QUESTION_REACTION_EMOJIS,
   prepareQuestionReactionPayloadForDelivery,
@@ -13,6 +16,7 @@ import {
 } from "../infra/question-reaction-runtime.js";
 
 export const questionGatewayRuntime = {
+  optionToken: buildQuestionOptionToken,
   resolveOption: resolveQuestionOverGateway,
   reactionEmojis: QUESTION_REACTION_EMOJIS,
   prepareReactionPayloadForDelivery: prepareQuestionReactionPayloadForDelivery,

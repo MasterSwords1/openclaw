@@ -1,4 +1,5 @@
 // Telegram question callback envelope tests.
+import { questionGatewayRuntime } from "openclaw/plugin-sdk/question-gateway-runtime";
 import { describe, expect, it } from "vitest";
 import {
   buildTelegramQuestionCallbackData,
@@ -17,9 +18,19 @@ describe("question callback data", () => {
     expect(parseTelegramQuestionCallbackData(data)).toEqual({ questionId, optionIndex: 3 });
   });
 
+  it("round-trips an order-independent option identity at Telegram's byte limit", () => {
+    const optionToken = questionGatewayRuntime.optionToken("Production");
+    const data = buildTelegramQuestionCallbackData({ questionId, optionToken });
+
+    expect(data).toBe(`tgq2:${questionId}:${optionToken}`);
+    expect(Buffer.byteLength(data ?? "", "utf8")).toBe(64);
+    expect(parseTelegramQuestionCallbackData(data)).toEqual({ questionId, optionToken });
+  });
+
   it.each([
     `tgq1:${questionId}:4`,
     `tgq2:${questionId}:0`,
+    `tgq2:${questionId}:${"x".repeat(23)}`,
     "tgq1:ask_short:0",
     `tgq1:${questionId}:0:extra`,
   ])("rejects malformed data: %s", (data) => {

@@ -10,6 +10,7 @@ import {
   type MessagePresentation,
   type MessagePresentationButton,
 } from "openclaw/plugin-sdk/interactive-runtime";
+import { questionGatewayRuntime } from "openclaw/plugin-sdk/question-gateway-runtime";
 import {
   buildTelegramApprovalCallbackData,
   hasTelegramApprovalCallbackPrefix,
@@ -47,7 +48,6 @@ function toTelegramButtonStyle(
 
 function toTelegramInlineButton(
   button: MessagePresentationButton,
-  optionIndex: number,
   options?: { allowWebAppButtons?: boolean },
 ): TelegramInlineButton | undefined {
   const style = toTelegramButtonStyle(button.style);
@@ -70,7 +70,7 @@ function toTelegramInlineButton(
   if (action.type === "question") {
     const callbackData = buildTelegramQuestionCallbackData({
       questionId: action.questionId,
-      optionIndex,
+      optionToken: questionGatewayRuntime.optionToken(action.optionValue),
     });
     return callbackData ? { text: button.label, callback_data: callbackData, style } : undefined;
   }
@@ -104,11 +104,10 @@ function chunkInteractiveButtons(
   rows: TelegramInlineButton[][],
   options?: { allowWebAppButtons?: boolean },
 ) {
-  // Index is position in the question's options; core emits one buttons block in option order.
   for (let i = 0; i < buttons.length; i += TELEGRAM_INTERACTIVE_ROW_SIZE) {
     const row = buttons
       .slice(i, i + TELEGRAM_INTERACTIVE_ROW_SIZE)
-      .map((button, offset) => toTelegramInlineButton(button, i + offset, options))
+      .map((button) => toTelegramInlineButton(button, options))
       .filter((button): button is TelegramInlineButton => Boolean(button));
     if (row.length > 0) {
       rows.push(row);

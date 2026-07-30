@@ -19,7 +19,9 @@ export async function handleTelegramQuestionCallback(params: {
     result = await (params.resolveQuestion ?? questionGatewayRuntime.resolveOption)({
       cfg: params.cfg,
       questionId: params.callback.questionId,
-      optionIndex: params.callback.optionIndex,
+      ...(params.callback.optionToken === undefined
+        ? { optionIndex: params.callback.optionIndex }
+        : { optionToken: params.callback.optionToken }),
       senderId: params.senderId,
       clientDisplayName: "Telegram question",
     });

@@ -1,3 +1,4 @@
+import { questionGatewayRuntime } from "openclaw/plugin-sdk/question-gateway-runtime";
 import { describe, expect, it } from "vitest";
 import { canonicalizeTelegramPresentationPayload } from "./interactive-fallback.js";
 
@@ -98,6 +99,54 @@ describe("canonicalizeTelegramPresentationPayload", () => {
         [
           { text: "Production", callback_data: "prod" },
           { text: "Staging", callback_data: "staging" },
+        ],
+      ],
+    });
+  });
+
+  it("keeps question option identity across split and reordered button blocks", () => {
+    const questionId = "ask_0123456789abcdef0123456789abcdef";
+    const result = canonicalizeTelegramPresentationPayload({
+      presentation: {
+        blocks: [
+          {
+            type: "buttons",
+            buttons: [
+              {
+                label: "Production",
+                action: { type: "question", questionId, optionValue: "Production" },
+              },
+            ],
+          },
+          { type: "text", text: "Choose carefully." },
+          {
+            type: "buttons",
+            buttons: [
+              {
+                label: "Staging",
+                action: { type: "question", questionId, optionValue: "Staging" },
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(result.channelData?.telegram).toEqual({
+      buttons: [
+        [
+          {
+            text: "Production",
+            callback_data: `tgq2:${questionId}:${questionGatewayRuntime.optionToken("Production")}`,
+            style: undefined,
+          },
+        ],
+        [
+          {
+            text: "Staging",
+            callback_data: `tgq2:${questionId}:${questionGatewayRuntime.optionToken("Staging")}`,
+            style: undefined,
+          },
         ],
       ],
     });

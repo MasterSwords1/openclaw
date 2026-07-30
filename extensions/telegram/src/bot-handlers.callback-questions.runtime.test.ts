@@ -6,6 +6,10 @@ const callback = {
   questionId: "ask_0123456789abcdef0123456789abcdef",
   optionIndex: 1,
 };
+const tokenCallback = {
+  questionId: callback.questionId,
+  optionToken: "0123456789abcdefghijkl",
+};
 
 describe("handleTelegramQuestionCallback", () => {
   it.each([
@@ -49,5 +53,25 @@ describe("handleTelegramQuestionCallback", () => {
     ).resolves.toBeUndefined();
     expect(feedback).toHaveBeenCalledOnce();
     expect(feedback).toHaveBeenCalledWith("Answer submitted.", true);
+  });
+
+  it("passes canonical option identity to the Gateway resolver", async () => {
+    const resolveQuestion = vi.fn(async () => ({
+      status: "answered" as const,
+      questionId: "target",
+      optionValue: "Production",
+    }));
+
+    await handleTelegramQuestionCallback({
+      callback: tokenCallback,
+      cfg: {} as never,
+      senderId: "42",
+      feedback: async () => undefined,
+      resolveQuestion,
+    });
+
+    expect(resolveQuestion).toHaveBeenCalledWith(
+      expect.objectContaining({ optionToken: tokenCallback.optionToken }),
+    );
   });
 });

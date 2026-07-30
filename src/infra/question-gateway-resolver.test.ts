@@ -1,6 +1,9 @@
 // Covers question-button value resolution through a stubbed Gateway.
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { resolveQuestionOverGateway } from "./question-gateway-resolver.js";
+import {
+  buildQuestionOptionToken,
+  resolveQuestionOverGateway,
+} from "./question-gateway-resolver.js";
 
 const hoisted = vi.hoisted(() => ({ callGateway: vi.fn() }));
 
@@ -71,6 +74,29 @@ describe("resolveQuestionOverGateway", () => {
         }),
       ],
     ]);
+  });
+
+  it("maps an order-independent option token to the canonical option label", async () => {
+    hoisted.callGateway.mockResolvedValueOnce({ question: pendingRecord }).mockResolvedValueOnce({
+      status: "answered",
+      answers: { answers: { deploy_target: ["Production"] } },
+    });
+
+    await expect(
+      resolveQuestionOverGateway({
+        cfg: {} as never,
+        questionId: recordId,
+        optionToken: buildQuestionOptionToken("Production"),
+      }),
+    ).resolves.toMatchObject({ optionValue: "Production" });
+    expect(hoisted.callGateway).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        method: "question.resolve",
+        params: expect.objectContaining({
+          answers: { answers: { deploy_target: ["Production"] } },
+        }),
+      }),
+    );
   });
 
   it.each([

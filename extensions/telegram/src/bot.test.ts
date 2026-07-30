@@ -58,11 +58,16 @@ const questionGatewayHoisted = vi.hoisted(() => ({
   })),
 }));
 
-vi.mock("openclaw/plugin-sdk/question-gateway-runtime", () => ({
-  questionGatewayRuntime: {
-    resolveOption: questionGatewayHoisted.resolveQuestionOverGatewaySpy,
-  },
-}));
+vi.mock("openclaw/plugin-sdk/question-gateway-runtime", async (importOriginal) => {
+  const original =
+    await importOriginal<typeof import("openclaw/plugin-sdk/question-gateway-runtime")>();
+  return {
+    questionGatewayRuntime: {
+      ...original.questionGatewayRuntime,
+      resolveOption: questionGatewayHoisted.resolveQuestionOverGatewaySpy,
+    },
+  };
+});
 
 vi.mock("openclaw/plugin-sdk/channel-inbound", async () => {
   const actual = await vi.importActual<typeof import("openclaw/plugin-sdk/channel-inbound")>(
@@ -1827,6 +1832,7 @@ describe("createTelegramBot", () => {
   it("does not resolve opaque approval-shaped plugin callbacks", async () => {
     onSpy.mockClear();
     editMessageReplyMarkupSpy.mockClear();
+    sendMessageSpy.mockClear();
     resolveExecApprovalSpy.mockClear();
 
     loadConfig.mockReturnValue({
@@ -1854,7 +1860,14 @@ describe("createTelegramBot", () => {
     );
 
     expect(resolveExecApprovalSpy).not.toHaveBeenCalled();
-    expect(editMessageReplyMarkupSpy).not.toHaveBeenCalled();
+    expect(editMessageReplyMarkupSpy).toHaveBeenCalledWith(1234, 25, {
+      reply_markup: { inline_keyboard: [] },
+    });
+    expect(sendMessageSpy).toHaveBeenCalledWith(
+      1234,
+      "This action is no longer available.",
+      undefined,
+    );
     expect(answerCallbackQuerySpy).toHaveBeenCalledWith("cbq-opaque-plugin-approve");
   });
 

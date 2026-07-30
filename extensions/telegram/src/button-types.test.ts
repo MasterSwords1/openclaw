@@ -1,5 +1,6 @@
 // Telegram tests cover button types plugin behavior.
 import { buildApprovalResolutionRef } from "openclaw/plugin-sdk/approval-reference-runtime";
+import { questionGatewayRuntime } from "openclaw/plugin-sdk/question-gateway-runtime";
 import { describe, expect, it } from "vitest";
 import { parseTelegramApprovalCallbackData } from "./approval-callback-data.js";
 import { buildTelegramPresentationButtons, resolveTelegramInlineButtons } from "./button-types.js";
@@ -54,8 +55,10 @@ describe("buildTelegramPresentationButtons", () => {
     ]);
   });
 
-  it("encodes question buttons by record id and option index", () => {
+  it("encodes question buttons by record id and canonical option identity", () => {
     const questionId = "ask_0123456789abcdef0123456789abcdef";
+    const stagingToken = questionGatewayRuntime.optionToken("Staging");
+    const productionToken = questionGatewayRuntime.optionToken("Production");
     expect(
       buildTelegramPresentationButtons({
         blocks: [
@@ -70,8 +73,12 @@ describe("buildTelegramPresentationButtons", () => {
       }),
     ).toEqual([
       [
-        { text: "Staging", callback_data: `tgq1:${questionId}:0`, style: undefined },
-        { text: "Production", callback_data: `tgq1:${questionId}:1`, style: undefined },
+        { text: "Staging", callback_data: `tgq2:${questionId}:${stagingToken}`, style: undefined },
+        {
+          text: "Production",
+          callback_data: `tgq2:${questionId}:${productionToken}`,
+          style: undefined,
+        },
       ],
     ]);
   });
@@ -141,17 +148,29 @@ describe("buildTelegramPresentationButtons", () => {
   });
 
   it("keeps legacy values that look like opaque callback prefixes raw", () => {
+    const value = "tgcb1:inspect:123";
     expect(parseTelegramOpaqueCallbackData("tgcb1:inspect:123")).toBeNull();
     expect(
       buildTelegramPresentationButtons({
         blocks: [
           {
             type: "buttons",
-            buttons: [{ label: "Raw", value: "tgcb1:inspect:123" }],
+            buttons: [{ label: "Raw", value }],
           },
         ],
       }),
-    ).toEqual([[{ text: "Raw", callback_data: "tgcb1:inspect:123", style: undefined }]]);
+    ).toEqual([[{ text: "Raw", callback_data: value, style: undefined }]]);
+  });
+
+  it("preserves legacy tgcb1 values at Telegram's callback byte limit", () => {
+    const value = `tgcb1:${"x".repeat(58)}`;
+
+    expect(Buffer.byteLength(value, "utf8")).toBe(64);
+    expect(
+      buildTelegramPresentationButtons({
+        blocks: [{ type: "buttons", buttons: [{ label: "Legacy", value }] }],
+      }),
+    ).toEqual([[{ text: "Legacy", callback_data: value, style: undefined }]]);
   });
 
   it("keeps transport-private approval callback prefixes opaque for legacy values", () => {
