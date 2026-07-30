@@ -458,18 +458,29 @@ class QaCrablineTransport extends QaStateBackedTransportAdapter {
         : rawConfig;
     if (this.#selection.channel === "discord") {
       const discord = config.channels?.discord;
+      const senderAllowlist = this.#transportPolicy?.senderAllowlist?.map(resolveDiscordQaId);
+      // Crabline's local binding opens DMs, so the real Discord plugin also requires the matching
+      // allowlist. Keep an explicit sender restriction; otherwise its open policy uses a wildcard.
+      const dmAllowlist = senderAllowlist ?? discord?.allowFrom ?? ["*"];
+      const discordWithOpenDms = {
+        ...discord,
+        allowFrom: [...dmAllowlist],
+        ...(dmAllowlist.includes("*") ? {} : { dmPolicy: "allowlist" as const }),
+      };
       const wildcardGuild = discord?.guilds?.["*"];
       const wildcardChannel = wildcardGuild?.channels?.["*"];
-      const senderAllowlist = this.#transportPolicy?.senderAllowlist?.map(resolveDiscordQaId);
       if (!this.#transportPolicy?.requireGroupMention && !senderAllowlist) {
-        return config as QaTransportGatewayConfig;
+        return {
+          ...config,
+          channels: { ...config.channels, discord: discordWithOpenDms },
+        } as QaTransportGatewayConfig;
       }
       return {
         ...config,
         channels: {
           ...config.channels,
           discord: {
-            ...discord,
+            ...discordWithOpenDms,
             ...(senderAllowlist ? { groupPolicy: "allowlist" as const } : {}),
             guilds: {
               ...discord?.guilds,

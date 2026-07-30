@@ -37,7 +37,9 @@ describe("Crabline Discord transport", () => {
             }
           | undefined;
         expect(discord).toMatchObject({
+          allowFrom: [expect.stringMatching(/^\d{17,20}$/u)],
           applicationId: expect.stringMatching(/^\d{17,20}$/u),
+          dmPolicy: "allowlist",
           guilds: {
             "*": {
               channels: { "*": { enabled: true, requireMention: true } },
@@ -118,6 +120,24 @@ describe("Crabline Discord transport", () => {
 
         await transport.cleanupAfterGatewayStop?.();
         await expect(fetch(probeUrl, { headers })).rejects.toThrow();
+      } finally {
+        await transport.cleanupAfterGatewayStop?.();
+      }
+    });
+  });
+
+  it("completes Crabline's open Discord DM binding without a sender restriction", async () => {
+    await withTempDir("qa-crabline-discord-open-dm-", async (outputDir) => {
+      const transport = await createQaCrablineTransportAdapter({
+        outputDir,
+        selection: DISCORD_SELECTION,
+        state: createQaBusState(),
+      });
+
+      try {
+        expect(transport.createGatewayConfig({ baseUrl: "http://127.0.0.1:1" })).toMatchObject({
+          channels: { discord: { allowFrom: ["*"], dmPolicy: "open" } },
+        });
       } finally {
         await transport.cleanupAfterGatewayStop?.();
       }
