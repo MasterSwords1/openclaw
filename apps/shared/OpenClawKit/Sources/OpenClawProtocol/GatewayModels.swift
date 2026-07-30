@@ -427,13 +427,13 @@ public struct BoardWidgetDeclared: Codable, Sendable {
 }
 
 public struct BoardSnapshot: Codable, Sendable {
-    public let sessionkey: SessionPeerKind
+    public let sessionkey: String
     public let revision: Int
     public let tabs: [BoardTab]
     public let widgets: [BoardWidget]
 
     public init(
-        sessionkey: SessionPeerKind,
+        sessionkey: String,
         revision: Int,
         tabs: [BoardTab],
         widgets: [BoardWidget])
@@ -623,16 +623,16 @@ public struct BoardWidgetRemoveOp: Codable, Sendable {
 }
 
 public struct BoardMcpAppDescriptor: Codable, Sendable {
-    public let servername: SessionPeerKind
-    public let toolname: SessionPeerKind
-    public let uiresourceuri: SessionPeerKind
-    public let toolcallid: SessionPeerKind
+    public let servername: String
+    public let toolname: String
+    public let uiresourceuri: String
+    public let toolcallid: String
 
     public init(
-        servername: SessionPeerKind,
-        toolname: SessionPeerKind,
-        uiresourceuri: SessionPeerKind,
-        toolcallid: SessionPeerKind)
+        servername: String,
+        toolname: String,
+        uiresourceuri: String,
+        toolcallid: String)
     {
         self.servername = servername
         self.toolname = toolname
@@ -686,11 +686,11 @@ public struct BoardWidgetMcpAppContent: Codable, Sendable {
 
 public struct BoardWidgetMcpAppPutContent: Codable, Sendable {
     public let kind: String
-    public let viewid: SessionPeerKind
+    public let viewid: String
 
     public init(
         kind: String,
-        viewid: SessionPeerKind)
+        viewid: String)
     {
         self.kind = kind
         self.viewid = viewid
@@ -726,11 +726,11 @@ public struct BoardWidgetPluginContent: Codable, Sendable {
 
 public struct BoardCanvasDocumentSource: Codable, Sendable {
     public let kind: String
-    public let docid: SessionPeerKind
+    public let docid: String
 
     public init(
         kind: String,
-        docid: SessionPeerKind)
+        docid: String)
     {
         self.kind = kind
         self.docid = docid
@@ -743,10 +743,10 @@ public struct BoardCanvasDocumentSource: Codable, Sendable {
 }
 
 public struct BoardGetParams: Codable, Sendable {
-    public let sessionkey: SessionPeerKind
+    public let sessionkey: String
 
     public init(
-        sessionkey: SessionPeerKind)
+        sessionkey: String)
     {
         self.sessionkey = sessionkey
     }
@@ -757,11 +757,11 @@ public struct BoardGetParams: Codable, Sendable {
 }
 
 public struct BoardUpdateParams: Codable, Sendable {
-    public let sessionkey: SessionPeerKind
+    public let sessionkey: String
     public let ops: [BoardOp]
 
     public init(
-        sessionkey: SessionPeerKind,
+        sessionkey: String,
         ops: [BoardOp])
     {
         self.sessionkey = sessionkey
@@ -775,7 +775,7 @@ public struct BoardUpdateParams: Codable, Sendable {
 }
 
 public struct BoardWidgetPutParams: Codable, Sendable {
-    public let sessionkey: SessionPeerKind
+    public let sessionkey: String
     public let name: String
     public let title: String?
     public let content: BoardWidgetPutContent
@@ -785,7 +785,7 @@ public struct BoardWidgetPutParams: Codable, Sendable {
     public let declared: BoardWidgetDeclared?
 
     public init(
-        sessionkey: SessionPeerKind,
+        sessionkey: String,
         name: String,
         title: String? = nil,
         content: BoardWidgetPutContent,
@@ -817,18 +817,18 @@ public struct BoardWidgetPutParams: Codable, Sendable {
 }
 
 public struct BoardWidgetGrantParams: Codable, Sendable {
-    public let sessionkey: SessionPeerKind
+    public let sessionkey: String
     public let name: String
     public let decision: AnyCodable
     public let revision: Int
-    public let instanceid: SessionPeerKind
+    public let instanceid: String
 
     public init(
-        sessionkey: SessionPeerKind,
+        sessionkey: String,
         name: String,
         decision: AnyCodable,
         revision: Int,
-        instanceid: SessionPeerKind)
+        instanceid: String)
     {
         self.sessionkey = sessionkey
         self.name = name
@@ -847,16 +847,16 @@ public struct BoardWidgetGrantParams: Codable, Sendable {
 }
 
 public struct BoardWidgetAppViewParams: Codable, Sendable {
-    public let sessionkey: SessionPeerKind
+    public let sessionkey: String
     public let name: String
     public let revision: Int
-    public let instanceid: SessionPeerKind
+    public let instanceid: String
 
     public init(
-        sessionkey: SessionPeerKind,
+        sessionkey: String,
         name: String,
         revision: Int,
-        instanceid: SessionPeerKind)
+        instanceid: String)
     {
         self.sessionkey = sessionkey
         self.name = name
@@ -873,11 +873,11 @@ public struct BoardWidgetAppViewParams: Codable, Sendable {
 }
 
 public struct BoardWidgetAppViewResult: Codable, Sendable {
-    public let viewid: SessionPeerKind
+    public let viewid: String
     public let expiresatms: Int
 
     public init(
-        viewid: SessionPeerKind,
+        viewid: String,
         expiresatms: Int)
     {
         self.viewid = viewid
@@ -891,12 +891,12 @@ public struct BoardWidgetAppViewResult: Codable, Sendable {
 }
 
 public struct BoardEventParams: Codable, Sendable {
-    public let sessionkey: SessionPeerKind
+    public let sessionkey: String
     public let widget: String
     public let payload: AnyCodable
 
     public init(
-        sessionkey: SessionPeerKind,
+        sessionkey: String,
         widget: String,
         payload: AnyCodable)
     {
@@ -967,12 +967,12 @@ public struct BoardDataReadParams: Codable, Sendable {
 }
 
 public struct BoardChangedEvent: Codable, Sendable {
-    public let sessionkey: SessionPeerKind
+    public let sessionkey: String
     public let revision: Int
     public let widget: String?
 
     public init(
-        sessionkey: SessionPeerKind,
+        sessionkey: String,
         revision: Int,
         widget: String? = nil)
     {
@@ -1025,11 +1025,11 @@ public struct BoardSetChatDockCommand: Codable, Sendable {
 }
 
 public struct BoardCommandEvent: Codable, Sendable {
-    public let sessionkey: SessionPeerKind
+    public let sessionkey: String
     public let command: BoardCommand
 
     public init(
-        sessionkey: SessionPeerKind,
+        sessionkey: String,
         command: BoardCommand)
     {
         self.sessionkey = sessionkey
@@ -1182,15 +1182,15 @@ public struct HelloOk: Codable, Sendable {
 
 public struct RequestFrame: Codable, Sendable {
     public let type: String
-    public let id: SessionPeerKind
-    public let method: SessionPeerKind
+    public let id: String
+    public let method: String
     public let params: AnyCodable?
     public let traceparent: String?
 
     public init(
         type: String,
-        id: SessionPeerKind,
-        method: SessionPeerKind,
+        id: String,
+        method: String,
         params: AnyCodable? = nil,
         traceparent: String? = nil)
     {
@@ -1212,14 +1212,14 @@ public struct RequestFrame: Codable, Sendable {
 
 public struct ResponseFrame: Codable, Sendable {
     public let type: String
-    public let id: SessionPeerKind
+    public let id: String
     public let ok: Bool
     public let payload: AnyCodable?
     public let error: ErrorShape?
 
     public init(
         type: String,
-        id: SessionPeerKind,
+        id: String,
         ok: Bool,
         payload: AnyCodable? = nil,
         error: ErrorShape? = nil)
@@ -1242,14 +1242,14 @@ public struct ResponseFrame: Codable, Sendable {
 
 public struct EventFrame: Codable, Sendable {
     public let type: String
-    public let event: SessionPeerKind
+    public let event: String
     public let payload: AnyCodable?
     public let seq: Int?
     public let stateversion: StateVersion?
 
     public init(
         type: String,
-        event: SessionPeerKind,
+        event: String,
         payload: AnyCodable? = nil,
         seq: Int? = nil,
         stateversion: StateVersion? = nil)
@@ -1421,15 +1421,15 @@ public struct Snapshot: Codable, Sendable {
 }
 
 public struct ErrorShape: Codable, Sendable {
-    public let code: SessionPeerKind
-    public let message: SessionPeerKind
+    public let code: String
+    public let message: String
     public let details: AnyCodable?
     public let retryable: Bool?
     public let retryafterms: Int?
 
     public init(
-        code: SessionPeerKind,
-        message: SessionPeerKind,
+        code: String,
+        message: String,
         details: AnyCodable? = nil,
         retryable: Bool? = nil,
         retryafterms: Int? = nil)
@@ -1452,13 +1452,13 @@ public struct ErrorShape: Codable, Sendable {
 
 public struct MissingScopeErrorDetails: Codable, Sendable {
     public let code: String
-    public let missingscope: SessionPeerKind
-    public let requiredscopes: [SessionPeerKind]
+    public let missingscope: String
+    public let requiredscopes: [String]
 
     public init(
         code: String,
-        missingscope: SessionPeerKind,
-        requiredscopes: [SessionPeerKind])
+        missingscope: String,
+        requiredscopes: [String])
     {
         self.code = code
         self.missingscope = missingscope
@@ -1488,11 +1488,11 @@ public struct McpAppViewExpiredErrorDetails: Codable, Sendable {
 
 public struct UnknownAgentIdErrorDetails: Codable, Sendable {
     public let code: String
-    public let agentid: SessionPeerKind
+    public let agentid: String
 
     public init(
         code: String,
-        agentid: SessionPeerKind)
+        agentid: String)
     {
         self.code = code
         self.agentid = agentid
@@ -1735,21 +1735,21 @@ public struct GatewaySuspendResumeResult: Codable, Sendable {
 }
 
 public struct WorkerEnvironmentMetadata: Codable, Sendable {
-    public let providerid: SessionPeerKind
+    public let providerid: String
     public let leaseid: String?
     public let state: WorkerEnvironmentState
     public let agems: Int
     public let idlems: Int?
-    public let attachedsessionids: [SessionPeerKind]
+    public let attachedsessionids: [String]
     public let tunnelstatus: WorkerTunnelStatus
 
     public init(
-        providerid: SessionPeerKind,
+        providerid: String,
         leaseid: String? = nil,
         state: WorkerEnvironmentState,
         agems: Int,
         idlems: Int? = nil,
-        attachedsessionids: [SessionPeerKind],
+        attachedsessionids: [String],
         tunnelstatus: WorkerTunnelStatus)
     {
         self.providerid = providerid
@@ -1773,16 +1773,16 @@ public struct WorkerEnvironmentMetadata: Codable, Sendable {
 }
 
 public struct EnvironmentSummary: Codable, Sendable {
-    public let id: SessionPeerKind
-    public let type: SessionPeerKind
+    public let id: String
+    public let type: String
     public let label: String?
     public let status: EnvironmentStatus
     public let capabilities: [String]?
     public let worker: WorkerEnvironmentMetadata?
 
     public init(
-        id: SessionPeerKind,
-        type: SessionPeerKind,
+        id: String,
+        type: String,
         label: String? = nil,
         status: EnvironmentStatus,
         capabilities: [String]? = nil,
@@ -1807,12 +1807,12 @@ public struct EnvironmentSummary: Codable, Sendable {
 }
 
 public struct EnvironmentsCreateParams: Codable, Sendable {
-    public let profileid: SessionPeerKind
-    public let idempotencykey: SessionPeerKind
+    public let profileid: String
+    public let idempotencykey: String
 
     public init(
-        profileid: SessionPeerKind,
-        idempotencykey: SessionPeerKind)
+        profileid: String,
+        idempotencykey: String)
     {
         self.profileid = profileid
         self.idempotencykey = idempotencykey
@@ -1825,16 +1825,16 @@ public struct EnvironmentsCreateParams: Codable, Sendable {
 }
 
 public struct EnvironmentsCreateResult: Codable, Sendable {
-    public let id: SessionPeerKind
-    public let type: SessionPeerKind
+    public let id: String
+    public let type: String
     public let label: String?
     public let status: EnvironmentStatus
     public let capabilities: [String]?
     public let worker: WorkerEnvironmentMetadata?
 
     public init(
-        id: SessionPeerKind,
-        type: SessionPeerKind,
+        id: String,
+        type: String,
         label: String? = nil,
         status: EnvironmentStatus,
         capabilities: [String]? = nil,
@@ -1859,11 +1859,11 @@ public struct EnvironmentsCreateResult: Codable, Sendable {
 }
 
 public struct EnvironmentsDestroyParams: Codable, Sendable {
-    public let environmentid: SessionPeerKind
+    public let environmentid: String
     public let force: Bool?
 
     public init(
-        environmentid: SessionPeerKind,
+        environmentid: String,
         force: Bool? = nil)
     {
         self.environmentid = environmentid
@@ -1877,16 +1877,16 @@ public struct EnvironmentsDestroyParams: Codable, Sendable {
 }
 
 public struct EnvironmentsDestroyResult: Codable, Sendable {
-    public let id: SessionPeerKind
-    public let type: SessionPeerKind
+    public let id: String
+    public let type: String
     public let label: String?
     public let status: EnvironmentStatus
     public let capabilities: [String]?
     public let worker: WorkerEnvironmentMetadata?
 
     public init(
-        id: SessionPeerKind,
-        type: SessionPeerKind,
+        id: String,
+        type: String,
         label: String? = nil,
         status: EnvironmentStatus,
         capabilities: [String]? = nil,
@@ -1931,10 +1931,10 @@ public struct EnvironmentsListResult: Codable, Sendable {
 }
 
 public struct EnvironmentsStatusParams: Codable, Sendable {
-    public let environmentid: SessionPeerKind
+    public let environmentid: String
 
     public init(
-        environmentid: SessionPeerKind)
+        environmentid: String)
     {
         self.environmentid = environmentid
     }
@@ -1945,16 +1945,16 @@ public struct EnvironmentsStatusParams: Codable, Sendable {
 }
 
 public struct EnvironmentsStatusResult: Codable, Sendable {
-    public let id: SessionPeerKind
-    public let type: SessionPeerKind
+    public let id: String
+    public let type: String
     public let label: String?
     public let status: EnvironmentStatus
     public let capabilities: [String]?
     public let worker: WorkerEnvironmentMetadata?
 
     public init(
-        id: SessionPeerKind,
-        type: SessionPeerKind,
+        id: String,
+        type: String,
         label: String? = nil,
         status: EnvironmentStatus,
         capabilities: [String]? = nil,
@@ -2075,18 +2075,18 @@ public struct SystemInfoResult: Codable, Sendable {
 }
 
 public struct AgentEvent: Codable, Sendable {
-    public let runid: SessionPeerKind
+    public let runid: String
     public let seq: Int
-    public let stream: SessionPeerKind
+    public let stream: String
     public let ts: Int
     public let spawnedby: String?
     public let isheartbeat: Bool?
     public let data: [String: AnyCodable]
 
     public init(
-        runid: SessionPeerKind,
+        runid: String,
         seq: Int,
-        stream: SessionPeerKind,
+        stream: String,
         ts: Int,
         spawnedby: String? = nil,
         isheartbeat: Bool? = nil,
@@ -2113,18 +2113,18 @@ public struct AgentEvent: Codable, Sendable {
 }
 
 public struct ConversationSendParams: Codable, Sendable {
-    public let agentid: SessionPeerKind
+    public let agentid: String
     public let sourcesessionkey: String?
-    public let operationid: SessionPeerKind
+    public let operationid: String
     public let conversationref: String
-    public let message: SessionPeerKind
+    public let message: String
 
     public init(
-        agentid: SessionPeerKind,
+        agentid: String,
         sourcesessionkey: String? = nil,
-        operationid: SessionPeerKind,
+        operationid: String,
         conversationref: String,
-        message: SessionPeerKind)
+        message: String)
     {
         self.agentid = agentid
         self.sourcesessionkey = sourcesessionkey
@@ -2145,14 +2145,14 @@ public struct ConversationSendParams: Codable, Sendable {
 public struct ConversationSendResult: Codable, Sendable {
     public let status: AnyCodable
     public let conversationref: String
-    public let channel: SessionPeerKind
+    public let channel: String
     public let messageid: String?
     public let queueid: String?
 
     public init(
         status: AnyCodable,
         conversationref: String,
-        channel: SessionPeerKind,
+        channel: String,
         messageid: String? = nil,
         queueid: String? = nil)
     {
@@ -2174,10 +2174,10 @@ public struct ConversationSendResult: Codable, Sendable {
 
 public struct ConversationListItem: Codable, Sendable {
     public let conversationref: String
-    public let channel: SessionPeerKind
-    public let accountid: SessionPeerKind
+    public let channel: String
+    public let accountid: String
     public let kind: AnyCodable
-    public let target: SessionPeerKind
+    public let target: String
     public let threadid: String?
     public let label: String?
     public let firstseenat: Int
@@ -2185,10 +2185,10 @@ public struct ConversationListItem: Codable, Sendable {
 
     public init(
         conversationref: String,
-        channel: SessionPeerKind,
-        accountid: SessionPeerKind,
+        channel: String,
+        accountid: String,
         kind: AnyCodable,
-        target: SessionPeerKind,
+        target: String,
         threadid: String? = nil,
         label: String? = nil,
         firstseenat: Int,
@@ -2219,13 +2219,13 @@ public struct ConversationListItem: Codable, Sendable {
 }
 
 public struct ConversationListParams: Codable, Sendable {
-    public let agentid: SessionPeerKind
+    public let agentid: String
     public let channel: String?
     public let query: String?
     public let limit: Int?
 
     public init(
-        agentid: SessionPeerKind,
+        agentid: String,
         channel: String? = nil,
         query: String? = nil,
         limit: Int? = nil)
@@ -2259,12 +2259,12 @@ public struct ConversationListResult: Codable, Sendable {
 }
 
 public struct ConversationTurnCancelParams: Codable, Sendable {
-    public let agentid: SessionPeerKind
-    public let turnid: SessionPeerKind
+    public let agentid: String
+    public let turnid: String
 
     public init(
-        agentid: SessionPeerKind,
-        turnid: SessionPeerKind)
+        agentid: String,
+        turnid: String)
     {
         self.agentid = agentid
         self.turnid = turnid
@@ -2291,19 +2291,19 @@ public struct ConversationTurnCancelResult: Codable, Sendable {
 }
 
 public struct ConversationTurnParams: Codable, Sendable {
-    public let agentid: SessionPeerKind
+    public let agentid: String
     public let sourcesessionkey: String?
-    public let turnid: SessionPeerKind
+    public let turnid: String
     public let conversationref: String
-    public let message: SessionPeerKind
+    public let message: String
     public let timeoutms: Int
 
     public init(
-        agentid: SessionPeerKind,
+        agentid: String,
         sourcesessionkey: String? = nil,
-        turnid: SessionPeerKind,
+        turnid: String,
         conversationref: String,
-        message: SessionPeerKind,
+        message: String,
         timeoutms: Int)
     {
         self.agentid = agentid
@@ -2326,7 +2326,7 @@ public struct ConversationTurnParams: Codable, Sendable {
 
 public struct ConversationTurnReply: Codable, Sendable {
     public let conversationref: String
-    public let messageid: SessionPeerKind
+    public let messageid: String
     public let replytoid: String?
     public let threadid: String?
     public let text: String
@@ -2336,7 +2336,7 @@ public struct ConversationTurnReply: Codable, Sendable {
 
     public init(
         conversationref: String,
-        messageid: SessionPeerKind,
+        messageid: String,
         replytoid: String? = nil,
         threadid: String? = nil,
         text: String,
@@ -2367,8 +2367,8 @@ public struct ConversationTurnReply: Codable, Sendable {
 }
 
 public struct MessageActionParams: Codable, Sendable {
-    public let channel: SessionPeerKind
-    public let action: SessionPeerKind
+    public let channel: String
+    public let action: String
     public let params: [String: AnyCodable]
     public let accountid: String?
     public let requesteraccountid: String?
@@ -2380,11 +2380,11 @@ public struct MessageActionParams: Codable, Sendable {
     public let agentid: String?
     public let toolcontext: [String: AnyCodable]?
     public let conversationreadorigin: String?
-    public let idempotencykey: SessionPeerKind
+    public let idempotencykey: String
 
     public init(
-        channel: SessionPeerKind,
-        action: SessionPeerKind,
+        channel: String,
+        action: String,
         params: [String: AnyCodable],
         accountid: String? = nil,
         requesteraccountid: String? = nil,
@@ -2396,7 +2396,7 @@ public struct MessageActionParams: Codable, Sendable {
         agentid: String? = nil,
         toolcontext: [String: AnyCodable]? = nil,
         conversationreadorigin: String? = nil,
-        idempotencykey: SessionPeerKind)
+        idempotencykey: String)
     {
         self.channel = channel
         self.action = action
@@ -2433,7 +2433,7 @@ public struct MessageActionParams: Codable, Sendable {
 }
 
 public struct SendParams: Codable, Sendable {
-    public let to: SessionPeerKind
+    public let to: String
     public let message: String?
     public let mediaurl: String?
     public let mediaurls: [String]?
@@ -2451,10 +2451,10 @@ public struct SendParams: Codable, Sendable {
     public let silent: Bool?
     public let parsemode: String?
     public let sessionkey: String?
-    public let idempotencykey: SessionPeerKind
+    public let idempotencykey: String
 
     public init(
-        to: SessionPeerKind,
+        to: String,
         message: String? = nil,
         mediaurl: String? = nil,
         mediaurls: [String]? = nil,
@@ -2472,7 +2472,7 @@ public struct SendParams: Codable, Sendable {
         silent: Bool? = nil,
         parsemode: String? = nil,
         sessionkey: String? = nil,
-        idempotencykey: SessionPeerKind)
+        idempotencykey: String)
     {
         self.to = to
         self.message = message
@@ -2519,9 +2519,9 @@ public struct SendParams: Codable, Sendable {
 }
 
 public struct PollParams: Codable, Sendable {
-    public let to: SessionPeerKind
-    public let question: SessionPeerKind
-    public let options: [SessionPeerKind]
+    public let to: String
+    public let question: String
+    public let options: [String]
     public let maxselections: Int?
     public let durationseconds: Int?
     public let durationhours: Int?
@@ -2530,12 +2530,12 @@ public struct PollParams: Codable, Sendable {
     public let threadid: String?
     public let channel: String?
     public let accountid: String?
-    public let idempotencykey: SessionPeerKind
+    public let idempotencykey: String
 
     public init(
-        to: SessionPeerKind,
-        question: SessionPeerKind,
-        options: [SessionPeerKind],
+        to: String,
+        question: String,
+        options: [String],
         maxselections: Int? = nil,
         durationseconds: Int? = nil,
         durationhours: Int? = nil,
@@ -2544,7 +2544,7 @@ public struct PollParams: Codable, Sendable {
         threadid: String? = nil,
         channel: String? = nil,
         accountid: String? = nil,
-        idempotencykey: SessionPeerKind)
+        idempotencykey: String)
     {
         self.to = to
         self.question = question
@@ -2577,7 +2577,7 @@ public struct PollParams: Codable, Sendable {
 }
 
 public struct AgentParams: Codable, Sendable {
-    public let message: SessionPeerKind
+    public let message: String
     public let agentid: String?
     public let provider: String?
     public let model: String?
@@ -2620,11 +2620,11 @@ public struct AgentParams: Codable, Sendable {
     public let swarmoutputschema: [String: AnyCodable]?
     public let forcerestartsafetools: Bool?
     public let voicewaketrigger: String?
-    public let idempotencykey: SessionPeerKind
+    public let idempotencykey: String
     public let label: String?
 
     public init(
-        message: SessionPeerKind,
+        message: String,
         agentid: String? = nil,
         provider: String? = nil,
         model: String? = nil,
@@ -2667,7 +2667,7 @@ public struct AgentParams: Codable, Sendable {
         swarmoutputschema: [String: AnyCodable]? = nil,
         forcerestartsafetools: Bool? = nil,
         voicewaketrigger: String? = nil,
-        idempotencykey: SessionPeerKind,
+        idempotencykey: String,
         label: String? = nil)
     {
         self.message = message
@@ -2785,7 +2785,7 @@ public struct AgentIdentityParams: Codable, Sendable {
 }
 
 public struct AgentIdentityResult: Codable, Sendable {
-    public let agentid: SessionPeerKind
+    public let agentid: String
     public let name: String?
     public let avatar: String?
     public let avatarsource: String?
@@ -2794,7 +2794,7 @@ public struct AgentIdentityResult: Codable, Sendable {
     public let emoji: String?
 
     public init(
-        agentid: SessionPeerKind,
+        agentid: String,
         name: String? = nil,
         avatar: String? = nil,
         avatarsource: String? = nil,
@@ -2823,11 +2823,11 @@ public struct AgentIdentityResult: Codable, Sendable {
 }
 
 public struct AgentWaitParams: Codable, Sendable {
-    public let runid: SessionPeerKind
+    public let runid: String
     public let timeoutms: Int?
 
     public init(
-        runid: SessionPeerKind,
+        runid: String,
         timeoutms: Int? = nil)
     {
         self.runid = runid
@@ -2842,13 +2842,13 @@ public struct AgentWaitParams: Codable, Sendable {
 
 public struct WakeParams: Codable, Sendable {
     public let mode: AnyCodable
-    public let text: SessionPeerKind
+    public let text: String
     public let sessionkey: String?
     public let agentid: String?
 
     public init(
         mode: AnyCodable,
-        text: SessionPeerKind,
+        text: String,
         sessionkey: String? = nil,
         agentid: String? = nil)
     {
@@ -2867,13 +2867,13 @@ public struct WakeParams: Codable, Sendable {
 }
 
 public struct WorktreeRecord: Codable, Sendable {
-    public let id: SessionPeerKind
+    public let id: String
     public let name: String
     public let repofingerprint: String
-    public let reporoot: SessionPeerKind
-    public let path: SessionPeerKind
-    public let branch: SessionPeerKind
-    public let baseref: SessionPeerKind
+    public let reporoot: String
+    public let path: String
+    public let branch: String
+    public let baseref: String
     public let ownerkind: String
     public let ownerid: String?
     public let snapshotref: String?
@@ -2882,13 +2882,13 @@ public struct WorktreeRecord: Codable, Sendable {
     public let removedat: Int?
 
     public init(
-        id: SessionPeerKind,
+        id: String,
         name: String,
         repofingerprint: String,
-        reporoot: SessionPeerKind,
-        path: SessionPeerKind,
-        branch: SessionPeerKind,
-        baseref: SessionPeerKind,
+        reporoot: String,
+        path: String,
+        branch: String,
+        baseref: String,
         ownerkind: String,
         ownerid: String? = nil,
         snapshotref: String? = nil,
@@ -2945,12 +2945,12 @@ public struct WorktreesListResult: Codable, Sendable {
 }
 
 public struct WorktreesCreateParams: Codable, Sendable {
-    public let reporoot: SessionPeerKind
+    public let reporoot: String
     public let name: String?
     public let baseref: String?
 
     public init(
-        reporoot: SessionPeerKind,
+        reporoot: String,
         name: String? = nil,
         baseref: String? = nil)
     {
@@ -2967,11 +2967,11 @@ public struct WorktreesCreateParams: Codable, Sendable {
 }
 
 public struct WorktreesRemoveParams: Codable, Sendable {
-    public let id: SessionPeerKind
+    public let id: String
     public let force: Bool?
 
     public init(
-        id: SessionPeerKind,
+        id: String,
         force: Bool? = nil)
     {
         self.id = id
@@ -3007,10 +3007,10 @@ public struct WorktreesRemoveResult: Codable, Sendable {
 }
 
 public struct WorktreesRestoreParams: Codable, Sendable {
-    public let id: SessionPeerKind
+    public let id: String
 
     public init(
-        id: SessionPeerKind)
+        id: String)
     {
         self.id = id
     }
@@ -3023,12 +3023,12 @@ public struct WorktreesRestoreParams: Codable, Sendable {
 public struct WorktreesGcParams: Codable, Sendable {}
 
 public struct WorktreesGcResult: Codable, Sendable {
-    public let removed: [SessionPeerKind]
+    public let removed: [String]
     public let orphansdeleted: Int
     public let snapshotspruned: Int
 
     public init(
-        removed: [SessionPeerKind],
+        removed: [String],
         orphansdeleted: Int,
         snapshotspruned: Int)
     {
@@ -3045,11 +3045,11 @@ public struct WorktreesGcResult: Codable, Sendable {
 }
 
 public struct WorktreeBranch: Codable, Sendable {
-    public let name: SessionPeerKind
+    public let name: String
     public let kind: AnyCodable
 
     public init(
-        name: SessionPeerKind,
+        name: String,
         kind: AnyCodable)
     {
         self.name = name
@@ -3063,11 +3063,11 @@ public struct WorktreeBranch: Codable, Sendable {
 }
 
 public struct WorktreesBranchesParams: Codable, Sendable {
-    public let reporoot: SessionPeerKind
+    public let reporoot: String
     public let includerepositorystatus: Bool?
 
     public init(
-        reporoot: SessionPeerKind,
+        reporoot: String,
         includerepositorystatus: Bool? = nil)
     {
         self.reporoot = reporoot
@@ -3107,13 +3107,13 @@ public struct WorktreesBranchesResult: Codable, Sendable {
 }
 
 public struct FsDirEntry: Codable, Sendable {
-    public let name: SessionPeerKind
-    public let path: SessionPeerKind
+    public let name: String
+    public let path: String
     public let hidden: Bool?
 
     public init(
-        name: SessionPeerKind,
-        path: SessionPeerKind,
+        name: String,
+        path: String,
         hidden: Bool? = nil)
     {
         self.name = name
@@ -3147,15 +3147,15 @@ public struct FsListDirParams: Codable, Sendable {
 }
 
 public struct FsListDirResult: Codable, Sendable {
-    public let path: SessionPeerKind
+    public let path: String
     public let parent: String?
-    public let home: SessionPeerKind
+    public let home: String
     public let entries: [FsDirEntry]
 
     public init(
-        path: SessionPeerKind,
+        path: String,
         parent: String? = nil,
-        home: SessionPeerKind,
+        home: String,
         entries: [FsDirEntry])
     {
         self.path = path
@@ -3175,10 +3175,10 @@ public struct FsListDirResult: Codable, Sendable {
 public struct NodePairListParams: Codable, Sendable {}
 
 public struct NodePairApproveParams: Codable, Sendable {
-    public let requestid: SessionPeerKind
+    public let requestid: String
 
     public init(
-        requestid: SessionPeerKind)
+        requestid: String)
     {
         self.requestid = requestid
     }
@@ -3189,10 +3189,10 @@ public struct NodePairApproveParams: Codable, Sendable {
 }
 
 public struct NodePairRejectParams: Codable, Sendable {
-    public let requestid: SessionPeerKind
+    public let requestid: String
 
     public init(
-        requestid: SessionPeerKind)
+        requestid: String)
     {
         self.requestid = requestid
     }
@@ -3203,10 +3203,10 @@ public struct NodePairRejectParams: Codable, Sendable {
 }
 
 public struct NodePairRemoveParams: Codable, Sendable {
-    public let nodeid: SessionPeerKind
+    public let nodeid: String
 
     public init(
-        nodeid: SessionPeerKind)
+        nodeid: String)
     {
         self.nodeid = nodeid
     }
@@ -3217,12 +3217,12 @@ public struct NodePairRemoveParams: Codable, Sendable {
 }
 
 public struct NodeRenameParams: Codable, Sendable {
-    public let nodeid: SessionPeerKind
-    public let displayname: SessionPeerKind
+    public let nodeid: String
+    public let displayname: String
 
     public init(
-        nodeid: SessionPeerKind,
-        displayname: SessionPeerKind)
+        nodeid: String,
+        displayname: String)
     {
         self.nodeid = nodeid
         self.displayname = displayname
@@ -3237,17 +3237,17 @@ public struct NodeRenameParams: Codable, Sendable {
 public struct NodeListParams: Codable, Sendable {}
 
 public struct NodePluginToolDescriptor: Codable, Sendable {
-    public let pluginid: SessionPeerKind
+    public let pluginid: String
     public let name: String
-    public let description: SessionPeerKind
+    public let description: String
     public let parameters: [String: AnyCodable]?
     public let command: String?
     public let mcp: [String: AnyCodable]?
 
     public init(
-        pluginid: SessionPeerKind,
+        pluginid: String,
         name: String,
-        description: SessionPeerKind,
+        description: String,
         parameters: [String: AnyCodable]? = nil,
         command: String? = nil,
         mcp: [String: AnyCodable]? = nil)
@@ -3321,10 +3321,10 @@ public struct NodeSkillsUpdateParams: Codable, Sendable {
 }
 
 public struct NodePendingAckParams: Codable, Sendable {
-    public let ids: [SessionPeerKind]
+    public let ids: [String]
 
     public init(
-        ids: [SessionPeerKind])
+        ids: [String])
     {
         self.ids = ids
     }
@@ -3335,10 +3335,10 @@ public struct NodePendingAckParams: Codable, Sendable {
 }
 
 public struct NodeDescribeParams: Codable, Sendable {
-    public let nodeid: SessionPeerKind
+    public let nodeid: String
 
     public init(
-        nodeid: SessionPeerKind)
+        nodeid: String)
     {
         self.nodeid = nodeid
     }
@@ -3349,11 +3349,11 @@ public struct NodeDescribeParams: Codable, Sendable {
 }
 
 public struct NodeInvokeParams: Codable, Sendable {
-    public let nodeid: SessionPeerKind
-    public let command: SessionPeerKind
+    public let nodeid: String
+    public let command: String
     public let params: AnyCodable?
     public let timeoutms: Int?
-    public let idempotencykey: SessionPeerKind
+    public let idempotencykey: String
     public let sessionkey: String?
     public let turnsourcechannel: String?
     public let turnsourceto: String?
@@ -3361,11 +3361,11 @@ public struct NodeInvokeParams: Codable, Sendable {
     public let turnsourcethreadid: AnyCodable?
 
     public init(
-        nodeid: SessionPeerKind,
-        command: SessionPeerKind,
+        nodeid: String,
+        command: String,
         params: AnyCodable? = nil,
         timeoutms: Int? = nil,
-        idempotencykey: SessionPeerKind,
+        idempotencykey: String,
         sessionkey: String? = nil,
         turnsourcechannel: String? = nil,
         turnsourceto: String? = nil,
@@ -3399,14 +3399,14 @@ public struct NodeInvokeParams: Codable, Sendable {
 }
 
 public struct NodeInvokeInputEvent: Codable, Sendable {
-    public let id: SessionPeerKind
-    public let nodeid: SessionPeerKind
+    public let id: String
+    public let nodeid: String
     public let seq: Int
     public let payloadjson: String
 
     public init(
-        id: SessionPeerKind,
-        nodeid: SessionPeerKind,
+        id: String,
+        nodeid: String,
         seq: Int,
         payloadjson: String)
     {
@@ -3425,14 +3425,14 @@ public struct NodeInvokeInputEvent: Codable, Sendable {
 }
 
 public struct NodeInvokeProgressParams: Codable, Sendable {
-    public let invokeid: SessionPeerKind
-    public let nodeid: SessionPeerKind
+    public let invokeid: String
+    public let nodeid: String
     public let seq: Int
     public let chunk: String
 
     public init(
-        invokeid: SessionPeerKind,
-        nodeid: SessionPeerKind,
+        invokeid: String,
+        nodeid: String,
         seq: Int,
         chunk: String)
     {
@@ -3451,16 +3451,16 @@ public struct NodeInvokeProgressParams: Codable, Sendable {
 }
 
 public struct NodeInvokeResultParams: Codable, Sendable {
-    public let id: SessionPeerKind
-    public let nodeid: SessionPeerKind
+    public let id: String
+    public let nodeid: String
     public let ok: Bool
     public let payload: AnyCodable?
     public let payloadjson: String?
     public let error: [String: AnyCodable]?
 
     public init(
-        id: SessionPeerKind,
-        nodeid: SessionPeerKind,
+        id: String,
+        nodeid: String,
         ok: Bool,
         payload: AnyCodable? = nil,
         payloadjson: String? = nil,
@@ -3485,17 +3485,17 @@ public struct NodeInvokeResultParams: Codable, Sendable {
 }
 
 public struct NodeInvokeRequestEvent: Codable, Sendable {
-    public let id: SessionPeerKind
-    public let nodeid: SessionPeerKind
-    public let command: SessionPeerKind
+    public let id: String
+    public let nodeid: String
+    public let command: String
     public let paramsjson: String?
     public let timeoutms: Int?
     public let idempotencykey: String?
 
     public init(
-        id: SessionPeerKind,
-        nodeid: SessionPeerKind,
-        command: SessionPeerKind,
+        id: String,
+        nodeid: String,
+        command: String,
         paramsjson: String? = nil,
         timeoutms: Int? = nil,
         idempotencykey: String? = nil)
@@ -3519,12 +3519,12 @@ public struct NodeInvokeRequestEvent: Codable, Sendable {
 }
 
 public struct NodeEventParams: Codable, Sendable {
-    public let event: SessionPeerKind
+    public let event: String
     public let payload: AnyCodable?
     public let payloadjson: String?
 
     public init(
-        event: SessionPeerKind,
+        event: String,
         payload: AnyCodable? = nil,
         payloadjson: String? = nil)
     {
@@ -3542,13 +3542,13 @@ public struct NodeEventParams: Codable, Sendable {
 
 public struct NodeEventResult: Codable, Sendable {
     public let ok: Bool
-    public let event: SessionPeerKind
+    public let event: String
     public let handled: Bool
     public let reason: String?
 
     public init(
         ok: Bool,
-        event: SessionPeerKind,
+        event: String,
         handled: Bool,
         reason: String? = nil)
     {
@@ -3623,13 +3623,13 @@ public struct NodePendingDrainParams: Codable, Sendable {
 }
 
 public struct NodePendingDrainResult: Codable, Sendable {
-    public let nodeid: SessionPeerKind
+    public let nodeid: String
     public let revision: Int
     public let items: [[String: AnyCodable]]
     public let hasmore: Bool
 
     public init(
-        nodeid: SessionPeerKind,
+        nodeid: String,
         revision: Int,
         items: [[String: AnyCodable]],
         hasmore: Bool)
@@ -3649,14 +3649,14 @@ public struct NodePendingDrainResult: Codable, Sendable {
 }
 
 public struct NodePendingEnqueueParams: Codable, Sendable {
-    public let nodeid: SessionPeerKind
+    public let nodeid: String
     public let type: String
     public let priority: String?
     public let expiresinms: Int?
     public let wake: Bool?
 
     public init(
-        nodeid: SessionPeerKind,
+        nodeid: String,
         type: String,
         priority: String? = nil,
         expiresinms: Int? = nil,
@@ -3679,13 +3679,13 @@ public struct NodePendingEnqueueParams: Codable, Sendable {
 }
 
 public struct NodePendingEnqueueResult: Codable, Sendable {
-    public let nodeid: SessionPeerKind
+    public let nodeid: String
     public let revision: Int
     public let queued: [String: AnyCodable]
     public let waketriggered: Bool
 
     public init(
-        nodeid: SessionPeerKind,
+        nodeid: String,
         revision: Int,
         queued: [String: AnyCodable],
         waketriggered: Bool)
@@ -3705,13 +3705,13 @@ public struct NodePendingEnqueueResult: Codable, Sendable {
 }
 
 public struct PushTestParams: Codable, Sendable {
-    public let nodeid: SessionPeerKind
+    public let nodeid: String
     public let title: String?
     public let body: String?
     public let environment: String?
 
     public init(
-        nodeid: SessionPeerKind,
+        nodeid: String,
         title: String? = nil,
         body: String? = nil,
         environment: String? = nil)
@@ -3775,12 +3775,12 @@ public struct PushTestResult: Codable, Sendable {
 public struct UiSplitCommand: Codable, Sendable {
     public let kind: String
     public let direction: AnyCodable
-    public let sessionkey: SessionPeerKind
+    public let sessionkey: String
 
     public init(
         kind: String,
         direction: AnyCodable,
-        sessionkey: SessionPeerKind)
+        sessionkey: String)
     {
         self.kind = kind
         self.direction = direction
@@ -3796,11 +3796,11 @@ public struct UiSplitCommand: Codable, Sendable {
 
 public struct UiClosePaneCommand: Codable, Sendable {
     public let kind: String
-    public let sessionkey: SessionPeerKind
+    public let sessionkey: String
 
     public init(
         kind: String,
-        sessionkey: SessionPeerKind)
+        sessionkey: String)
     {
         self.kind = kind
         self.sessionkey = sessionkey
@@ -3814,11 +3814,11 @@ public struct UiClosePaneCommand: Codable, Sendable {
 
 public struct UiFocusCommand: Codable, Sendable {
     public let kind: String
-    public let sessionkey: SessionPeerKind
+    public let sessionkey: String
 
     public init(
         kind: String,
-        sessionkey: SessionPeerKind)
+        sessionkey: String)
     {
         self.kind = kind
         self.sessionkey = sessionkey
@@ -3880,11 +3880,11 @@ public struct UiPanelCommand: Codable, Sendable {
 
 public struct UiNavigateCommand: Codable, Sendable {
     public let kind: String
-    public let sessionkey: SessionPeerKind
+    public let sessionkey: String
 
     public init(
         kind: String,
-        sessionkey: SessionPeerKind)
+        sessionkey: String)
     {
         self.kind = kind
         self.sessionkey = sessionkey
@@ -3931,16 +3931,16 @@ public struct UiCommandResult: Codable, Sendable {
 public struct SecretsReloadParams: Codable, Sendable {}
 
 public struct SecretsResolveParams: Codable, Sendable {
-    public let commandname: SessionPeerKind
-    public let targetids: [SessionPeerKind]
+    public let commandname: String
+    public let targetids: [String]
     public let allowedpaths: [String]?
     public let forcedactivepaths: [String]?
     public let optionalactivepaths: [String]?
     public let provideroverrides: [String: AnyCodable]?
 
     public init(
-        commandname: SessionPeerKind,
-        targetids: [SessionPeerKind],
+        commandname: String,
+        targetids: [String],
         allowedpaths: [String]? = nil,
         forcedactivepaths: [String]? = nil,
         optionalactivepaths: [String]? = nil,
@@ -3966,12 +3966,12 @@ public struct SecretsResolveParams: Codable, Sendable {
 
 public struct SecretsResolveAssignment: Codable, Sendable {
     public let path: String?
-    public let pathsegments: [SessionPeerKind]
+    public let pathsegments: [String]
     public let value: AnyCodable
 
     public init(
         path: String? = nil,
-        pathsegments: [SessionPeerKind],
+        pathsegments: [String],
         value: AnyCodable)
     {
         self.path = path
@@ -4117,13 +4117,13 @@ public struct SessionCatalogCapabilities: Codable, Sendable {
 }
 
 public struct SessionCatalogDescriptor: Codable, Sendable {
-    public let id: SessionPeerKind
-    public let label: SessionPeerKind
+    public let id: String
+    public let label: String
     public let capabilities: SessionCatalogCapabilities
 
     public init(
-        id: SessionPeerKind,
-        label: SessionPeerKind,
+        id: String,
+        label: String,
         capabilities: SessionCatalogCapabilities)
     {
         self.id = id
@@ -4157,10 +4157,10 @@ public struct SessionCatalogPullRequestSummary: Codable, Sendable {
 }
 
 public struct SessionCatalogSession: Codable, Sendable {
-    public let threadid: SessionPeerKind
+    public let threadid: String
     public let name: String?
     public let cwd: String?
-    public let status: SessionPeerKind
+    public let status: String
     public let createdat: Double?
     public let updatedat: Double?
     public let recencyat: Double?
@@ -4178,10 +4178,10 @@ public struct SessionCatalogSession: Codable, Sendable {
     public let canopenterminal: Bool?
 
     public init(
-        threadid: SessionPeerKind,
+        threadid: String,
         name: String? = nil,
         cwd: String? = nil,
-        status: SessionPeerKind,
+        status: String,
         createdat: Double? = nil,
         updatedat: Double? = nil,
         recencyat: Double? = nil,
@@ -4243,8 +4243,8 @@ public struct SessionCatalogSession: Codable, Sendable {
 }
 
 public struct SessionCatalogHost: Codable, Sendable {
-    public let hostid: SessionPeerKind
-    public let label: SessionPeerKind
+    public let hostid: String
+    public let label: String
     public let kind: AnyCodable
     public let connected: Bool
     public let nodeid: String?
@@ -4253,8 +4253,8 @@ public struct SessionCatalogHost: Codable, Sendable {
     public let error: [String: AnyCodable]?
 
     public init(
-        hostid: SessionPeerKind,
-        label: SessionPeerKind,
+        hostid: String,
+        label: String,
         kind: AnyCodable,
         connected: Bool,
         nodeid: String? = nil,
@@ -4285,15 +4285,15 @@ public struct SessionCatalogHost: Codable, Sendable {
 }
 
 public struct SessionCatalog: Codable, Sendable {
-    public let id: SessionPeerKind
-    public let label: SessionPeerKind
+    public let id: String
+    public let label: String
     public let capabilities: SessionCatalogCapabilities
     public let hosts: [SessionCatalogHost]
     public let error: [String: AnyCodable]?
 
     public init(
-        id: SessionPeerKind,
-        label: SessionPeerKind,
+        id: String,
+        label: String,
         capabilities: SessionCatalogCapabilities,
         hosts: [SessionCatalogHost],
         error: [String: AnyCodable]? = nil)
@@ -4405,16 +4405,16 @@ public struct SessionsCatalogListResult: Codable, Sendable {
 }
 
 public struct SessionsCatalogReadParams: Codable, Sendable {
-    public let catalogid: SessionPeerKind
-    public let hostid: SessionPeerKind
-    public let threadid: SessionPeerKind
+    public let catalogid: String
+    public let hostid: String
+    public let threadid: String
     public let limit: Int?
     public let cursor: String?
 
     public init(
-        catalogid: SessionPeerKind,
-        hostid: SessionPeerKind,
-        threadid: SessionPeerKind,
+        catalogid: String,
+        hostid: String,
+        threadid: String,
         limit: Int? = nil,
         cursor: String? = nil)
     {
@@ -4435,16 +4435,16 @@ public struct SessionsCatalogReadParams: Codable, Sendable {
 }
 
 public struct SessionsCatalogReadResult: Codable, Sendable {
-    public let hostid: SessionPeerKind
+    public let hostid: String
     public let label: String?
-    public let threadid: SessionPeerKind
+    public let threadid: String
     public let items: [SessionCatalogTranscriptItem]
     public let nextcursor: String?
 
     public init(
-        hostid: SessionPeerKind,
+        hostid: String,
         label: String? = nil,
-        threadid: SessionPeerKind,
+        threadid: String,
         items: [SessionCatalogTranscriptItem],
         nextcursor: String? = nil)
     {
@@ -4465,14 +4465,14 @@ public struct SessionsCatalogReadResult: Codable, Sendable {
 }
 
 public struct SessionsCatalogContinueParams: Codable, Sendable {
-    public let catalogid: SessionPeerKind
-    public let hostid: SessionPeerKind
-    public let threadid: SessionPeerKind
+    public let catalogid: String
+    public let hostid: String
+    public let threadid: String
 
     public init(
-        catalogid: SessionPeerKind,
-        hostid: SessionPeerKind,
-        threadid: SessionPeerKind)
+        catalogid: String,
+        hostid: String,
+        threadid: String)
     {
         self.catalogid = catalogid
         self.hostid = hostid
@@ -4487,10 +4487,10 @@ public struct SessionsCatalogContinueParams: Codable, Sendable {
 }
 
 public struct SessionsCatalogContinueResult: Codable, Sendable {
-    public let sessionkey: SessionPeerKind
+    public let sessionkey: String
 
     public init(
-        sessionkey: SessionPeerKind)
+        sessionkey: String)
     {
         self.sessionkey = sessionkey
     }
@@ -4501,15 +4501,15 @@ public struct SessionsCatalogContinueResult: Codable, Sendable {
 }
 
 public struct SessionsCatalogArchiveParams: Codable, Sendable {
-    public let catalogid: SessionPeerKind
-    public let hostid: SessionPeerKind
-    public let threadid: SessionPeerKind
+    public let catalogid: String
+    public let hostid: String
+    public let threadid: String
     public let confirmnootherrunner: Bool
 
     public init(
-        catalogid: SessionPeerKind,
-        hostid: SessionPeerKind,
-        threadid: SessionPeerKind,
+        catalogid: String,
+        hostid: String,
+        threadid: String,
         confirmnootherrunner: Bool)
     {
         self.catalogid = catalogid
@@ -4575,12 +4575,12 @@ public struct SessionsCleanupParams: Codable, Sendable {
 }
 
 public struct SessionsPreviewParams: Codable, Sendable {
-    public let keys: [SessionPeerKind]
+    public let keys: [String]
     public let limit: Int?
     public let maxchars: Int?
 
     public init(
-        keys: [SessionPeerKind],
+        keys: [String],
         limit: Int? = nil,
         maxchars: Int? = nil)
     {
@@ -4597,12 +4597,12 @@ public struct SessionsPreviewParams: Codable, Sendable {
 }
 
 public struct SessionsDescribeParams: Codable, Sendable {
-    public let key: SessionPeerKind
+    public let key: String
     public let includederivedtitles: Bool?
     public let includelastmessage: Bool?
 
     public init(
-        key: SessionPeerKind,
+        key: String,
         includederivedtitles: Bool? = nil,
         includelastmessage: Bool? = nil)
     {
@@ -4661,18 +4661,18 @@ public struct SessionsResolveParams: Codable, Sendable {
 }
 
 public struct SessionsSearchHit: Codable, Sendable {
-    public let sessionkey: SessionPeerKind
-    public let sessionid: SessionPeerKind
-    public let messageid: SessionPeerKind
+    public let sessionkey: String
+    public let sessionid: String
+    public let messageid: String
     public let role: AnyCodable
     public let timestamp: Int
     public let snippet: String
     public let score: Double
 
     public init(
-        sessionkey: SessionPeerKind,
-        sessionid: SessionPeerKind,
-        messageid: SessionPeerKind,
+        sessionkey: String,
+        sessionid: String,
+        messageid: String,
         role: AnyCodable,
         timestamp: Int,
         snippet: String,
@@ -4747,9 +4747,9 @@ public struct SessionsSearchResult: Codable, Sendable {
 }
 
 public struct SessionCompactionCheckpoint: Codable, Sendable {
-    public let checkpointid: SessionPeerKind
-    public let sessionkey: SessionPeerKind
-    public let sessionid: SessionPeerKind
+    public let checkpointid: String
+    public let sessionkey: String
+    public let sessionid: String
     public let createdat: Int
     public let reason: AnyCodable
     public let tokensbefore: Int?
@@ -4760,9 +4760,9 @@ public struct SessionCompactionCheckpoint: Codable, Sendable {
     public let postcompaction: [String: AnyCodable]
 
     public init(
-        checkpointid: SessionPeerKind,
-        sessionkey: SessionPeerKind,
-        sessionid: SessionPeerKind,
+        checkpointid: String,
+        sessionkey: String,
+        sessionid: String,
         createdat: Int,
         reason: AnyCodable,
         tokensbefore: Int? = nil,
@@ -4801,20 +4801,20 @@ public struct SessionCompactionCheckpoint: Codable, Sendable {
 }
 
 public struct SessionOperationEvent: Codable, Sendable {
-    public let operationid: SessionPeerKind
+    public let operationid: String
     public let operation: String
     public let phase: AnyCodable
-    public let sessionkey: SessionPeerKind
+    public let sessionkey: String
     public let agentid: String?
     public let ts: Int
     public let completed: Bool?
     public let reason: String?
 
     public init(
-        operationid: SessionPeerKind,
+        operationid: String,
         operation: String,
         phase: AnyCodable,
-        sessionkey: SessionPeerKind,
+        sessionkey: String,
         agentid: String? = nil,
         ts: Int,
         completed: Bool? = nil,
@@ -4887,7 +4887,7 @@ public struct SessionObserverPlanProgress: Codable, Sendable {
 }
 
 public struct SessionObserverDigest: Codable, Sendable {
-    public let sessionkey: SessionPeerKind
+    public let sessionkey: String
     public let agentid: String?
     public let runid: String?
     public let revision: Int
@@ -4898,7 +4898,7 @@ public struct SessionObserverDigest: Codable, Sendable {
     public let planprogress: SessionObserverPlanProgress?
 
     public init(
-        sessionkey: SessionPeerKind,
+        sessionkey: String,
         agentid: String? = nil,
         runid: String? = nil,
         revision: Int,
@@ -5209,11 +5209,11 @@ public struct SessionRow: Codable, Sendable {
 }
 
 public struct SessionsCompanionAskParams: Codable, Sendable {
-    public let sessionkey: SessionPeerKind
+    public let sessionkey: String
     public let question: String
 
     public init(
-        sessionkey: SessionPeerKind,
+        sessionkey: String,
         question: String)
     {
         self.sessionkey = sessionkey
@@ -5245,10 +5245,10 @@ public struct SessionsCompanionAskResult: Codable, Sendable {
 }
 
 public struct SessionsCompanionResetParams: Codable, Sendable {
-    public let sessionkey: SessionPeerKind
+    public let sessionkey: String
 
     public init(
-        sessionkey: SessionPeerKind)
+        sessionkey: String)
     {
         self.sessionkey = sessionkey
     }
@@ -5273,10 +5273,10 @@ public struct SessionsCompanionResetResult: Codable, Sendable {
 }
 
 public struct SessionsCompanionStateParams: Codable, Sendable {
-    public let sessionkey: SessionPeerKind
+    public let sessionkey: String
 
     public init(
-        sessionkey: SessionPeerKind)
+        sessionkey: String)
     {
         self.sessionkey = sessionkey
     }
@@ -5330,13 +5330,13 @@ public struct SessionsObserverVisibilityResult: Codable, Sendable {
 
 public struct SessionSharingIdentity: Codable, Sendable {
     public let type: AnyCodable
-    public let id: SessionPeerKind
+    public let id: String
     public let label: String?
     public let avatarurl: String?
 
     public init(
         type: AnyCodable,
-        id: SessionPeerKind,
+        id: String,
         label: String? = nil,
         avatarurl: String? = nil)
     {
@@ -5355,12 +5355,12 @@ public struct SessionSharingIdentity: Codable, Sendable {
 }
 
 public struct SessionVisibilitySetParams: Codable, Sendable {
-    public let sessionkey: SessionPeerKind
+    public let sessionkey: String
     public let agentid: String?
     public let visibility: SessionVisibility
 
     public init(
-        sessionkey: SessionPeerKind,
+        sessionkey: String,
         agentid: String? = nil,
         visibility: SessionVisibility)
     {
@@ -5378,12 +5378,12 @@ public struct SessionVisibilitySetParams: Codable, Sendable {
 
 public struct SessionVisibilitySetResult: Codable, Sendable {
     public let ok: Bool
-    public let sessionkey: SessionPeerKind
+    public let sessionkey: String
     public let visibility: SessionVisibility
 
     public init(
         ok: Bool,
-        sessionkey: SessionPeerKind,
+        sessionkey: String,
         visibility: SessionVisibility)
     {
         self.ok = ok
@@ -5399,11 +5399,11 @@ public struct SessionVisibilitySetResult: Codable, Sendable {
 }
 
 public struct SessionMembersListParams: Codable, Sendable {
-    public let sessionkey: SessionPeerKind
+    public let sessionkey: String
     public let agentid: String?
 
     public init(
-        sessionkey: SessionPeerKind,
+        sessionkey: String,
         agentid: String? = nil)
     {
         self.sessionkey = sessionkey
@@ -5417,13 +5417,13 @@ public struct SessionMembersListParams: Codable, Sendable {
 }
 
 public struct SessionMember: Codable, Sendable {
-    public let identityid: SessionPeerKind
-    public let addedby: SessionPeerKind
+    public let identityid: String
+    public let addedby: String
     public let addedat: Int
 
     public init(
-        identityid: SessionPeerKind,
-        addedby: SessionPeerKind,
+        identityid: String,
+        addedby: String,
         addedat: Int)
     {
         self.identityid = identityid
@@ -5439,7 +5439,7 @@ public struct SessionMember: Codable, Sendable {
 }
 
 public struct SessionMembersListResult: Codable, Sendable {
-    public let sessionkey: SessionPeerKind
+    public let sessionkey: String
     public let owner: SessionSharingIdentity?
     public let members: [SessionMember]
     public let identities: [SessionSharingIdentity]
@@ -5447,7 +5447,7 @@ public struct SessionMembersListResult: Codable, Sendable {
     public let allowedvisibilities: [SessionVisibility]
 
     public init(
-        sessionkey: SessionPeerKind,
+        sessionkey: String,
         owner: SessionSharingIdentity? = nil,
         members: [SessionMember],
         identities: [SessionSharingIdentity],
@@ -5473,14 +5473,14 @@ public struct SessionMembersListResult: Codable, Sendable {
 }
 
 public struct SessionMemberAddParams: Codable, Sendable {
-    public let sessionkey: SessionPeerKind
+    public let sessionkey: String
     public let agentid: String?
-    public let identityid: SessionPeerKind
+    public let identityid: String
 
     public init(
-        sessionkey: SessionPeerKind,
+        sessionkey: String,
         agentid: String? = nil,
-        identityid: SessionPeerKind)
+        identityid: String)
     {
         self.sessionkey = sessionkey
         self.agentid = agentid
@@ -5495,14 +5495,14 @@ public struct SessionMemberAddParams: Codable, Sendable {
 }
 
 public struct SessionMemberRemoveParams: Codable, Sendable {
-    public let sessionkey: SessionPeerKind
+    public let sessionkey: String
     public let agentid: String?
-    public let identityid: SessionPeerKind
+    public let identityid: String
 
     public init(
-        sessionkey: SessionPeerKind,
+        sessionkey: String,
         agentid: String? = nil,
-        identityid: SessionPeerKind)
+        identityid: String)
     {
         self.sessionkey = sessionkey
         self.agentid = agentid
@@ -5518,13 +5518,13 @@ public struct SessionMemberRemoveParams: Codable, Sendable {
 
 public struct SessionMemberMutationResult: Codable, Sendable {
     public let ok: Bool
-    public let sessionkey: SessionPeerKind
-    public let identityid: SessionPeerKind
+    public let sessionkey: String
+    public let identityid: String
 
     public init(
         ok: Bool,
-        sessionkey: SessionPeerKind,
-        identityid: SessionPeerKind)
+        sessionkey: String,
+        identityid: String)
     {
         self.ok = ok
         self.sessionkey = sessionkey
@@ -5540,8 +5540,8 @@ public struct SessionMemberMutationResult: Codable, Sendable {
 
 public struct SessionSharingEvent: Codable, Sendable {
     public let action: SessionSharingAction
-    public let sessionkey: SessionPeerKind
-    public let agentid: SessionPeerKind
+    public let sessionkey: String
+    public let agentid: String
     public let actor: SessionSharingIdentity
     public let visibility: SessionVisibility?
     public let identityid: String?
@@ -5549,8 +5549,8 @@ public struct SessionSharingEvent: Codable, Sendable {
 
     public init(
         action: SessionSharingAction,
-        sessionkey: SessionPeerKind,
-        agentid: SessionPeerKind,
+        sessionkey: String,
+        agentid: String,
         actor: SessionSharingIdentity,
         visibility: SessionVisibility? = nil,
         identityid: String? = nil,
@@ -5577,18 +5577,18 @@ public struct SessionSharingEvent: Codable, Sendable {
 }
 
 public struct SessionSuggestion: Codable, Sendable {
-    public let id: SessionPeerKind
-    public let sessionkey: SessionPeerKind
-    public let agentid: SessionPeerKind
+    public let id: String
+    public let sessionkey: String
+    public let agentid: String
     public let author: SessionSharingIdentity
     public let text: String
     public let createdat: Int
     public let state: SessionSuggestionState
 
     public init(
-        id: SessionPeerKind,
-        sessionkey: SessionPeerKind,
-        agentid: SessionPeerKind,
+        id: String,
+        sessionkey: String,
+        agentid: String,
         author: SessionSharingIdentity,
         text: String,
         createdat: Int,
@@ -5615,12 +5615,12 @@ public struct SessionSuggestion: Codable, Sendable {
 }
 
 public struct SessionSuggestionsAddParams: Codable, Sendable {
-    public let sessionkey: SessionPeerKind
+    public let sessionkey: String
     public let agentid: String?
     public let text: String
 
     public init(
-        sessionkey: SessionPeerKind,
+        sessionkey: String,
         agentid: String? = nil,
         text: String)
     {
@@ -5651,11 +5651,11 @@ public struct SessionSuggestionsAddResult: Codable, Sendable {
 }
 
 public struct SessionSuggestionsListParams: Codable, Sendable {
-    public let sessionkey: SessionPeerKind
+    public let sessionkey: String
     public let agentid: String?
 
     public init(
-        sessionkey: SessionPeerKind,
+        sessionkey: String,
         agentid: String? = nil)
     {
         self.sessionkey = sessionkey
@@ -5687,15 +5687,15 @@ public struct SessionSuggestionsListResult: Codable, Sendable {
 }
 
 public struct SessionSuggestionsResolveParams: Codable, Sendable {
-    public let sessionkey: SessionPeerKind
+    public let sessionkey: String
     public let agentid: String?
-    public let id: SessionPeerKind
+    public let id: String
     public let resolution: SessionSuggestionResolution
 
     public init(
-        sessionkey: SessionPeerKind,
+        sessionkey: String,
         agentid: String? = nil,
-        id: SessionPeerKind,
+        id: String,
         resolution: SessionSuggestionResolution)
     {
         self.sessionkey = sessionkey
@@ -5745,15 +5745,15 @@ public struct SessionSuggestionEvent: Codable, Sendable {
 }
 
 public struct SessionTypingParams: Codable, Sendable {
-    public let sessionkey: SessionPeerKind
+    public let sessionkey: String
     public let agentid: String?
-    public let sessionid: SessionPeerKind
+    public let sessionid: String
     public let typing: Bool
 
     public init(
-        sessionkey: SessionPeerKind,
+        sessionkey: String,
         agentid: String? = nil,
-        sessionid: SessionPeerKind,
+        sessionid: String,
         typing: Bool)
     {
         self.sessionkey = sessionkey
@@ -5789,17 +5789,17 @@ public struct SessionTypingResult: Codable, Sendable {
 }
 
 public struct SessionTypingEvent: Codable, Sendable {
-    public let sessionkey: SessionPeerKind
-    public let sessionid: SessionPeerKind
-    public let agentid: SessionPeerKind
+    public let sessionkey: String
+    public let sessionid: String
+    public let agentid: String
     public let actor: SessionSharingIdentity
     public let typing: Bool
     public let ts: Int
 
     public init(
-        sessionkey: SessionPeerKind,
-        sessionid: SessionPeerKind,
-        agentid: SessionPeerKind,
+        sessionkey: String,
+        sessionid: String,
+        agentid: String,
         actor: SessionSharingIdentity,
         typing: Bool,
         ts: Int)
@@ -5922,7 +5922,7 @@ public struct SyncingSessionPlacement: Codable, Sendable {
     public let createdatms: Int
     public let updatedatms: Int
     public let statechangedatms: Int
-    public let environmentid: SessionPeerKind
+    public let environmentid: String
     public let workerbundlehash: String
 
     public init(
@@ -5931,7 +5931,7 @@ public struct SyncingSessionPlacement: Codable, Sendable {
         createdatms: Int,
         updatedatms: Int,
         statechangedatms: Int,
-        environmentid: SessionPeerKind,
+        environmentid: String,
         workerbundlehash: String)
     {
         self.state = state
@@ -5960,10 +5960,10 @@ public struct StartingSessionPlacement: Codable, Sendable {
     public let createdatms: Int
     public let updatedatms: Int
     public let statechangedatms: Int
-    public let environmentid: SessionPeerKind
+    public let environmentid: String
     public let workerbundlehash: String
-    public let workspacebasemanifestref: SessionPeerKind
-    public let remoteworkspacedir: SessionPeerKind
+    public let workspacebasemanifestref: String
+    public let remoteworkspacedir: String
 
     public init(
         state: String,
@@ -5971,10 +5971,10 @@ public struct StartingSessionPlacement: Codable, Sendable {
         createdatms: Int,
         updatedatms: Int,
         statechangedatms: Int,
-        environmentid: SessionPeerKind,
+        environmentid: String,
         workerbundlehash: String,
-        workspacebasemanifestref: SessionPeerKind,
-        remoteworkspacedir: SessionPeerKind)
+        workspacebasemanifestref: String,
+        remoteworkspacedir: String)
     {
         self.state = state
         self.generation = generation
@@ -6006,11 +6006,11 @@ public struct ActiveWorkerSessionPlacement: Codable, Sendable {
     public let createdatms: Int
     public let updatedatms: Int
     public let statechangedatms: Int
-    public let environmentid: SessionPeerKind
+    public let environmentid: String
     public let activeownerepoch: Int
     public let workerbundlehash: String
-    public let workspacebasemanifestref: SessionPeerKind
-    public let remoteworkspacedir: SessionPeerKind
+    public let workspacebasemanifestref: String
+    public let remoteworkspacedir: String
     public let lasttranscriptackcursor: Int?
     public let lastliveeventackcursor: Int?
     public let workspaceresultconflict: [String: AnyCodable]?
@@ -6021,11 +6021,11 @@ public struct ActiveWorkerSessionPlacement: Codable, Sendable {
         createdatms: Int,
         updatedatms: Int,
         statechangedatms: Int,
-        environmentid: SessionPeerKind,
+        environmentid: String,
         activeownerepoch: Int,
         workerbundlehash: String,
-        workspacebasemanifestref: SessionPeerKind,
-        remoteworkspacedir: SessionPeerKind,
+        workspacebasemanifestref: String,
+        remoteworkspacedir: String,
         lasttranscriptackcursor: Int? = nil,
         lastliveeventackcursor: Int? = nil,
         workspaceresultconflict: [String: AnyCodable]? = nil)
@@ -6068,11 +6068,11 @@ public struct DrainingSessionPlacement: Codable, Sendable {
     public let createdatms: Int
     public let updatedatms: Int
     public let statechangedatms: Int
-    public let environmentid: SessionPeerKind
+    public let environmentid: String
     public let activeownerepoch: Int
     public let workerbundlehash: String
-    public let workspacebasemanifestref: SessionPeerKind
-    public let remoteworkspacedir: SessionPeerKind
+    public let workspacebasemanifestref: String
+    public let remoteworkspacedir: String
     public let lasttranscriptackcursor: Int?
     public let lastliveeventackcursor: Int?
     public let workspaceresultconflict: [String: AnyCodable]?
@@ -6083,11 +6083,11 @@ public struct DrainingSessionPlacement: Codable, Sendable {
         createdatms: Int,
         updatedatms: Int,
         statechangedatms: Int,
-        environmentid: SessionPeerKind,
+        environmentid: String,
         activeownerepoch: Int,
         workerbundlehash: String,
-        workspacebasemanifestref: SessionPeerKind,
-        remoteworkspacedir: SessionPeerKind,
+        workspacebasemanifestref: String,
+        remoteworkspacedir: String,
         lasttranscriptackcursor: Int? = nil,
         lastliveeventackcursor: Int? = nil,
         workspaceresultconflict: [String: AnyCodable]? = nil)
@@ -6130,11 +6130,11 @@ public struct ReconcilingSessionPlacement: Codable, Sendable {
     public let createdatms: Int
     public let updatedatms: Int
     public let statechangedatms: Int
-    public let environmentid: SessionPeerKind
+    public let environmentid: String
     public let activeownerepoch: Int
     public let workerbundlehash: String
-    public let workspacebasemanifestref: SessionPeerKind
-    public let remoteworkspacedir: SessionPeerKind
+    public let workspacebasemanifestref: String
+    public let remoteworkspacedir: String
     public let lasttranscriptackcursor: Int?
     public let lastliveeventackcursor: Int?
     public let workspaceresultconflict: [String: AnyCodable]?
@@ -6145,11 +6145,11 @@ public struct ReconcilingSessionPlacement: Codable, Sendable {
         createdatms: Int,
         updatedatms: Int,
         statechangedatms: Int,
-        environmentid: SessionPeerKind,
+        environmentid: String,
         activeownerepoch: Int,
         workerbundlehash: String,
-        workspacebasemanifestref: SessionPeerKind,
-        remoteworkspacedir: SessionPeerKind,
+        workspacebasemanifestref: String,
+        remoteworkspacedir: String,
         lasttranscriptackcursor: Int? = nil,
         lastliveeventackcursor: Int? = nil,
         workspaceresultconflict: [String: AnyCodable]? = nil)
@@ -6262,7 +6262,7 @@ public struct FailedSessionPlacement: Codable, Sendable {
     public let lasttranscriptackcursor: Int?
     public let lastliveeventackcursor: Int?
     public let workspaceresultconflict: [String: AnyCodable]?
-    public let recoveryerror: SessionPeerKind
+    public let recoveryerror: String
 
     public init(
         state: String,
@@ -6278,7 +6278,7 @@ public struct FailedSessionPlacement: Codable, Sendable {
         lasttranscriptackcursor: Int? = nil,
         lastliveeventackcursor: Int? = nil,
         workspaceresultconflict: [String: AnyCodable]? = nil,
-        recoveryerror: SessionPeerKind)
+        recoveryerror: String)
     {
         self.state = state
         self.generation = generation
@@ -6315,14 +6315,14 @@ public struct FailedSessionPlacement: Codable, Sendable {
 }
 
 public struct SessionsDispatchParams: Codable, Sendable {
-    public let key: SessionPeerKind
+    public let key: String
     public let agentid: String?
-    public let profileid: SessionPeerKind
+    public let profileid: String
 
     public init(
-        key: SessionPeerKind,
+        key: String,
         agentid: String? = nil,
-        profileid: SessionPeerKind)
+        profileid: String)
     {
         self.key = key
         self.agentid = agentid
@@ -6338,14 +6338,14 @@ public struct SessionsDispatchParams: Codable, Sendable {
 
 public struct SessionsDispatchResult: Codable, Sendable {
     public let ok: Bool
-    public let key: SessionPeerKind
-    public let sessionid: SessionPeerKind
+    public let key: String
+    public let sessionid: String
     public let placement: ActiveWorkerSessionPlacement
 
     public init(
         ok: Bool,
-        key: SessionPeerKind,
-        sessionid: SessionPeerKind,
+        key: String,
+        sessionid: String,
         placement: ActiveWorkerSessionPlacement)
     {
         self.ok = ok
@@ -6363,11 +6363,11 @@ public struct SessionsDispatchResult: Codable, Sendable {
 }
 
 public struct SessionsReclaimParams: Codable, Sendable {
-    public let key: SessionPeerKind
+    public let key: String
     public let agentid: String?
 
     public init(
-        key: SessionPeerKind,
+        key: String,
         agentid: String? = nil)
     {
         self.key = key
@@ -6382,14 +6382,14 @@ public struct SessionsReclaimParams: Codable, Sendable {
 
 public struct SessionsReclaimResult: Codable, Sendable {
     public let ok: Bool
-    public let key: SessionPeerKind
-    public let sessionid: SessionPeerKind
+    public let key: String
+    public let sessionid: String
     public let placement: ReclaimedSessionPlacement
 
     public init(
         ok: Bool,
-        key: SessionPeerKind,
-        sessionid: SessionPeerKind,
+        key: String,
+        sessionid: String,
         placement: ReclaimedSessionPlacement)
     {
         self.ok = ok
@@ -6429,10 +6429,10 @@ public struct SessionDiscussionInfo: Codable, Sendable {
 }
 
 public struct SessionDiscussionInfoParams: Codable, Sendable {
-    public let sessionkey: SessionPeerKind
+    public let sessionkey: String
 
     public init(
-        sessionkey: SessionPeerKind)
+        sessionkey: String)
     {
         self.sessionkey = sessionkey
     }
@@ -6465,10 +6465,10 @@ public struct SessionDiscussionInfoResult: Codable, Sendable {
 }
 
 public struct SessionDiscussionOpenParams: Codable, Sendable {
-    public let sessionkey: SessionPeerKind
+    public let sessionkey: String
 
     public init(
-        sessionkey: SessionPeerKind)
+        sessionkey: String)
     {
         self.sessionkey = sessionkey
     }
@@ -6501,11 +6501,11 @@ public struct SessionDiscussionOpenResult: Codable, Sendable {
 }
 
 public struct SessionsCompactionListParams: Codable, Sendable {
-    public let key: SessionPeerKind
+    public let key: String
     public let agentid: String?
 
     public init(
-        key: SessionPeerKind,
+        key: String,
         agentid: String? = nil)
     {
         self.key = key
@@ -6519,14 +6519,14 @@ public struct SessionsCompactionListParams: Codable, Sendable {
 }
 
 public struct SessionsCompactionGetParams: Codable, Sendable {
-    public let key: SessionPeerKind
+    public let key: String
     public let agentid: String?
-    public let checkpointid: SessionPeerKind
+    public let checkpointid: String
 
     public init(
-        key: SessionPeerKind,
+        key: String,
         agentid: String? = nil,
-        checkpointid: SessionPeerKind)
+        checkpointid: String)
     {
         self.key = key
         self.agentid = agentid
@@ -6541,14 +6541,14 @@ public struct SessionsCompactionGetParams: Codable, Sendable {
 }
 
 public struct SessionsCompactionBranchParams: Codable, Sendable {
-    public let key: SessionPeerKind
+    public let key: String
     public let agentid: String?
-    public let checkpointid: SessionPeerKind
+    public let checkpointid: String
 
     public init(
-        key: SessionPeerKind,
+        key: String,
         agentid: String? = nil,
-        checkpointid: SessionPeerKind)
+        checkpointid: String)
     {
         self.key = key
         self.agentid = agentid
@@ -6563,14 +6563,14 @@ public struct SessionsCompactionBranchParams: Codable, Sendable {
 }
 
 public struct SessionsCompactionRestoreParams: Codable, Sendable {
-    public let key: SessionPeerKind
+    public let key: String
     public let agentid: String?
-    public let checkpointid: SessionPeerKind
+    public let checkpointid: String
 
     public init(
-        key: SessionPeerKind,
+        key: String,
         agentid: String? = nil,
-        checkpointid: SessionPeerKind)
+        checkpointid: String)
     {
         self.key = key
         self.agentid = agentid
@@ -6586,12 +6586,12 @@ public struct SessionsCompactionRestoreParams: Codable, Sendable {
 
 public struct SessionsCompactionListResult: Codable, Sendable {
     public let ok: Bool
-    public let key: SessionPeerKind
+    public let key: String
     public let checkpoints: [SessionCompactionCheckpoint]
 
     public init(
         ok: Bool,
-        key: SessionPeerKind,
+        key: String,
         checkpoints: [SessionCompactionCheckpoint])
     {
         self.ok = ok
@@ -6608,12 +6608,12 @@ public struct SessionsCompactionListResult: Codable, Sendable {
 
 public struct SessionsCompactionGetResult: Codable, Sendable {
     public let ok: Bool
-    public let key: SessionPeerKind
+    public let key: String
     public let checkpoint: SessionCompactionCheckpoint
 
     public init(
         ok: Bool,
-        key: SessionPeerKind,
+        key: String,
         checkpoint: SessionCompactionCheckpoint)
     {
         self.ok = ok
@@ -6630,17 +6630,17 @@ public struct SessionsCompactionGetResult: Codable, Sendable {
 
 public struct SessionsCompactionBranchResult: Codable, Sendable {
     public let ok: Bool
-    public let sourcekey: SessionPeerKind
-    public let key: SessionPeerKind
-    public let sessionid: SessionPeerKind
+    public let sourcekey: String
+    public let key: String
+    public let sessionid: String
     public let checkpoint: SessionCompactionCheckpoint
     public let entry: [String: AnyCodable]
 
     public init(
         ok: Bool,
-        sourcekey: SessionPeerKind,
-        key: SessionPeerKind,
-        sessionid: SessionPeerKind,
+        sourcekey: String,
+        key: String,
+        sessionid: String,
         checkpoint: SessionCompactionCheckpoint,
         entry: [String: AnyCodable])
     {
@@ -6664,15 +6664,15 @@ public struct SessionsCompactionBranchResult: Codable, Sendable {
 
 public struct SessionsCompactionRestoreResult: Codable, Sendable {
     public let ok: Bool
-    public let key: SessionPeerKind
-    public let sessionid: SessionPeerKind
+    public let key: String
+    public let sessionid: String
     public let checkpoint: SessionCompactionCheckpoint
     public let entry: [String: AnyCodable]
 
     public init(
         ok: Bool,
-        key: SessionPeerKind,
-        sessionid: SessionPeerKind,
+        key: String,
+        sessionid: String,
         checkpoint: SessionCompactionCheckpoint,
         entry: [String: AnyCodable])
     {
@@ -6693,14 +6693,14 @@ public struct SessionsCompactionRestoreResult: Codable, Sendable {
 }
 
 public struct SessionsRewindParams: Codable, Sendable {
-    public let sessionkey: SessionPeerKind
+    public let sessionkey: String
     public let agentid: String?
-    public let entryid: SessionPeerKind
+    public let entryid: String
 
     public init(
-        sessionkey: SessionPeerKind,
+        sessionkey: String,
         agentid: String? = nil,
-        entryid: SessionPeerKind)
+        entryid: String)
     {
         self.sessionkey = sessionkey
         self.agentid = agentid
@@ -6733,14 +6733,14 @@ public struct SessionsRewindResult: Codable, Sendable {
 }
 
 public struct SessionsForkParams: Codable, Sendable {
-    public let sessionkey: SessionPeerKind
+    public let sessionkey: String
     public let agentid: String?
-    public let entryid: SessionPeerKind
+    public let entryid: String
 
     public init(
-        sessionkey: SessionPeerKind,
+        sessionkey: String,
         agentid: String? = nil,
-        entryid: SessionPeerKind)
+        entryid: String)
     {
         self.sessionkey = sessionkey
         self.agentid = agentid
@@ -6755,12 +6755,12 @@ public struct SessionsForkParams: Codable, Sendable {
 }
 
 public struct SessionsForkResult: Codable, Sendable {
-    public let sessionkey: SessionPeerKind
+    public let sessionkey: String
     public let editortext: String?
     public let editorattachments: [[String: AnyCodable]]?
 
     public init(
-        sessionkey: SessionPeerKind,
+        sessionkey: String,
         editortext: String? = nil,
         editorattachments: [[String: AnyCodable]]? = nil)
     {
@@ -6777,14 +6777,14 @@ public struct SessionsForkResult: Codable, Sendable {
 }
 
 public struct SessionBranch: Codable, Sendable {
-    public let leafentryid: SessionPeerKind
+    public let leafentryid: String
     public let headline: String
     public let messagecount: Int
     public let updatedat: String?
     public let active: Bool
 
     public init(
-        leafentryid: SessionPeerKind,
+        leafentryid: String,
         headline: String,
         messagecount: Int,
         updatedat: String? = nil,
@@ -6807,11 +6807,11 @@ public struct SessionBranch: Codable, Sendable {
 }
 
 public struct SessionsBranchesListParams: Codable, Sendable {
-    public let sessionkey: SessionPeerKind
+    public let sessionkey: String
     public let agentid: String?
 
     public init(
-        sessionkey: SessionPeerKind,
+        sessionkey: String,
         agentid: String? = nil)
     {
         self.sessionkey = sessionkey
@@ -6839,14 +6839,14 @@ public struct SessionsBranchesListResult: Codable, Sendable {
 }
 
 public struct SessionsBranchesSwitchParams: Codable, Sendable {
-    public let sessionkey: SessionPeerKind
+    public let sessionkey: String
     public let agentid: String?
-    public let leafentryid: SessionPeerKind
+    public let leafentryid: String
 
     public init(
-        sessionkey: SessionPeerKind,
+        sessionkey: String,
         agentid: String? = nil,
-        leafentryid: SessionPeerKind)
+        leafentryid: String)
     {
         self.sessionkey = sessionkey
         self.agentid = agentid
@@ -6864,7 +6864,7 @@ public struct SessionsBranchesSwitchResult: Codable, Sendable {}
 
 public struct SessionFileBrowserEntry: Codable, Sendable {
     public let path: String
-    public let name: SessionPeerKind
+    public let name: String
     public let kind: AnyCodable
     public let sessionkind: SessionFileRelevance?
     public let size: Int?
@@ -6872,7 +6872,7 @@ public struct SessionFileBrowserEntry: Codable, Sendable {
 
     public init(
         path: String,
-        name: SessionPeerKind,
+        name: String,
         kind: AnyCodable,
         sessionkind: SessionFileRelevance? = nil,
         size: Int? = nil,
@@ -6927,9 +6927,9 @@ public struct SessionFileBrowserResult: Codable, Sendable {
 }
 
 public struct SessionFileEntry: Codable, Sendable {
-    public let path: SessionPeerKind
+    public let path: String
     public let workspacepath: String?
-    public let name: SessionPeerKind
+    public let name: String
     public let kind: SessionFileKind
     public let missing: Bool
     public let size: Int?
@@ -6941,9 +6941,9 @@ public struct SessionFileEntry: Codable, Sendable {
     public let previewkind: SessionFilePreviewKind?
 
     public init(
-        path: SessionPeerKind,
+        path: String,
         workspacepath: String? = nil,
-        name: SessionPeerKind,
+        name: String,
         kind: SessionFileKind,
         missing: Bool,
         size: Int? = nil,
@@ -6985,13 +6985,13 @@ public struct SessionFileEntry: Codable, Sendable {
 }
 
 public struct SessionsFilesListParams: Codable, Sendable {
-    public let sessionkey: SessionPeerKind
+    public let sessionkey: String
     public let agentid: String?
     public let path: String?
     public let search: String?
 
     public init(
-        sessionkey: SessionPeerKind,
+        sessionkey: String,
         agentid: String? = nil,
         path: String? = nil,
         search: String? = nil)
@@ -7011,14 +7011,14 @@ public struct SessionsFilesListParams: Codable, Sendable {
 }
 
 public struct SessionsFilesListResult: Codable, Sendable {
-    public let sessionkey: SessionPeerKind
+    public let sessionkey: String
     public let root: String?
     public let gitcheckout: Bool?
     public let files: [SessionFileEntry]
     public let browser: SessionFileBrowserResult?
 
     public init(
-        sessionkey: SessionPeerKind,
+        sessionkey: String,
         root: String? = nil,
         gitcheckout: Bool? = nil,
         files: [SessionFileEntry],
@@ -7041,13 +7041,13 @@ public struct SessionsFilesListResult: Codable, Sendable {
 }
 
 public struct SessionsFilesGetParams: Codable, Sendable {
-    public let sessionkey: SessionPeerKind
-    public let path: SessionPeerKind
+    public let sessionkey: String
+    public let path: String
     public let agentid: String?
 
     public init(
-        sessionkey: SessionPeerKind,
-        path: SessionPeerKind,
+        sessionkey: String,
+        path: String,
         agentid: String? = nil)
     {
         self.sessionkey = sessionkey
@@ -7063,12 +7063,12 @@ public struct SessionsFilesGetParams: Codable, Sendable {
 }
 
 public struct SessionsFilesGetResult: Codable, Sendable {
-    public let sessionkey: SessionPeerKind
+    public let sessionkey: String
     public let root: String?
     public let file: SessionFileEntry
 
     public init(
-        sessionkey: SessionPeerKind,
+        sessionkey: String,
         root: String? = nil,
         file: SessionFileEntry)
     {
@@ -7085,11 +7085,11 @@ public struct SessionsFilesGetResult: Codable, Sendable {
 }
 
 public struct SessionsFilesRevealParams: Codable, Sendable {
-    public let key: SessionPeerKind
+    public let key: String
     public let agentid: String?
 
     public init(
-        key: SessionPeerKind,
+        key: String,
         agentid: String? = nil)
     {
         self.key = key
@@ -7125,15 +7125,15 @@ public struct SessionsFilesRevealResult: Codable, Sendable {
 }
 
 public struct SessionsFilesSetParams: Codable, Sendable {
-    public let sessionkey: SessionPeerKind
-    public let path: SessionPeerKind
+    public let sessionkey: String
+    public let path: String
     public let agentid: String?
     public let content: String
     public let expectedhash: String
 
     public init(
-        sessionkey: SessionPeerKind,
-        path: SessionPeerKind,
+        sessionkey: String,
+        path: String,
         agentid: String? = nil,
         content: String,
         expectedhash: String)
@@ -7155,12 +7155,12 @@ public struct SessionsFilesSetParams: Codable, Sendable {
 }
 
 public struct SessionsFilesSetResult: Codable, Sendable {
-    public let sessionkey: SessionPeerKind
+    public let sessionkey: String
     public let root: String?
     public let file: SessionFileEntry
 
     public init(
-        sessionkey: SessionPeerKind,
+        sessionkey: String,
         root: String? = nil,
         file: SessionFileEntry)
     {
@@ -7177,7 +7177,7 @@ public struct SessionsFilesSetResult: Codable, Sendable {
 }
 
 public struct SessionDiffFile: Codable, Sendable {
-    public let path: SessionPeerKind
+    public let path: String
     public let oldpath: String?
     public let status: SessionDiffFileStatus
     public let additions: Int
@@ -7188,7 +7188,7 @@ public struct SessionDiffFile: Codable, Sendable {
     public let truncated: Bool?
 
     public init(
-        path: SessionPeerKind,
+        path: String,
         oldpath: String? = nil,
         status: SessionDiffFileStatus,
         additions: Int,
@@ -7223,11 +7223,11 @@ public struct SessionDiffFile: Codable, Sendable {
 }
 
 public struct SessionsDiffParams: Codable, Sendable {
-    public let sessionkey: SessionPeerKind
+    public let sessionkey: String
     public let agentid: String?
 
     public init(
-        sessionkey: SessionPeerKind,
+        sessionkey: String,
         agentid: String? = nil)
     {
         self.sessionkey = sessionkey
@@ -7241,7 +7241,7 @@ public struct SessionsDiffParams: Codable, Sendable {
 }
 
 public struct SessionsDiffResult: Codable, Sendable {
-    public let sessionkey: SessionPeerKind
+    public let sessionkey: String
     public let root: String?
     public let branch: String?
     public let baseref: String?
@@ -7252,7 +7252,7 @@ public struct SessionsDiffResult: Codable, Sendable {
     public let unavailablereason: AnyCodable?
 
     public init(
-        sessionkey: SessionPeerKind,
+        sessionkey: String,
         root: String? = nil,
         branch: String? = nil,
         baseref: String? = nil,
@@ -7287,14 +7287,14 @@ public struct SessionsDiffResult: Codable, Sendable {
 }
 
 public struct SessionWorktreeInfo: Codable, Sendable {
-    public let id: SessionPeerKind
-    public let path: SessionPeerKind
-    public let branch: SessionPeerKind
+    public let id: String
+    public let path: String
+    public let branch: String
 
     public init(
-        id: SessionPeerKind,
-        path: SessionPeerKind,
-        branch: SessionPeerKind)
+        id: String,
+        path: String,
+        branch: String)
     {
         self.id = id
         self.path = path
@@ -7404,7 +7404,7 @@ public struct SessionsCreateParams: Codable, Sendable {
 
 public struct SessionsCreateResult: Codable, Sendable {
     public let ok: Bool
-    public let key: SessionPeerKind
+    public let key: String
     public let sessionid: String?
     public let entry: [String: AnyCodable]?
     public let runstarted: Bool?
@@ -7415,7 +7415,7 @@ public struct SessionsCreateResult: Codable, Sendable {
 
     public init(
         ok: Bool,
-        key: SessionPeerKind,
+        key: String,
         sessionid: String? = nil,
         entry: [String: AnyCodable]? = nil,
         runstarted: Bool? = nil,
@@ -7449,7 +7449,7 @@ public struct SessionsCreateResult: Codable, Sendable {
 }
 
 public struct SessionsSendParams: Codable, Sendable {
-    public let key: SessionPeerKind
+    public let key: String
     public let agentid: String?
     public let message: String
     public let thinking: String?
@@ -7458,7 +7458,7 @@ public struct SessionsSendParams: Codable, Sendable {
     public let idempotencykey: String?
 
     public init(
-        key: SessionPeerKind,
+        key: String,
         agentid: String? = nil,
         message: String,
         thinking: String? = nil,
@@ -7487,12 +7487,12 @@ public struct SessionsSendParams: Codable, Sendable {
 }
 
 public struct SessionsMessagesSubscribeParams: Codable, Sendable {
-    public let key: SessionPeerKind
+    public let key: String
     public let agentid: String?
     public let includeapprovals: Bool?
 
     public init(
-        key: SessionPeerKind,
+        key: String,
         agentid: String? = nil,
         includeapprovals: Bool? = nil)
     {
@@ -7509,11 +7509,11 @@ public struct SessionsMessagesSubscribeParams: Codable, Sendable {
 }
 
 public struct SessionsMessagesUnsubscribeParams: Codable, Sendable {
-    public let key: SessionPeerKind
+    public let key: String
     public let agentid: String?
 
     public init(
-        key: SessionPeerKind,
+        key: String,
         agentid: String? = nil)
     {
         self.key = key
@@ -7581,7 +7581,7 @@ public struct SessionsAbortParams: Codable, Sendable {
 }
 
 public struct SessionsPatchParams: Codable, Sendable {
-    public let key: SessionPeerKind
+    public let key: String
     public let agentid: String?
     public let expectedsessionid: String?
     public let expectedlifecyclerevision: String?
@@ -7616,7 +7616,7 @@ public struct SessionsPatchParams: Codable, Sendable {
     public let groupactivation: AnyCodable?
 
     public init(
-        key: SessionPeerKind,
+        key: String,
         agentid: String? = nil,
         expectedsessionid: String? = nil,
         expectedlifecyclerevision: String? = nil,
@@ -7723,16 +7723,16 @@ public struct SessionsPatchParams: Codable, Sendable {
 }
 
 public struct SessionsPluginPatchParams: Codable, Sendable {
-    public let key: SessionPeerKind
-    public let pluginid: SessionPeerKind
-    public let namespace: SessionPeerKind
+    public let key: String
+    public let pluginid: String
+    public let namespace: String
     public let value: AnyCodable?
     public let unset: Bool?
 
     public init(
-        key: SessionPeerKind,
-        pluginid: SessionPeerKind,
-        namespace: SessionPeerKind,
+        key: String,
+        pluginid: String,
+        namespace: String,
         value: AnyCodable? = nil,
         unset: Bool? = nil)
     {
@@ -7754,12 +7754,12 @@ public struct SessionsPluginPatchParams: Codable, Sendable {
 
 public struct SessionsPluginPatchResult: Codable, Sendable {
     public let ok: Bool
-    public let key: SessionPeerKind
+    public let key: String
     public let value: AnyCodable?
 
     public init(
         ok: Bool,
-        key: SessionPeerKind,
+        key: String,
         value: AnyCodable? = nil)
     {
         self.ok = ok
@@ -7775,12 +7775,12 @@ public struct SessionsPluginPatchResult: Codable, Sendable {
 }
 
 public struct SessionsResetParams: Codable, Sendable {
-    public let key: SessionPeerKind
+    public let key: String
     public let agentid: String?
     public let reason: AnyCodable?
 
     public init(
-        key: SessionPeerKind,
+        key: String,
         agentid: String? = nil,
         reason: AnyCodable? = nil)
     {
@@ -7797,7 +7797,7 @@ public struct SessionsResetParams: Codable, Sendable {
 }
 
 public struct SessionsDeleteParams: Codable, Sendable {
-    public let key: SessionPeerKind
+    public let key: String
     public let agentid: String?
     public let deletetranscript: Bool?
     public let expectedsessionid: String?
@@ -7807,7 +7807,7 @@ public struct SessionsDeleteParams: Codable, Sendable {
     public let archivedonly: Bool?
 
     public init(
-        key: SessionPeerKind,
+        key: String,
         agentid: String? = nil,
         deletetranscript: Bool? = nil,
         expectedsessionid: String? = nil,
@@ -7953,12 +7953,12 @@ public struct SessionsGroupsMutationResult: Codable, Sendable {
 }
 
 public struct SessionsCompactParams: Codable, Sendable {
-    public let key: SessionPeerKind
+    public let key: String
     public let agentid: String?
     public let maxlines: Int?
 
     public init(
-        key: SessionPeerKind,
+        key: String,
         agentid: String? = nil,
         maxlines: Int? = nil)
     {
@@ -8039,16 +8039,16 @@ public struct SessionsUsageParams: Codable, Sendable {
 public struct AuditActivityAgentRunV1: Codable, Sendable {
     public let eventtype: String
     public let schemaversion: Int
-    public let eventid: SessionPeerKind
+    public let eventid: String
     public let sequence: Int
     public let sourcesequence: Int
     public let occurredat: Int
     public let redaction: String
     public let actor: [String: AnyCodable]
-    public let agentid: SessionPeerKind
+    public let agentid: String
     public let sessionkey: String?
     public let sessionid: String?
-    public let runid: SessionPeerKind
+    public let runid: String
     public let kind: String
     public let action: AnyCodable
     public let status: AnyCodable
@@ -8057,16 +8057,16 @@ public struct AuditActivityAgentRunV1: Codable, Sendable {
     public init(
         eventtype: String,
         schemaversion: Int,
-        eventid: SessionPeerKind,
+        eventid: String,
         sequence: Int,
         sourcesequence: Int,
         occurredat: Int,
         redaction: String,
         actor: [String: AnyCodable],
-        agentid: SessionPeerKind,
+        agentid: String,
         sessionkey: String? = nil,
         sessionid: String? = nil,
-        runid: SessionPeerKind,
+        runid: String,
         kind: String,
         action: AnyCodable,
         status: AnyCodable,
@@ -8113,16 +8113,16 @@ public struct AuditActivityAgentRunV1: Codable, Sendable {
 public struct AuditActivityToolActionV1: Codable, Sendable {
     public let eventtype: String
     public let schemaversion: Int
-    public let eventid: SessionPeerKind
+    public let eventid: String
     public let sequence: Int
     public let sourcesequence: Int
     public let occurredat: Int
     public let redaction: String
     public let actor: [String: AnyCodable]
-    public let agentid: SessionPeerKind
+    public let agentid: String
     public let sessionkey: String?
     public let sessionid: String?
-    public let runid: SessionPeerKind
+    public let runid: String
     public let kind: String
     public let toolcallid: String?
     public let toolname: String?
@@ -8133,16 +8133,16 @@ public struct AuditActivityToolActionV1: Codable, Sendable {
     public init(
         eventtype: String,
         schemaversion: Int,
-        eventid: SessionPeerKind,
+        eventid: String,
         sequence: Int,
         sourcesequence: Int,
         occurredat: Int,
         redaction: String,
         actor: [String: AnyCodable],
-        agentid: SessionPeerKind,
+        agentid: String,
         sessionkey: String? = nil,
         sessionid: String? = nil,
-        runid: SessionPeerKind,
+        runid: String,
         kind: String,
         toolcallid: String? = nil,
         toolname: String? = nil,
@@ -8195,12 +8195,12 @@ public struct AuditActivityToolActionV1: Codable, Sendable {
 public struct AuditActivityInboundMessageV1: Codable, Sendable {
     public let eventtype: String
     public let schemaversion: Int
-    public let eventid: SessionPeerKind
+    public let eventid: String
     public let sequence: Int
     public let sourcesequence: Int
     public let occurredat: Int
     public let redaction: String
-    public let channel: SessionPeerKind
+    public let channel: String
     public let conversationkind: AnyCodable
     public let durationms: Int?
     public let resultcount: Int?
@@ -8222,12 +8222,12 @@ public struct AuditActivityInboundMessageV1: Codable, Sendable {
     public init(
         eventtype: String,
         schemaversion: Int,
-        eventid: SessionPeerKind,
+        eventid: String,
         sequence: Int,
         sourcesequence: Int,
         occurredat: Int,
         redaction: String,
-        channel: SessionPeerKind,
+        channel: String,
         conversationkind: AnyCodable,
         durationms: Int? = nil,
         resultcount: Int? = nil,
@@ -8305,12 +8305,12 @@ public struct AuditActivityInboundMessageV1: Codable, Sendable {
 public struct AuditActivityOutboundMessageV1: Codable, Sendable {
     public let eventtype: String
     public let schemaversion: Int
-    public let eventid: SessionPeerKind
+    public let eventid: String
     public let sequence: Int
     public let sourcesequence: Int
     public let occurredat: Int
     public let redaction: String
-    public let channel: SessionPeerKind
+    public let channel: String
     public let conversationkind: AnyCodable
     public let durationms: Int?
     public let resultcount: Int?
@@ -8334,12 +8334,12 @@ public struct AuditActivityOutboundMessageV1: Codable, Sendable {
     public init(
         eventtype: String,
         schemaversion: Int,
-        eventid: SessionPeerKind,
+        eventid: String,
         sequence: Int,
         sourcesequence: Int,
         occurredat: Int,
         redaction: String,
-        channel: SessionPeerKind,
+        channel: String,
         conversationkind: AnyCodable,
         durationms: Int? = nil,
         resultcount: Int? = nil,
@@ -8493,7 +8493,7 @@ public struct AuditActivityListResult: Codable, Sendable {
 }
 
 public struct AuditEvent: Codable, Sendable {
-    public let eventid: SessionPeerKind
+    public let eventid: String
     public let sequence: Int
     public let sourcesequence: Int
     public let occurredat: Int
@@ -8502,16 +8502,16 @@ public struct AuditEvent: Codable, Sendable {
     public let status: AnyCodable
     public let errorcode: AnyCodable?
     public let actor: [String: AnyCodable]
-    public let agentid: SessionPeerKind
+    public let agentid: String
     public let sessionkey: String?
     public let sessionid: String?
-    public let runid: SessionPeerKind
+    public let runid: String
     public let toolcallid: String?
     public let toolname: String?
     public let redaction: String
 
     public init(
-        eventid: SessionPeerKind,
+        eventid: String,
         sequence: Int,
         sourcesequence: Int,
         occurredat: Int,
@@ -8520,10 +8520,10 @@ public struct AuditEvent: Codable, Sendable {
         status: AnyCodable,
         errorcode: AnyCodable? = nil,
         actor: [String: AnyCodable],
-        agentid: SessionPeerKind,
+        agentid: String,
         sessionkey: String? = nil,
         sessionid: String? = nil,
-        runid: SessionPeerKind,
+        runid: String,
         toolcallid: String? = nil,
         toolname: String? = nil,
         redaction: String)
@@ -8825,7 +8825,7 @@ public struct TaskSuggestionsListResult: Codable, Sendable {
 }
 
 public struct TaskSummary: Codable, Sendable {
-    public let id: SessionPeerKind
+    public let id: String
     public let kind: String?
     public let runtime: String?
     public let status: AnyCodable
@@ -8851,7 +8851,7 @@ public struct TaskSummary: Codable, Sendable {
     public let prompt: String?
 
     public init(
-        id: SessionPeerKind,
+        id: String,
         kind: String? = nil,
         runtime: String? = nil,
         status: AnyCodable,
@@ -8979,10 +8979,10 @@ public struct TasksListResult: Codable, Sendable {
 }
 
 public struct TasksGetParams: Codable, Sendable {
-    public let taskid: SessionPeerKind
+    public let taskid: String
 
     public init(
-        taskid: SessionPeerKind)
+        taskid: String)
     {
         self.taskid = taskid
     }
@@ -9007,11 +9007,11 @@ public struct TasksGetResult: Codable, Sendable {
 }
 
 public struct TasksCancelParams: Codable, Sendable {
-    public let taskid: SessionPeerKind
+    public let taskid: String
     public let reason: String?
 
     public init(
-        taskid: SessionPeerKind,
+        taskid: String,
         reason: String? = nil)
     {
         self.taskid = taskid
@@ -9053,11 +9053,11 @@ public struct TasksCancelResult: Codable, Sendable {
 public struct ConfigGetParams: Codable, Sendable {}
 
 public struct ConfigSetParams: Codable, Sendable {
-    public let raw: SessionPeerKind
+    public let raw: String
     public let basehash: String?
 
     public init(
-        raw: SessionPeerKind,
+        raw: String,
         basehash: String? = nil)
     {
         self.raw = raw
@@ -9071,7 +9071,7 @@ public struct ConfigSetParams: Codable, Sendable {
 }
 
 public struct ConfigApplyParams: Codable, Sendable {
-    public let raw: SessionPeerKind
+    public let raw: String
     public let basehash: String?
     public let sessionkey: String?
     public let deliverycontext: [String: AnyCodable]?
@@ -9079,7 +9079,7 @@ public struct ConfigApplyParams: Codable, Sendable {
     public let restartdelayms: Int?
 
     public init(
-        raw: SessionPeerKind,
+        raw: String,
         basehash: String? = nil,
         sessionkey: String? = nil,
         deliverycontext: [String: AnyCodable]? = nil,
@@ -9105,7 +9105,7 @@ public struct ConfigApplyParams: Codable, Sendable {
 }
 
 public struct ConfigPatchParams: Codable, Sendable {
-    public let raw: SessionPeerKind
+    public let raw: String
     public let basehash: String?
     public let sessionkey: String?
     public let deliverycontext: [String: AnyCodable]?
@@ -9114,7 +9114,7 @@ public struct ConfigPatchParams: Codable, Sendable {
     public let replacepaths: [String]?
 
     public init(
-        raw: SessionPeerKind,
+        raw: String,
         basehash: String? = nil,
         sessionkey: String? = nil,
         deliverycontext: [String: AnyCodable]? = nil,
@@ -9161,14 +9161,14 @@ public struct ConfigSchemaLookupParams: Codable, Sendable {
 public struct ConfigSchemaResponse: Codable, Sendable {
     public let schema: AnyCodable
     public let uihints: [String: AnyCodable]
-    public let version: SessionPeerKind
-    public let generatedat: SessionPeerKind
+    public let version: String
+    public let generatedat: String
 
     public init(
         schema: AnyCodable,
         uihints: [String: AnyCodable],
-        version: SessionPeerKind,
-        generatedat: SessionPeerKind)
+        version: String,
+        generatedat: String)
     {
         self.schema = schema
         self.uihints = uihints
@@ -9185,7 +9185,7 @@ public struct ConfigSchemaResponse: Codable, Sendable {
 }
 
 public struct ConfigSchemaLookupResult: Codable, Sendable {
-    public let path: SessionPeerKind
+    public let path: String
     public let schema: AnyCodable
     public let reloadkind: AnyCodable?
     public let hint: [String: AnyCodable]?
@@ -9193,7 +9193,7 @@ public struct ConfigSchemaLookupResult: Codable, Sendable {
     public let children: [[String: AnyCodable]]
 
     public init(
-        path: SessionPeerKind,
+        path: String,
         schema: AnyCodable,
         reloadkind: AnyCodable? = nil,
         hint: [String: AnyCodable]? = nil,
@@ -9219,7 +9219,7 @@ public struct ConfigSchemaLookupResult: Codable, Sendable {
 }
 
 public struct SystemAgentChatParams: Codable, Sendable {
-    public let sessionid: SessionPeerKind
+    public let sessionid: String
     public let message: String?
     public let welcomevariant: AnyCodable?
     public let reset: Bool?
@@ -9227,7 +9227,7 @@ public struct SystemAgentChatParams: Codable, Sendable {
     public let delegation: [String: AnyCodable]?
 
     public init(
-        sessionid: SessionPeerKind,
+        sessionid: String,
         message: String? = nil,
         welcomevariant: AnyCodable? = nil,
         reset: Bool? = nil,
@@ -9253,8 +9253,8 @@ public struct SystemAgentChatParams: Codable, Sendable {
 }
 
 public struct SystemAgentChatResult: Codable, Sendable {
-    public let sessionid: SessionPeerKind
-    public let reply: SessionPeerKind
+    public let sessionid: String
+    public let reply: String
     public let sensitive: Bool?
     public let wizardinputpending: Bool?
     public let action: AnyCodable
@@ -9265,8 +9265,8 @@ public struct SystemAgentChatResult: Codable, Sendable {
     public let question: [String: AnyCodable]?
 
     public init(
-        sessionid: SessionPeerKind,
-        reply: SessionPeerKind,
+        sessionid: String,
+        reply: String,
         sensitive: Bool? = nil,
         wizardinputpending: Bool? = nil,
         action: AnyCodable,
@@ -9353,7 +9353,7 @@ public struct SystemAgentChatHistoryResult: Codable, Sendable {
 }
 
 public struct SystemChangeEntry: Codable, Sendable {
-    public let id: SessionPeerKind
+    public let id: String
     public let at: Double
     public let kind: SystemChangeKind
     public let source: SystemChangeSource
@@ -9363,7 +9363,7 @@ public struct SystemChangeEntry: Codable, Sendable {
     public let opaquechange: Bool?
 
     public init(
-        id: SessionPeerKind,
+        id: String,
         at: Double,
         kind: SystemChangeKind,
         source: SystemChangeSource,
@@ -9438,7 +9438,7 @@ public struct SystemAgentSetupDetectResult: Codable, Sendable {
     public let manualproviders: [[String: AnyCodable]]
     public let authoptions: [[String: AnyCodable]]?
     public let recommendedinstalls: [[String: AnyCodable]]?
-    public let workspace: SessionPeerKind
+    public let workspace: String
     public let codexappserverdetected: Bool?
     public let configuredmodel: String?
     public let setupcomplete: Bool
@@ -9449,7 +9449,7 @@ public struct SystemAgentSetupDetectResult: Codable, Sendable {
         manualproviders: [[String: AnyCodable]],
         authoptions: [[String: AnyCodable]]? = nil,
         recommendedinstalls: [[String: AnyCodable]]? = nil,
-        workspace: SessionPeerKind,
+        workspace: String,
         codexappserverdetected: Bool? = nil,
         configuredmodel: String? = nil,
         setupcomplete: Bool)
@@ -9545,13 +9545,13 @@ public struct SystemAgentSetupActivateResult: Codable, Sendable {
 }
 
 public struct SystemAgentSetupAuthStartParams: Codable, Sendable {
-    public let sessionid: SessionPeerKind
-    public let authchoice: SessionPeerKind
+    public let sessionid: String
+    public let authchoice: String
     public let workspace: String?
 
     public init(
-        sessionid: SessionPeerKind,
-        authchoice: SessionPeerKind,
+        sessionid: String,
+        authchoice: String,
         workspace: String? = nil)
     {
         self.sessionid = sessionid
@@ -9567,7 +9567,7 @@ public struct SystemAgentSetupAuthStartParams: Codable, Sendable {
 }
 
 public struct SystemAgentSetupAuthStartResult: Codable, Sendable {
-    public let sessionid: SessionPeerKind
+    public let sessionid: String
     public let done: Bool
     public let step: WizardStep?
     public let status: AnyCodable?
@@ -9576,7 +9576,7 @@ public struct SystemAgentSetupAuthStartResult: Codable, Sendable {
     public let accounts: [[String: AnyCodable]]?
 
     public init(
-        sessionid: SessionPeerKind,
+        sessionid: String,
         done: Bool,
         step: WizardStep? = nil,
         status: AnyCodable? = nil,
@@ -9635,11 +9635,11 @@ public struct WizardStartParams: Codable, Sendable {
 }
 
 public struct WizardNextParams: Codable, Sendable {
-    public let sessionid: SessionPeerKind
+    public let sessionid: String
     public let answer: [String: AnyCodable]?
 
     public init(
-        sessionid: SessionPeerKind,
+        sessionid: String,
         answer: [String: AnyCodable]? = nil)
     {
         self.sessionid = sessionid
@@ -9653,10 +9653,10 @@ public struct WizardNextParams: Codable, Sendable {
 }
 
 public struct WizardCancelParams: Codable, Sendable {
-    public let sessionid: SessionPeerKind
+    public let sessionid: String
 
     public init(
-        sessionid: SessionPeerKind)
+        sessionid: String)
     {
         self.sessionid = sessionid
     }
@@ -9667,10 +9667,10 @@ public struct WizardCancelParams: Codable, Sendable {
 }
 
 public struct WizardStatusParams: Codable, Sendable {
-    public let sessionid: SessionPeerKind
+    public let sessionid: String
 
     public init(
-        sessionid: SessionPeerKind)
+        sessionid: String)
     {
         self.sessionid = sessionid
     }
@@ -9681,7 +9681,7 @@ public struct WizardStatusParams: Codable, Sendable {
 }
 
 public struct WizardStep: Codable, Sendable {
-    public let id: SessionPeerKind
+    public let id: String
     public let type: AnyCodable
     public let title: String?
     public let message: String?
@@ -9695,7 +9695,7 @@ public struct WizardStep: Codable, Sendable {
     public let devicecode: [String: AnyCodable]?
 
     public init(
-        id: SessionPeerKind,
+        id: String,
         type: AnyCodable,
         title: String? = nil,
         message: String? = nil,
@@ -9773,7 +9773,7 @@ public struct WizardNextResult: Codable, Sendable {
 }
 
 public struct WizardStartResult: Codable, Sendable {
-    public let sessionid: SessionPeerKind
+    public let sessionid: String
     public let done: Bool
     public let step: WizardStep?
     public let status: AnyCodable?
@@ -9782,7 +9782,7 @@ public struct WizardStartResult: Codable, Sendable {
     public let accounts: [[String: AnyCodable]]?
 
     public init(
-        sessionid: SessionPeerKind,
+        sessionid: String,
         done: Bool,
         step: WizardStep? = nil,
         status: AnyCodable? = nil,
@@ -9847,13 +9847,13 @@ public struct TalkModeParams: Codable, Sendable {
 }
 
 public struct TalkEvent: Codable, Sendable {
-    public let id: SessionPeerKind
+    public let id: String
     public let type: AnyCodable
-    public let sessionid: SessionPeerKind
+    public let sessionid: String
     public let turnid: String?
     public let captureid: String?
     public let seq: Int
-    public let timestamp: SessionPeerKind
+    public let timestamp: String
     public let mode: AnyCodable
     public let transport: AnyCodable
     public let brain: AnyCodable
@@ -9865,13 +9865,13 @@ public struct TalkEvent: Codable, Sendable {
     public let payload: AnyCodable
 
     public init(
-        id: SessionPeerKind,
+        id: String,
         type: AnyCodable,
-        sessionid: SessionPeerKind,
+        sessionid: String,
         turnid: String? = nil,
         captureid: String? = nil,
         seq: Int,
-        timestamp: SessionPeerKind,
+        timestamp: String,
         mode: AnyCodable,
         transport: AnyCodable,
         brain: AnyCodable,
@@ -10019,11 +10019,11 @@ public struct TalkClientCreateParams: Codable, Sendable {
 }
 
 public struct TalkClientCloseParams: Codable, Sendable {
-    public let sessionkey: SessionPeerKind
+    public let sessionkey: String
     public let voicesessionid: String
 
     public init(
-        sessionkey: SessionPeerKind,
+        sessionkey: String,
         voicesessionid: String)
     {
         self.sessionkey = sessionkey
@@ -10051,13 +10051,13 @@ public struct TalkClientMutationResult: Codable, Sendable {
 }
 
 public struct TalkClientSteerParams: Codable, Sendable {
-    public let sessionkey: SessionPeerKind
-    public let text: SessionPeerKind
+    public let sessionkey: String
+    public let text: String
     public let mode: AnyCodable?
 
     public init(
-        sessionkey: SessionPeerKind,
-        text: SessionPeerKind,
+        sessionkey: String,
+        text: String,
         mode: AnyCodable? = nil)
     {
         self.sessionkey = sessionkey
@@ -10075,7 +10075,7 @@ public struct TalkClientSteerParams: Codable, Sendable {
 public struct TalkAgentControlResult: Codable, Sendable {
     public let ok: Bool
     public let mode: AnyCodable
-    public let sessionkey: SessionPeerKind
+    public let sessionkey: String
     public let sessionid: String?
     public let active: Bool
     public let queued: Bool?
@@ -10093,7 +10093,7 @@ public struct TalkAgentControlResult: Codable, Sendable {
     public init(
         ok: Bool,
         mode: AnyCodable,
-        sessionkey: SessionPeerKind,
+        sessionkey: String,
         sessionid: String? = nil,
         active: Bool,
         queued: Bool? = nil,
@@ -10147,18 +10147,18 @@ public struct TalkAgentControlResult: Codable, Sendable {
 }
 
 public struct TalkClientToolCallParams: Codable, Sendable {
-    public let sessionkey: SessionPeerKind
+    public let sessionkey: String
     public let voicesessionid: String?
-    public let callid: SessionPeerKind
-    public let name: SessionPeerKind
+    public let callid: String
+    public let name: String
     public let args: AnyCodable?
     public let relaysessionid: String?
 
     public init(
-        sessionkey: SessionPeerKind,
+        sessionkey: String,
         voicesessionid: String? = nil,
-        callid: SessionPeerKind,
-        name: SessionPeerKind,
+        callid: String,
+        name: String,
         args: AnyCodable? = nil,
         relaysessionid: String? = nil)
     {
@@ -10181,12 +10181,12 @@ public struct TalkClientToolCallParams: Codable, Sendable {
 }
 
 public struct TalkClientToolCallResult: Codable, Sendable {
-    public let runid: SessionPeerKind
-    public let idempotencykey: SessionPeerKind
+    public let runid: String
+    public let idempotencykey: String
 
     public init(
-        runid: SessionPeerKind,
-        idempotencykey: SessionPeerKind)
+        runid: String,
+        idempotencykey: String)
     {
         self.runid = runid
         self.idempotencykey = idempotencykey
@@ -10199,19 +10199,19 @@ public struct TalkClientToolCallResult: Codable, Sendable {
 }
 
 public struct TalkClientTranscriptParams: Codable, Sendable {
-    public let sessionkey: SessionPeerKind
+    public let sessionkey: String
     public let voicesessionid: String
     public let entryid: String
     public let role: AnyCodable
-    public let text: SessionPeerKind
+    public let text: String
     public let timestamp: Double?
 
     public init(
-        sessionkey: SessionPeerKind,
+        sessionkey: String,
         voicesessionid: String,
         entryid: String,
         role: AnyCodable,
-        text: SessionPeerKind,
+        text: String,
         timestamp: Double? = nil)
     {
         self.sessionkey = sessionkey
@@ -10261,13 +10261,13 @@ public struct TalkConfigResult: Codable, Sendable {
 }
 
 public struct TalkSessionAppendAudioParams: Codable, Sendable {
-    public let sessionid: SessionPeerKind
-    public let audiobase64: SessionPeerKind
+    public let sessionid: String
+    public let audiobase64: String
     public let timestamp: Double?
 
     public init(
-        sessionid: SessionPeerKind,
-        audiobase64: SessionPeerKind,
+        sessionid: String,
+        audiobase64: String,
         timestamp: Double? = nil)
     {
         self.sessionid = sessionid
@@ -10283,12 +10283,12 @@ public struct TalkSessionAppendAudioParams: Codable, Sendable {
 }
 
 public struct TalkSessionAcknowledgeMarkParams: Codable, Sendable {
-    public let sessionid: SessionPeerKind
-    public let markname: SessionPeerKind
+    public let sessionid: String
+    public let markname: String
 
     public init(
-        sessionid: SessionPeerKind,
-        markname: SessionPeerKind)
+        sessionid: String,
+        markname: String)
     {
         self.sessionid = sessionid
         self.markname = markname
@@ -10301,12 +10301,12 @@ public struct TalkSessionAcknowledgeMarkParams: Codable, Sendable {
 }
 
 public struct TalkSessionCancelOutputParams: Codable, Sendable {
-    public let sessionid: SessionPeerKind
+    public let sessionid: String
     public let turnid: String?
     public let reason: String?
 
     public init(
-        sessionid: SessionPeerKind,
+        sessionid: String,
         turnid: String? = nil,
         reason: String? = nil)
     {
@@ -10323,12 +10323,12 @@ public struct TalkSessionCancelOutputParams: Codable, Sendable {
 }
 
 public struct TalkSessionCancelTurnParams: Codable, Sendable {
-    public let sessionid: SessionPeerKind
+    public let sessionid: String
     public let turnid: String?
     public let reason: String?
 
     public init(
-        sessionid: SessionPeerKind,
+        sessionid: String,
         turnid: String? = nil,
         reason: String? = nil)
     {
@@ -10411,7 +10411,7 @@ public struct TalkSessionCreateParams: Codable, Sendable {
 }
 
 public struct TalkSessionCreateResult: Codable, Sendable {
-    public let sessionid: SessionPeerKind
+    public let sessionid: String
     public let provider: String?
     public let mode: AnyCodable
     public let transport: AnyCodable
@@ -10428,7 +10428,7 @@ public struct TalkSessionCreateResult: Codable, Sendable {
     public let expiresat: Double?
 
     public init(
-        sessionid: SessionPeerKind,
+        sessionid: String,
         provider: String? = nil,
         mode: AnyCodable,
         transport: AnyCodable,
@@ -10481,12 +10481,12 @@ public struct TalkSessionCreateResult: Codable, Sendable {
 }
 
 public struct TalkSessionJoinParams: Codable, Sendable {
-    public let sessionid: SessionPeerKind
-    public let token: SessionPeerKind
+    public let sessionid: String
+    public let token: String
 
     public init(
-        sessionid: SessionPeerKind,
-        token: SessionPeerKind)
+        sessionid: String,
+        token: String)
     {
         self.sessionid = sessionid
         self.token = token
@@ -10499,10 +10499,10 @@ public struct TalkSessionJoinParams: Codable, Sendable {
 }
 
 public struct TalkSessionJoinResult: Codable, Sendable {
-    public let id: SessionPeerKind
-    public let roomid: SessionPeerKind
-    public let roomurl: SessionPeerKind
-    public let sessionkey: SessionPeerKind
+    public let id: String
+    public let roomid: String
+    public let roomurl: String
+    public let sessionkey: String
     public let sessionid: String?
     public let channel: String?
     public let target: String?
@@ -10517,10 +10517,10 @@ public struct TalkSessionJoinResult: Codable, Sendable {
     public let room: [String: AnyCodable]
 
     public init(
-        id: SessionPeerKind,
-        roomid: SessionPeerKind,
-        roomurl: SessionPeerKind,
-        sessionkey: SessionPeerKind,
+        id: String,
+        roomid: String,
+        roomurl: String,
+        sessionkey: String,
         sessionid: String? = nil,
         channel: String? = nil,
         target: String? = nil,
@@ -10573,11 +10573,11 @@ public struct TalkSessionJoinResult: Codable, Sendable {
 }
 
 public struct TalkSessionTurnParams: Codable, Sendable {
-    public let sessionid: SessionPeerKind
+    public let sessionid: String
     public let turnid: String?
 
     public init(
-        sessionid: SessionPeerKind,
+        sessionid: String,
         turnid: String? = nil)
     {
         self.sessionid = sessionid
@@ -10613,15 +10613,15 @@ public struct TalkSessionTurnResult: Codable, Sendable {
 }
 
 public struct TalkSessionSteerParams: Codable, Sendable {
-    public let sessionid: SessionPeerKind
+    public let sessionid: String
     public let sessionkey: String?
-    public let text: SessionPeerKind
+    public let text: String
     public let mode: AnyCodable?
 
     public init(
-        sessionid: SessionPeerKind,
+        sessionid: String,
         sessionkey: String? = nil,
-        text: SessionPeerKind,
+        text: String,
         mode: AnyCodable? = nil)
     {
         self.sessionid = sessionid
@@ -10639,14 +10639,14 @@ public struct TalkSessionSteerParams: Codable, Sendable {
 }
 
 public struct TalkSessionSubmitToolResultParams: Codable, Sendable {
-    public let sessionid: SessionPeerKind
-    public let callid: SessionPeerKind
+    public let sessionid: String
+    public let callid: String
     public let result: AnyCodable
     public let options: [String: AnyCodable]?
 
     public init(
-        sessionid: SessionPeerKind,
-        callid: SessionPeerKind,
+        sessionid: String,
+        callid: String,
         result: AnyCodable,
         options: [String: AnyCodable]? = nil)
     {
@@ -10665,10 +10665,10 @@ public struct TalkSessionSubmitToolResultParams: Codable, Sendable {
 }
 
 public struct TalkSessionCloseParams: Codable, Sendable {
-    public let sessionid: SessionPeerKind
+    public let sessionid: String
 
     public init(
-        sessionid: SessionPeerKind)
+        sessionid: String)
     {
         self.sessionid = sessionid
     }
@@ -10693,7 +10693,7 @@ public struct TalkSessionOkResult: Codable, Sendable {
 }
 
 public struct TalkSpeakParams: Codable, Sendable {
-    public let text: SessionPeerKind
+    public let text: String
     public let voiceid: String?
     public let modelid: String?
     public let outputformat: String?
@@ -10709,7 +10709,7 @@ public struct TalkSpeakParams: Codable, Sendable {
     public let latencytier: Int?
 
     public init(
-        text: SessionPeerKind,
+        text: String,
         voiceid: String? = nil,
         modelid: String? = nil,
         outputformat: String? = nil,
@@ -10759,16 +10759,16 @@ public struct TalkSpeakParams: Codable, Sendable {
 }
 
 public struct TalkSpeakResult: Codable, Sendable {
-    public let audiobase64: SessionPeerKind
-    public let provider: SessionPeerKind
+    public let audiobase64: String
+    public let provider: String
     public let outputformat: String?
     public let voicecompatible: Bool?
     public let mimetype: String?
     public let fileextension: String?
 
     public init(
-        audiobase64: SessionPeerKind,
-        provider: SessionPeerKind,
+        audiobase64: String,
+        provider: String,
         outputformat: String? = nil,
         voicecompatible: Bool? = nil,
         mimetype: String? = nil,
@@ -10793,10 +10793,10 @@ public struct TalkSpeakResult: Codable, Sendable {
 }
 
 public struct TtsSpeakParams: Codable, Sendable {
-    public let text: SessionPeerKind
+    public let text: String
 
     public init(
-        text: SessionPeerKind)
+        text: String)
     {
         self.text = text
     }
@@ -10807,15 +10807,15 @@ public struct TtsSpeakParams: Codable, Sendable {
 }
 
 public struct TtsSpeakResult: Codable, Sendable {
-    public let audiobase64: SessionPeerKind
-    public let provider: SessionPeerKind
+    public let audiobase64: String
+    public let provider: String
     public let outputformat: String?
     public let mimetype: String?
     public let fileextension: String?
 
     public init(
-        audiobase64: SessionPeerKind,
-        provider: SessionPeerKind,
+        audiobase64: String,
+        provider: String,
         outputformat: String? = nil,
         mimetype: String? = nil,
         fileextension: String? = nil)
@@ -10860,7 +10860,7 @@ public struct ChannelsStatusParams: Codable, Sendable {
 
 public struct ChannelsStatusResult: Codable, Sendable {
     public let ts: Int
-    public let channelorder: [SessionPeerKind]
+    public let channelorder: [String]
     public let channellabels: [String: AnyCodable]
     public let channeldetaillabels: [String: AnyCodable]?
     public let channelsystemimages: [String: AnyCodable]?
@@ -10874,7 +10874,7 @@ public struct ChannelsStatusResult: Codable, Sendable {
 
     public init(
         ts: Int,
-        channelorder: [SessionPeerKind],
+        channelorder: [String],
         channellabels: [String: AnyCodable],
         channeldetaillabels: [String: AnyCodable]? = nil,
         channelsystemimages: [String: AnyCodable]? = nil,
@@ -10961,16 +10961,16 @@ public struct ChannelsPairingListResult: Codable, Sendable {
 }
 
 public struct ChannelsPairingApproveParams: Codable, Sendable {
-    public let channel: SessionPeerKind
-    public let accountid: SessionPeerKind
-    public let requestid: SessionPeerKind
+    public let channel: String
+    public let accountid: String
+    public let requestid: String
     public let notify: Bool?
     public let bootstrapcommandowner: Bool?
 
     public init(
-        channel: SessionPeerKind,
-        accountid: SessionPeerKind,
-        requestid: SessionPeerKind,
+        channel: String,
+        accountid: String,
+        requestid: String,
         notify: Bool? = nil,
         bootstrapcommandowner: Bool? = nil)
     {
@@ -10991,14 +10991,14 @@ public struct ChannelsPairingApproveParams: Codable, Sendable {
 }
 
 public struct ChannelsPairingApproveResult: Codable, Sendable {
-    public let requestid: SessionPeerKind
-    public let senderid: SessionPeerKind
+    public let requestid: String
+    public let senderid: String
     public let notification: String
     public let commandownerbootstrap: String
 
     public init(
-        requestid: SessionPeerKind,
-        senderid: SessionPeerKind,
+        requestid: String,
+        senderid: String,
         notification: String,
         commandownerbootstrap: String)
     {
@@ -11017,14 +11017,14 @@ public struct ChannelsPairingApproveResult: Codable, Sendable {
 }
 
 public struct ChannelsPairingDismissParams: Codable, Sendable {
-    public let channel: SessionPeerKind
-    public let accountid: SessionPeerKind
-    public let requestid: SessionPeerKind
+    public let channel: String
+    public let accountid: String
+    public let requestid: String
 
     public init(
-        channel: SessionPeerKind,
-        accountid: SessionPeerKind,
-        requestid: SessionPeerKind)
+        channel: String,
+        accountid: String,
+        requestid: String)
     {
         self.channel = channel
         self.accountid = accountid
@@ -11039,12 +11039,12 @@ public struct ChannelsPairingDismissParams: Codable, Sendable {
 }
 
 public struct ChannelsPairingDismissResult: Codable, Sendable {
-    public let requestid: SessionPeerKind
-    public let senderid: SessionPeerKind
+    public let requestid: String
+    public let senderid: String
 
     public init(
-        requestid: SessionPeerKind,
-        senderid: SessionPeerKind)
+        requestid: String,
+        senderid: String)
     {
         self.requestid = requestid
         self.senderid = senderid
@@ -11057,11 +11057,11 @@ public struct ChannelsPairingDismissResult: Codable, Sendable {
 }
 
 public struct ChannelsStartParams: Codable, Sendable {
-    public let channel: SessionPeerKind
+    public let channel: String
     public let accountid: String?
 
     public init(
-        channel: SessionPeerKind,
+        channel: String,
         accountid: String? = nil)
     {
         self.channel = channel
@@ -11075,11 +11075,11 @@ public struct ChannelsStartParams: Codable, Sendable {
 }
 
 public struct ChannelsStopParams: Codable, Sendable {
-    public let channel: SessionPeerKind
+    public let channel: String
     public let accountid: String?
 
     public init(
-        channel: SessionPeerKind,
+        channel: String,
         accountid: String? = nil)
     {
         self.channel = channel
@@ -11093,11 +11093,11 @@ public struct ChannelsStopParams: Codable, Sendable {
 }
 
 public struct ChannelsLogoutParams: Codable, Sendable {
-    public let channel: SessionPeerKind
+    public let channel: String
     public let accountid: String?
 
     public init(
-        channel: SessionPeerKind,
+        channel: String,
         accountid: String? = nil)
     {
         self.channel = channel
@@ -11159,7 +11159,7 @@ public struct WebLoginWaitParams: Codable, Sendable {
 }
 
 public struct AgentSummary: Codable, Sendable {
-    public let id: SessionPeerKind
+    public let id: String
     public let kind: AgentKind?
     public let name: String?
     public let identity: [String: AnyCodable]?
@@ -11172,7 +11172,7 @@ public struct AgentSummary: Codable, Sendable {
     public let thinkingdefault: String?
 
     public init(
-        id: SessionPeerKind,
+        id: String,
         kind: AgentKind? = nil,
         name: String? = nil,
         identity: [String: AnyCodable]? = nil,
@@ -11213,14 +11213,14 @@ public struct AgentSummary: Codable, Sendable {
 }
 
 public struct AgentsCreateParams: Codable, Sendable {
-    public let name: SessionPeerKind
+    public let name: String
     public let workspace: String?
     public let model: String?
     public let emoji: String?
     public let avatar: String?
 
     public init(
-        name: SessionPeerKind,
+        name: String,
         workspace: String? = nil,
         model: String? = nil,
         emoji: String? = nil,
@@ -11244,16 +11244,16 @@ public struct AgentsCreateParams: Codable, Sendable {
 
 public struct AgentsCreateResult: Codable, Sendable {
     public let ok: Bool
-    public let agentid: SessionPeerKind
-    public let name: SessionPeerKind
-    public let workspace: SessionPeerKind
+    public let agentid: String
+    public let name: String
+    public let workspace: String
     public let model: String?
 
     public init(
         ok: Bool,
-        agentid: SessionPeerKind,
-        name: SessionPeerKind,
-        workspace: SessionPeerKind,
+        agentid: String,
+        name: String,
+        workspace: String,
         model: String? = nil)
     {
         self.ok = ok
@@ -11273,7 +11273,7 @@ public struct AgentsCreateResult: Codable, Sendable {
 }
 
 public struct AgentsUpdateParams: Codable, Sendable {
-    public let agentid: SessionPeerKind
+    public let agentid: String
     public let name: String?
     public let workspace: String?
     public let modelvalue: AnyCodable?
@@ -11282,7 +11282,7 @@ public struct AgentsUpdateParams: Codable, Sendable {
     public let avatar: String?
 
     public init(
-        agentid: SessionPeerKind,
+        agentid: String,
         name: String? = nil,
         workspace: String? = nil,
         modelvalue: AnyCodable?,
@@ -11298,7 +11298,7 @@ public struct AgentsUpdateParams: Codable, Sendable {
     }
 
     public init(
-        agentid: SessionPeerKind,
+        agentid: String,
         name: String? = nil,
         workspace: String? = nil,
         model: String? = nil,
@@ -11325,7 +11325,7 @@ public struct AgentsUpdateParams: Codable, Sendable {
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        self.agentid = try container.decode(SessionPeerKind.self, forKey: .agentid)
+        self.agentid = try container.decode(String.self, forKey: .agentid)
         self.name = try container.decodeIfPresent(String.self, forKey: .name)
         self.workspace = try container.decodeIfPresent(String.self, forKey: .workspace)
         self.modelvalue = container.contains(.modelvalue)
@@ -11348,11 +11348,11 @@ public struct AgentsUpdateParams: Codable, Sendable {
 
 public struct AgentsUpdateResult: Codable, Sendable {
     public let ok: Bool
-    public let agentid: SessionPeerKind
+    public let agentid: String
 
     public init(
         ok: Bool,
-        agentid: SessionPeerKind)
+        agentid: String)
     {
         self.ok = ok
         self.agentid = agentid
@@ -11365,11 +11365,11 @@ public struct AgentsUpdateResult: Codable, Sendable {
 }
 
 public struct AgentsDeleteParams: Codable, Sendable {
-    public let agentid: SessionPeerKind
+    public let agentid: String
     public let deletefiles: Bool?
 
     public init(
-        agentid: SessionPeerKind,
+        agentid: String,
         deletefiles: Bool? = nil)
     {
         self.agentid = agentid
@@ -11384,14 +11384,14 @@ public struct AgentsDeleteParams: Codable, Sendable {
 
 public struct AgentsDeleteResult: Codable, Sendable {
     public let ok: Bool
-    public let agentid: SessionPeerKind
+    public let agentid: String
     public let removedbindings: Int
     public let removed: [[String: AnyCodable]]?
     public let failed: [[String: AnyCodable]]?
 
     public init(
         ok: Bool,
-        agentid: SessionPeerKind,
+        agentid: String,
         removedbindings: Int,
         removed: [[String: AnyCodable]]? = nil,
         failed: [[String: AnyCodable]]? = nil)
@@ -11413,8 +11413,8 @@ public struct AgentsDeleteResult: Codable, Sendable {
 }
 
 public struct AgentsFileEntry: Codable, Sendable {
-    public let name: SessionPeerKind
-    public let path: SessionPeerKind
+    public let name: String
+    public let path: String
     public let missing: Bool
     public let expectedabsent: Bool?
     public let size: Int?
@@ -11422,8 +11422,8 @@ public struct AgentsFileEntry: Codable, Sendable {
     public let content: String?
 
     public init(
-        name: SessionPeerKind,
-        path: SessionPeerKind,
+        name: String,
+        path: String,
         missing: Bool,
         expectedabsent: Bool? = nil,
         size: Int? = nil,
@@ -11451,10 +11451,10 @@ public struct AgentsFileEntry: Codable, Sendable {
 }
 
 public struct AgentsFilesListParams: Codable, Sendable {
-    public let agentid: SessionPeerKind
+    public let agentid: String
 
     public init(
-        agentid: SessionPeerKind)
+        agentid: String)
     {
         self.agentid = agentid
     }
@@ -11465,13 +11465,13 @@ public struct AgentsFilesListParams: Codable, Sendable {
 }
 
 public struct AgentsFilesListResult: Codable, Sendable {
-    public let agentid: SessionPeerKind
-    public let workspace: SessionPeerKind
+    public let agentid: String
+    public let workspace: String
     public let files: [AgentsFileEntry]
 
     public init(
-        agentid: SessionPeerKind,
-        workspace: SessionPeerKind,
+        agentid: String,
+        workspace: String,
         files: [AgentsFileEntry])
     {
         self.agentid = agentid
@@ -11487,12 +11487,12 @@ public struct AgentsFilesListResult: Codable, Sendable {
 }
 
 public struct AgentsFilesGetParams: Codable, Sendable {
-    public let agentid: SessionPeerKind
-    public let name: SessionPeerKind
+    public let agentid: String
+    public let name: String
 
     public init(
-        agentid: SessionPeerKind,
-        name: SessionPeerKind)
+        agentid: String,
+        name: String)
     {
         self.agentid = agentid
         self.name = name
@@ -11505,13 +11505,13 @@ public struct AgentsFilesGetParams: Codable, Sendable {
 }
 
 public struct AgentsFilesGetResult: Codable, Sendable {
-    public let agentid: SessionPeerKind
-    public let workspace: SessionPeerKind
+    public let agentid: String
+    public let workspace: String
     public let file: AgentsFileEntry
 
     public init(
-        agentid: SessionPeerKind,
-        workspace: SessionPeerKind,
+        agentid: String,
+        workspace: String,
         file: AgentsFileEntry)
     {
         self.agentid = agentid
@@ -11527,13 +11527,13 @@ public struct AgentsFilesGetResult: Codable, Sendable {
 }
 
 public struct AgentsFilesSetParams: Codable, Sendable {
-    public let agentid: SessionPeerKind
-    public let name: SessionPeerKind
+    public let agentid: String
+    public let name: String
     public let content: String
 
     public init(
-        agentid: SessionPeerKind,
-        name: SessionPeerKind,
+        agentid: String,
+        name: String,
         content: String)
     {
         self.agentid = agentid
@@ -11550,14 +11550,14 @@ public struct AgentsFilesSetParams: Codable, Sendable {
 
 public struct AgentsFilesSetResult: Codable, Sendable {
     public let ok: Bool
-    public let agentid: SessionPeerKind
-    public let workspace: SessionPeerKind
+    public let agentid: String
+    public let workspace: String
     public let file: AgentsFileEntry
 
     public init(
         ok: Bool,
-        agentid: SessionPeerKind,
-        workspace: SessionPeerKind,
+        agentid: String,
+        workspace: String,
         file: AgentsFileEntry)
     {
         self.ok = ok
@@ -11575,15 +11575,15 @@ public struct AgentsFilesSetResult: Codable, Sendable {
 }
 
 public struct AgentsWorkspaceEntry: Codable, Sendable {
-    public let path: SessionPeerKind
-    public let name: SessionPeerKind
+    public let path: String
+    public let name: String
     public let kind: AnyCodable
     public let size: Int?
     public let updatedatms: Int?
 
     public init(
-        path: SessionPeerKind,
-        name: SessionPeerKind,
+        path: String,
+        name: String,
         kind: AnyCodable,
         size: Int? = nil,
         updatedatms: Int? = nil)
@@ -11605,20 +11605,20 @@ public struct AgentsWorkspaceEntry: Codable, Sendable {
 }
 
 public struct AgentsWorkspaceFile: Codable, Sendable {
-    public let path: SessionPeerKind
-    public let name: SessionPeerKind
+    public let path: String
+    public let name: String
     public let size: Int
     public let updatedatms: Int
-    public let mimetype: SessionPeerKind
+    public let mimetype: String
     public let encoding: AnyCodable
     public let content: String
 
     public init(
-        path: SessionPeerKind,
-        name: SessionPeerKind,
+        path: String,
+        name: String,
         size: Int,
         updatedatms: Int,
-        mimetype: SessionPeerKind,
+        mimetype: String,
         encoding: AnyCodable,
         content: String)
     {
@@ -11643,13 +11643,13 @@ public struct AgentsWorkspaceFile: Codable, Sendable {
 }
 
 public struct AgentsWorkspaceListParams: Codable, Sendable {
-    public let agentid: SessionPeerKind
+    public let agentid: String
     public let path: String?
     public let offset: Int?
     public let limit: Int?
 
     public init(
-        agentid: SessionPeerKind,
+        agentid: String,
         path: String? = nil,
         offset: Int? = nil,
         limit: Int? = nil)
@@ -11669,7 +11669,7 @@ public struct AgentsWorkspaceListParams: Codable, Sendable {
 }
 
 public struct AgentsWorkspaceListResult: Codable, Sendable {
-    public let agentid: SessionPeerKind
+    public let agentid: String
     public let path: String
     public let parentpath: String?
     public let entries: [AgentsWorkspaceEntry]
@@ -11677,7 +11677,7 @@ public struct AgentsWorkspaceListResult: Codable, Sendable {
     public let offset: Int
 
     public init(
-        agentid: SessionPeerKind,
+        agentid: String,
         path: String,
         parentpath: String? = nil,
         entries: [AgentsWorkspaceEntry],
@@ -11703,12 +11703,12 @@ public struct AgentsWorkspaceListResult: Codable, Sendable {
 }
 
 public struct AgentsWorkspaceGetParams: Codable, Sendable {
-    public let agentid: SessionPeerKind
-    public let path: SessionPeerKind
+    public let agentid: String
+    public let path: String
 
     public init(
-        agentid: SessionPeerKind,
-        path: SessionPeerKind)
+        agentid: String,
+        path: String)
     {
         self.agentid = agentid
         self.path = path
@@ -11721,11 +11721,11 @@ public struct AgentsWorkspaceGetParams: Codable, Sendable {
 }
 
 public struct AgentsWorkspaceGetResult: Codable, Sendable {
-    public let agentid: SessionPeerKind
+    public let agentid: String
     public let file: AgentsWorkspaceFile
 
     public init(
-        agentid: SessionPeerKind,
+        agentid: String,
         file: AgentsWorkspaceFile)
     {
         self.agentid = agentid
@@ -11739,9 +11739,9 @@ public struct AgentsWorkspaceGetResult: Codable, Sendable {
 }
 
 public struct ArtifactSummary: Codable, Sendable {
-    public let id: SessionPeerKind
-    public let type: SessionPeerKind
-    public let title: SessionPeerKind
+    public let id: String
+    public let type: String
+    public let title: String
     public let mimetype: String?
     public let sizebytes: Int?
     public let sessionkey: String?
@@ -11752,9 +11752,9 @@ public struct ArtifactSummary: Codable, Sendable {
     public let download: [String: AnyCodable]
 
     public init(
-        id: SessionPeerKind,
-        type: SessionPeerKind,
-        title: SessionPeerKind,
+        id: String,
+        type: String,
+        title: String,
         mimetype: String? = nil,
         sizebytes: Int? = nil,
         sessionkey: String? = nil,
@@ -11837,14 +11837,14 @@ public struct ArtifactsGetParams: Codable, Sendable {
     public let runid: String?
     public let taskid: String?
     public let agentid: String?
-    public let artifactid: SessionPeerKind
+    public let artifactid: String
 
     public init(
         sessionkey: String? = nil,
         runid: String? = nil,
         taskid: String? = nil,
         agentid: String? = nil,
-        artifactid: SessionPeerKind)
+        artifactid: String)
     {
         self.sessionkey = sessionkey
         self.runid = runid
@@ -11881,14 +11881,14 @@ public struct ArtifactsDownloadParams: Codable, Sendable {
     public let runid: String?
     public let taskid: String?
     public let agentid: String?
-    public let artifactid: SessionPeerKind
+    public let artifactid: String
 
     public init(
         sessionkey: String? = nil,
         runid: String? = nil,
         taskid: String? = nil,
         agentid: String? = nil,
-        artifactid: SessionPeerKind)
+        artifactid: String)
     {
         self.sessionkey = sessionkey
         self.runid = runid
@@ -11939,14 +11939,14 @@ public struct ArtifactsDownloadResult: Codable, Sendable {
 public struct AgentsListParams: Codable, Sendable {}
 
 public struct AgentsListResult: Codable, Sendable {
-    public let defaultid: SessionPeerKind
-    public let mainkey: SessionPeerKind
+    public let defaultid: String
+    public let mainkey: String
     public let scope: AnyCodable
     public let agents: [AgentSummary]
 
     public init(
-        defaultid: SessionPeerKind,
-        mainkey: SessionPeerKind,
+        defaultid: String,
+        mainkey: String,
         scope: AnyCodable,
         agents: [AgentSummary])
     {
@@ -11965,9 +11965,9 @@ public struct AgentsListResult: Codable, Sendable {
 }
 
 public struct ModelChoice: Codable, Sendable {
-    public let id: SessionPeerKind
-    public let name: SessionPeerKind
-    public let provider: SessionPeerKind
+    public let id: String
+    public let name: String
+    public let provider: String
     public let alias: String?
     public let available: Bool?
     public let contextwindow: Int?
@@ -11977,9 +11977,9 @@ public struct ModelChoice: Codable, Sendable {
     public let input: [AnyCodable]?
 
     public init(
-        id: SessionPeerKind,
-        name: SessionPeerKind,
-        provider: SessionPeerKind,
+        id: String,
+        name: String,
+        provider: String,
         alias: String? = nil,
         available: Bool? = nil,
         contextwindow: Int? = nil,
@@ -12015,12 +12015,12 @@ public struct ModelChoice: Codable, Sendable {
 }
 
 public struct ModelsAuthLogoutParams: Codable, Sendable {
-    public let provider: SessionPeerKind
+    public let provider: String
     public let profileids: [String]?
     public let agentid: String?
 
     public init(
-        provider: SessionPeerKind,
+        provider: String,
         profileids: [String]? = nil,
         agentid: String? = nil)
     {
@@ -12087,13 +12087,13 @@ public struct ModelsListResult: Codable, Sendable {
 }
 
 public struct ModelsProbeParams: Codable, Sendable {
-    public let provider: SessionPeerKind
+    public let provider: String
     public let profileid: String?
     public let timeoutms: Int?
     public let agentid: String?
 
     public init(
-        provider: SessionPeerKind,
+        provider: String,
         profileid: String? = nil,
         timeoutms: Int? = nil,
         agentid: String? = nil)
@@ -12114,14 +12114,14 @@ public struct ModelsProbeParams: Codable, Sendable {
 
 public struct ModelsProbeTargetResult: Codable, Sendable {
     public let profileid: String?
-    public let label: SessionPeerKind
+    public let label: String
     public let status: AuthProbeStatus
     public let latencyms: Int?
     public let error: String?
 
     public init(
         profileid: String? = nil,
-        label: SessionPeerKind,
+        label: String,
         status: AuthProbeStatus,
         latencyms: Int? = nil,
         error: String? = nil)
@@ -12143,14 +12143,14 @@ public struct ModelsProbeTargetResult: Codable, Sendable {
 }
 
 public struct ModelsProbeResult: Codable, Sendable {
-    public let provider: SessionPeerKind
+    public let provider: String
     public let status: AuthProbeStatus
     public let latencyms: Int?
     public let error: String?
     public let results: [ModelsProbeTargetResult]
 
     public init(
-        provider: SessionPeerKind,
+        provider: String,
         status: AuthProbeStatus,
         latencyms: Int? = nil,
         error: String? = nil,
@@ -12292,11 +12292,11 @@ public struct ToolsCatalogParams: Codable, Sendable {
 
 public struct ToolCatalogProfile: Codable, Sendable {
     public let id: AnyCodable
-    public let label: SessionPeerKind
+    public let label: String
 
     public init(
         id: AnyCodable,
-        label: SessionPeerKind)
+        label: String)
     {
         self.id = id
         self.label = label
@@ -12309,8 +12309,8 @@ public struct ToolCatalogProfile: Codable, Sendable {
 }
 
 public struct ToolCatalogEntry: Codable, Sendable {
-    public let id: SessionPeerKind
-    public let label: SessionPeerKind
+    public let id: String
+    public let label: String
     public let description: String
     public let source: AnyCodable
     public let pluginid: String?
@@ -12320,8 +12320,8 @@ public struct ToolCatalogEntry: Codable, Sendable {
     public let defaultprofiles: [AnyCodable]
 
     public init(
-        id: SessionPeerKind,
-        label: SessionPeerKind,
+        id: String,
+        label: String,
         description: String,
         source: AnyCodable,
         pluginid: String? = nil,
@@ -12355,15 +12355,15 @@ public struct ToolCatalogEntry: Codable, Sendable {
 }
 
 public struct ToolCatalogGroup: Codable, Sendable {
-    public let id: SessionPeerKind
-    public let label: SessionPeerKind
+    public let id: String
+    public let label: String
     public let source: AnyCodable
     public let pluginid: String?
     public let tools: [ToolCatalogEntry]
 
     public init(
-        id: SessionPeerKind,
-        label: SessionPeerKind,
+        id: String,
+        label: String,
         source: AnyCodable,
         pluginid: String? = nil,
         tools: [ToolCatalogEntry])
@@ -12385,12 +12385,12 @@ public struct ToolCatalogGroup: Codable, Sendable {
 }
 
 public struct ToolsCatalogResult: Codable, Sendable {
-    public let agentid: SessionPeerKind
+    public let agentid: String
     public let profiles: [ToolCatalogProfile]
     public let groups: [ToolCatalogGroup]
 
     public init(
-        agentid: SessionPeerKind,
+        agentid: String,
         profiles: [ToolCatalogProfile],
         groups: [ToolCatalogGroup])
     {
@@ -12408,11 +12408,11 @@ public struct ToolsCatalogResult: Codable, Sendable {
 
 public struct ToolsEffectiveParams: Codable, Sendable {
     public let agentid: String?
-    public let sessionkey: SessionPeerKind
+    public let sessionkey: String
 
     public init(
         agentid: String? = nil,
-        sessionkey: SessionPeerKind)
+        sessionkey: String)
     {
         self.agentid = agentid
         self.sessionkey = sessionkey
@@ -12425,8 +12425,8 @@ public struct ToolsEffectiveParams: Codable, Sendable {
 }
 
 public struct ToolsEffectiveEntry: Codable, Sendable {
-    public let id: SessionPeerKind
-    public let label: SessionPeerKind
+    public let id: String
+    public let label: String
     public let description: String
     public let rawdescription: String
     public let source: AnyCodable
@@ -12439,8 +12439,8 @@ public struct ToolsEffectiveEntry: Codable, Sendable {
     public let tags: [String]?
 
     public init(
-        id: SessionPeerKind,
-        label: SessionPeerKind,
+        id: String,
+        label: String,
         description: String,
         rawdescription: String,
         source: AnyCodable,
@@ -12484,13 +12484,13 @@ public struct ToolsEffectiveEntry: Codable, Sendable {
 
 public struct ToolsEffectiveGroup: Codable, Sendable {
     public let id: AnyCodable
-    public let label: SessionPeerKind
+    public let label: String
     public let source: AnyCodable
     public let tools: [ToolsEffectiveEntry]
 
     public init(
         id: AnyCodable,
-        label: SessionPeerKind,
+        label: String,
         source: AnyCodable,
         tools: [ToolsEffectiveEntry])
     {
@@ -12509,13 +12509,13 @@ public struct ToolsEffectiveGroup: Codable, Sendable {
 }
 
 public struct ToolsEffectiveNotice: Codable, Sendable {
-    public let id: SessionPeerKind
+    public let id: String
     public let severity: AnyCodable
     public let message: String
     public let servers: [String]?
 
     public init(
-        id: SessionPeerKind,
+        id: String,
         severity: AnyCodable,
         message: String,
         servers: [String]? = nil)
@@ -12535,14 +12535,14 @@ public struct ToolsEffectiveNotice: Codable, Sendable {
 }
 
 public struct ToolsEffectiveResult: Codable, Sendable {
-    public let agentid: SessionPeerKind
-    public let profile: SessionPeerKind
+    public let agentid: String
+    public let profile: String
     public let groups: [ToolsEffectiveGroup]
     public let notices: [ToolsEffectiveNotice]?
 
     public init(
-        agentid: SessionPeerKind,
-        profile: SessionPeerKind,
+        agentid: String,
+        profile: String,
         groups: [ToolsEffectiveGroup],
         notices: [ToolsEffectiveNotice]? = nil)
     {
@@ -12561,7 +12561,7 @@ public struct ToolsEffectiveResult: Codable, Sendable {
 }
 
 public struct ToolsInvokeParams: Codable, Sendable {
-    public let name: SessionPeerKind
+    public let name: String
     public let args: [String: AnyCodable]?
     public let sessionkey: String?
     public let agentid: String?
@@ -12570,7 +12570,7 @@ public struct ToolsInvokeParams: Codable, Sendable {
     public let conversationreadorigin: String?
 
     public init(
-        name: SessionPeerKind,
+        name: String,
         args: [String: AnyCodable]? = nil,
         sessionkey: String? = nil,
         agentid: String? = nil,
@@ -12599,13 +12599,13 @@ public struct ToolsInvokeParams: Codable, Sendable {
 }
 
 public struct ToolsInvokeError: Codable, Sendable {
-    public let code: SessionPeerKind
-    public let message: SessionPeerKind
+    public let code: String
+    public let message: String
     public let details: AnyCodable?
 
     public init(
-        code: SessionPeerKind,
-        message: SessionPeerKind,
+        code: String,
+        message: String,
         details: AnyCodable? = nil)
     {
         self.code = code
@@ -12622,7 +12622,7 @@ public struct ToolsInvokeError: Codable, Sendable {
 
 public struct ToolsInvokeResult: Codable, Sendable {
     public let ok: Bool
-    public let toolname: SessionPeerKind
+    public let toolname: String
     public let output: AnyCodable?
     public let requiresapproval: Bool?
     public let approvalid: String?
@@ -12631,7 +12631,7 @@ public struct ToolsInvokeResult: Codable, Sendable {
 
     public init(
         ok: Bool,
-        toolname: SessionPeerKind,
+        toolname: String,
         output: AnyCodable? = nil,
         requiresapproval: Bool? = nil,
         approvalid: String? = nil,
@@ -12661,10 +12661,10 @@ public struct ToolsInvokeResult: Codable, Sendable {
 public struct SkillsBinsParams: Codable, Sendable {}
 
 public struct SkillsBinsResult: Codable, Sendable {
-    public let bins: [SessionPeerKind]
+    public let bins: [String]
 
     public init(
-        bins: [SessionPeerKind])
+        bins: [String])
     {
         self.bins = bins
     }
@@ -12707,10 +12707,10 @@ public struct SkillsSearchResult: Codable, Sendable {
 }
 
 public struct SkillsDetailParams: Codable, Sendable {
-    public let slug: SessionPeerKind
+    public let slug: String
 
     public init(
-        slug: SessionPeerKind)
+        slug: String)
     {
         self.slug = slug
     }
@@ -12747,10 +12747,10 @@ public struct SkillsDetailResult: Codable, Sendable {
 }
 
 public struct SkillsCuratorActionParams: Codable, Sendable {
-    public let skill: SessionPeerKind
+    public let skill: String
 
     public init(
-        skill: SessionPeerKind)
+        skill: String)
     {
         self.skill = skill
     }
@@ -12761,9 +12761,9 @@ public struct SkillsCuratorActionParams: Codable, Sendable {
 }
 
 public struct SkillsCuratorActionResult: Codable, Sendable {
-    public let skillfile: SessionPeerKind
-    public let skillkey: SessionPeerKind
-    public let skillname: SessionPeerKind
+    public let skillfile: String
+    public let skillkey: String
+    public let skillname: String
     public let state: AnyCodable
     public let pinned: Bool
     public let createdatms: Double
@@ -12773,9 +12773,9 @@ public struct SkillsCuratorActionResult: Codable, Sendable {
     public let archivedreason: AnyCodable
 
     public init(
-        skillfile: SessionPeerKind,
-        skillkey: SessionPeerKind,
-        skillname: SessionPeerKind,
+        skillfile: String,
+        skillkey: String,
+        skillname: String,
         state: AnyCodable,
         pinned: Bool,
         createdatms: Double,
@@ -12862,12 +12862,12 @@ public struct SkillsProposalsListParams: Codable, Sendable {
 
 public struct SkillsProposalsListResult: Codable, Sendable {
     public let schema: String
-    public let updatedat: SessionPeerKind
+    public let updatedat: String
     public let proposals: [[String: AnyCodable]]
 
     public init(
         schema: String,
-        updatedat: SessionPeerKind,
+        updatedat: String,
         proposals: [[String: AnyCodable]])
     {
         self.schema = schema
@@ -12884,13 +12884,13 @@ public struct SkillsProposalsListResult: Codable, Sendable {
 
 public struct SkillsProposalEvaluateParams: Codable, Sendable {
     public let agentid: String?
-    public let proposalid: SessionPeerKind
+    public let proposalid: String
     public let expectedrevisionhash: String?
     public let correlationid: String?
 
     public init(
         agentid: String? = nil,
-        proposalid: SessionPeerKind,
+        proposalid: String,
         expectedrevisionhash: String? = nil,
         correlationid: String? = nil)
     {
@@ -13054,11 +13054,11 @@ public struct SkillsProposalHistoryScanResult: Codable, Sendable {
 
 public struct SkillsProposalInspectParams: Codable, Sendable {
     public let agentid: String?
-    public let proposalid: SessionPeerKind
+    public let proposalid: String
 
     public init(
         agentid: String? = nil,
-        proposalid: SessionPeerKind)
+        proposalid: String)
     {
         self.agentid = agentid
         self.proposalid = proposalid
@@ -13098,8 +13098,8 @@ public struct SkillsProposalInspectResult: Codable, Sendable {
 
 public struct SkillsProposalCreateParams: Codable, Sendable {
     public let agentid: String?
-    public let name: SessionPeerKind
-    public let description: SessionPeerKind
+    public let name: String
+    public let description: String
     public let content: String
     public let supportfiles: [[String: AnyCodable]]?
     public let goal: String?
@@ -13107,8 +13107,8 @@ public struct SkillsProposalCreateParams: Codable, Sendable {
 
     public init(
         agentid: String? = nil,
-        name: SessionPeerKind,
-        description: SessionPeerKind,
+        name: String,
+        description: String,
         content: String,
         supportfiles: [[String: AnyCodable]]? = nil,
         goal: String? = nil,
@@ -13136,7 +13136,7 @@ public struct SkillsProposalCreateParams: Codable, Sendable {
 
 public struct SkillsProposalUpdateParams: Codable, Sendable {
     public let agentid: String?
-    public let skillname: SessionPeerKind
+    public let skillname: String
     public let description: String?
     public let content: String
     public let supportfiles: [[String: AnyCodable]]?
@@ -13145,7 +13145,7 @@ public struct SkillsProposalUpdateParams: Codable, Sendable {
 
     public init(
         agentid: String? = nil,
-        skillname: SessionPeerKind,
+        skillname: String,
         description: String? = nil,
         content: String,
         supportfiles: [[String: AnyCodable]]? = nil,
@@ -13174,7 +13174,7 @@ public struct SkillsProposalUpdateParams: Codable, Sendable {
 
 public struct SkillsProposalReviseParams: Codable, Sendable {
     public let agentid: String?
-    public let proposalid: SessionPeerKind
+    public let proposalid: String
     public let expectedrevisionhash: String?
     public let correlationid: String?
     public let content: String?
@@ -13185,7 +13185,7 @@ public struct SkillsProposalReviseParams: Codable, Sendable {
 
     public init(
         agentid: String? = nil,
-        proposalid: SessionPeerKind,
+        proposalid: String,
         expectedrevisionhash: String? = nil,
         correlationid: String? = nil,
         content: String? = nil,
@@ -13221,22 +13221,22 @@ public struct SkillsProposalReviseParams: Codable, Sendable {
 public struct SkillsProposalRequestRevisionParams: Codable, Sendable {
     public let agentid: String?
     public let targetagentid: String?
-    public let proposalid: SessionPeerKind
+    public let proposalid: String
     public let expectedrevisionhash: String?
     public let instructions: String
-    public let sessionkey: SessionPeerKind
+    public let sessionkey: String
     public let sessionid: String?
-    public let idempotencykey: SessionPeerKind
+    public let idempotencykey: String
 
     public init(
         agentid: String? = nil,
         targetagentid: String? = nil,
-        proposalid: SessionPeerKind,
+        proposalid: String,
         expectedrevisionhash: String? = nil,
         instructions: String,
-        sessionkey: SessionPeerKind,
+        sessionkey: String,
         sessionid: String? = nil,
-        idempotencykey: SessionPeerKind)
+        idempotencykey: String)
     {
         self.agentid = agentid
         self.targetagentid = targetagentid
@@ -13261,11 +13261,11 @@ public struct SkillsProposalRequestRevisionParams: Codable, Sendable {
 }
 
 public struct SkillsProposalRequestRevisionResult: Codable, Sendable {
-    public let runid: SessionPeerKind
+    public let runid: String
     public let status: AnyCodable
 
     public init(
-        runid: SessionPeerKind,
+        runid: String,
         status: AnyCodable)
     {
         self.runid = runid
@@ -13280,14 +13280,14 @@ public struct SkillsProposalRequestRevisionResult: Codable, Sendable {
 
 public struct SkillsProposalActionParams: Codable, Sendable {
     public let agentid: String?
-    public let proposalid: SessionPeerKind
+    public let proposalid: String
     public let expectedrevisionhash: String?
     public let correlationid: String?
     public let reason: String?
 
     public init(
         agentid: String? = nil,
-        proposalid: SessionPeerKind,
+        proposalid: String,
         expectedrevisionhash: String? = nil,
         correlationid: String? = nil,
         reason: String? = nil)
@@ -13310,11 +13310,11 @@ public struct SkillsProposalActionParams: Codable, Sendable {
 
 public struct SkillsProposalApplyResult: Codable, Sendable {
     public let record: SkillsProposalRecordResult
-    public let targetskillfile: SessionPeerKind
+    public let targetskillfile: String
 
     public init(
         record: SkillsProposalRecordResult,
-        targetskillfile: SessionPeerKind)
+        targetskillfile: String)
     {
         self.record = record
         self.targetskillfile = targetskillfile
@@ -13328,18 +13328,18 @@ public struct SkillsProposalApplyResult: Codable, Sendable {
 
 public struct SkillsProposalRecordResult: Codable, Sendable {
     public let schema: String
-    public let id: SessionPeerKind
+    public let id: String
     public let kind: AnyCodable
     public let status: AnyCodable
-    public let title: SessionPeerKind
-    public let description: SessionPeerKind
-    public let createdat: SessionPeerKind
-    public let updatedat: SessionPeerKind
+    public let title: String
+    public let description: String
+    public let createdat: String
+    public let updatedat: String
     public let createdby: AnyCodable
     public let origin: [String: AnyCodable]?
-    public let proposedversion: SessionPeerKind
+    public let proposedversion: String
     public let draftfile: String
-    public let drafthash: SessionPeerKind
+    public let drafthash: String
     public let supportfiles: [[String: AnyCodable]]?
     public let target: [String: AnyCodable]
     public let scan: [String: AnyCodable]
@@ -13354,18 +13354,18 @@ public struct SkillsProposalRecordResult: Codable, Sendable {
 
     public init(
         schema: String,
-        id: SessionPeerKind,
+        id: String,
         kind: AnyCodable,
         status: AnyCodable,
-        title: SessionPeerKind,
-        description: SessionPeerKind,
-        createdat: SessionPeerKind,
-        updatedat: SessionPeerKind,
+        title: String,
+        description: String,
+        createdat: String,
+        updatedat: String,
         createdby: AnyCodable,
         origin: [String: AnyCodable]? = nil,
-        proposedversion: SessionPeerKind,
+        proposedversion: String,
         draftfile: String,
-        drafthash: SessionPeerKind,
+        drafthash: String,
         supportfiles: [[String: AnyCodable]]? = nil,
         target: [String: AnyCodable],
         scan: [String: AnyCodable],
@@ -13466,11 +13466,11 @@ public struct SkillsSecurityVerdictsResult: Codable, Sendable {
 
 public struct SkillsSkillCardParams: Codable, Sendable {
     public let agentid: String?
-    public let skillkey: SessionPeerKind
+    public let skillkey: String
 
     public init(
         agentid: String? = nil,
-        skillkey: SessionPeerKind)
+        skillkey: String)
     {
         self.agentid = agentid
         self.skillkey = skillkey
@@ -13484,15 +13484,15 @@ public struct SkillsSkillCardParams: Codable, Sendable {
 
 public struct SkillsSkillCardResult: Codable, Sendable {
     public let schema: String
-    public let skillkey: SessionPeerKind
-    public let path: SessionPeerKind
+    public let skillkey: String
+    public let path: String
     public let sizebytes: Int
     public let content: String
 
     public init(
         schema: String,
-        skillkey: SessionPeerKind,
-        path: SessionPeerKind,
+        skillkey: String,
+        path: String,
         sizebytes: Int,
         content: String)
     {
@@ -13514,7 +13514,7 @@ public struct SkillsSkillCardResult: Codable, Sendable {
 
 public struct SkillsUploadBeginParams: Codable, Sendable {
     public let kind: String
-    public let slug: SessionPeerKind
+    public let slug: String
     public let sizebytes: Int
     public let sha256: String?
     public let force: Bool?
@@ -13522,7 +13522,7 @@ public struct SkillsUploadBeginParams: Codable, Sendable {
 
     public init(
         kind: String,
-        slug: SessionPeerKind,
+        slug: String,
         sizebytes: Int,
         sha256: String? = nil,
         force: Bool? = nil,
@@ -13547,12 +13547,12 @@ public struct SkillsUploadBeginParams: Codable, Sendable {
 }
 
 public struct SkillsUploadChunkParams: Codable, Sendable {
-    public let uploadid: SessionPeerKind
+    public let uploadid: String
     public let offset: Int
     public let database64: String
 
     public init(
-        uploadid: SessionPeerKind,
+        uploadid: String,
         offset: Int,
         database64: String)
     {
@@ -13569,11 +13569,11 @@ public struct SkillsUploadChunkParams: Codable, Sendable {
 }
 
 public struct SkillsUploadCommitParams: Codable, Sendable {
-    public let uploadid: SessionPeerKind
+    public let uploadid: String
     public let sha256: String?
 
     public init(
-        uploadid: SessionPeerKind,
+        uploadid: String,
         sha256: String? = nil)
     {
         self.uploadid = uploadid
@@ -13587,14 +13587,14 @@ public struct SkillsUploadCommitParams: Codable, Sendable {
 }
 
 public struct CronJob: Codable, Sendable {
-    public let id: SessionPeerKind
+    public let id: String
     public let declarationkey: String?
     public let displayname: String?
     public let owner: [String: AnyCodable]?
     public let scheduledtoolpolicy: AnyCodable?
     public let agentid: String?
     public let sessionkey: String?
-    public let name: SessionPeerKind
+    public let name: String
     public let description: String?
     public let enabled: Bool
     public let deleteafterrun: Bool?
@@ -13622,14 +13622,14 @@ public struct CronJob: Codable, Sendable {
     public let lastfailurenotificationdeliveryerror: String?
 
     public init(
-        id: SessionPeerKind,
+        id: String,
         declarationkey: String? = nil,
         displayname: String? = nil,
         owner: [String: AnyCodable]? = nil,
         scheduledtoolpolicy: AnyCodable? = nil,
         agentid: String? = nil,
         sessionkey: String? = nil,
-        name: SessionPeerKind,
+        name: String,
         description: String? = nil,
         enabled: Bool,
         deleteafterrun: Bool? = nil,
@@ -13789,7 +13789,7 @@ public struct CronListParams: Codable, Sendable {
 public struct CronStatusParams: Codable, Sendable {}
 
 public struct CronAddParams: Codable, Sendable {
-    public let name: SessionPeerKind
+    public let name: String
     public let declarationkey: String?
     public let displayname: String?
     public let owner: [String: AnyCodable]?
@@ -13808,7 +13808,7 @@ public struct CronAddParams: Codable, Sendable {
     public let failurealert: AnyCodable?
 
     public init(
-        name: SessionPeerKind,
+        name: String,
         declarationkey: String? = nil,
         displayname: String? = nil,
         owner: [String: AnyCodable]? = nil,
@@ -13974,7 +13974,7 @@ public struct CronScratchGetResult: Codable, Sendable {
 
 public struct CronRunLogEntry: Codable, Sendable {
     public let ts: Int
-    public let jobid: SessionPeerKind
+    public let jobid: String
     public let action: String
     public let status: AnyCodable?
     public let error: String?
@@ -13999,7 +13999,7 @@ public struct CronRunLogEntry: Codable, Sendable {
 
     public init(
         ts: Int,
-        jobid: SessionPeerKind,
+        jobid: String,
         action: String,
         status: AnyCodable? = nil,
         error: String? = nil,
@@ -14097,7 +14097,7 @@ public struct LogsTailParams: Codable, Sendable {
 }
 
 public struct LogsTailResult: Codable, Sendable {
-    public let file: SessionPeerKind
+    public let file: String
     public let cursor: Int
     public let size: Int
     public let lines: [String]
@@ -14105,7 +14105,7 @@ public struct LogsTailResult: Codable, Sendable {
     public let reset: Bool?
 
     public init(
-        file: SessionPeerKind,
+        file: String,
         cursor: Int,
         size: Int,
         lines: [String],
@@ -14131,7 +14131,7 @@ public struct LogsTailResult: Codable, Sendable {
 }
 
 public struct MemoryMigrationItem: Codable, Sendable {
-    public let id: SessionPeerKind
+    public let id: String
     public let status: MemoryMigrationItemStatus
     public let source: String?
     public let target: String?
@@ -14140,7 +14140,7 @@ public struct MemoryMigrationItem: Codable, Sendable {
     public let details: [String: AnyCodable]?
 
     public init(
-        id: SessionPeerKind,
+        id: String,
         status: MemoryMigrationItemStatus,
         source: String? = nil,
         target: String? = nil,
@@ -14207,8 +14207,8 @@ public struct MemoryMigrationSummary: Codable, Sendable {
 }
 
 public struct MemoryMigrationProviderPlan: Codable, Sendable {
-    public let providerid: SessionPeerKind
-    public let label: SessionPeerKind
+    public let providerid: String
+    public let label: String
     public let description: String?
     public let planfingerprint: String?
     public let found: Bool
@@ -14222,8 +14222,8 @@ public struct MemoryMigrationProviderPlan: Codable, Sendable {
     public let warnings: [String]?
 
     public init(
-        providerid: SessionPeerKind,
-        label: SessionPeerKind,
+        providerid: String,
+        label: String,
         description: String? = nil,
         planfingerprint: String? = nil,
         found: Bool,
@@ -14269,11 +14269,11 @@ public struct MemoryMigrationProviderPlan: Codable, Sendable {
 }
 
 public struct MigrationsMemoryPlanParams: Codable, Sendable {
-    public let agentid: SessionPeerKind
+    public let agentid: String
     public let overwrite: Bool?
 
     public init(
-        agentid: SessionPeerKind,
+        agentid: String,
         overwrite: Bool? = nil)
     {
         self.agentid = agentid
@@ -14287,13 +14287,13 @@ public struct MigrationsMemoryPlanParams: Codable, Sendable {
 }
 
 public struct MigrationsMemoryPlanResult: Codable, Sendable {
-    public let agentid: SessionPeerKind
-    public let workspace: SessionPeerKind
+    public let agentid: String
+    public let workspace: String
     public let providers: [MemoryMigrationProviderPlan]
 
     public init(
-        agentid: SessionPeerKind,
-        workspace: SessionPeerKind,
+        agentid: String,
+        workspace: String,
         providers: [MemoryMigrationProviderPlan])
     {
         self.agentid = agentid
@@ -14309,19 +14309,19 @@ public struct MigrationsMemoryPlanResult: Codable, Sendable {
 }
 
 public struct MigrationsMemoryApplyParams: Codable, Sendable {
-    public let idempotencykey: SessionPeerKind
-    public let agentid: SessionPeerKind
-    public let providerid: SessionPeerKind
+    public let idempotencykey: String
+    public let agentid: String
+    public let providerid: String
     public let planfingerprint: String
-    public let itemids: [SessionPeerKind]
+    public let itemids: [String]
     public let overwrite: Bool?
 
     public init(
-        idempotencykey: SessionPeerKind,
-        agentid: SessionPeerKind,
-        providerid: SessionPeerKind,
+        idempotencykey: String,
+        agentid: String,
+        providerid: String,
         planfingerprint: String,
-        itemids: [SessionPeerKind],
+        itemids: [String],
         overwrite: Bool? = nil)
     {
         self.idempotencykey = idempotencykey
@@ -14343,8 +14343,8 @@ public struct MigrationsMemoryApplyParams: Codable, Sendable {
 }
 
 public struct MigrationsMemoryApplyResult: Codable, Sendable {
-    public let providerid: SessionPeerKind
-    public let source: SessionPeerKind
+    public let providerid: String
+    public let source: String
     public let target: String?
     public let summary: MemoryMigrationSummary
     public let items: [MemoryMigrationItem]
@@ -14353,8 +14353,8 @@ public struct MigrationsMemoryApplyResult: Codable, Sendable {
     public let reportdir: String?
 
     public init(
-        providerid: SessionPeerKind,
-        source: SessionPeerKind,
+        providerid: String,
+        source: String,
         target: String? = nil,
         summary: MemoryMigrationSummary,
         items: [MemoryMigrationItem],
@@ -14411,18 +14411,18 @@ public struct TerminalOpenParams: Codable, Sendable {
 }
 
 public struct TerminalOpenResult: Codable, Sendable {
-    public let sessionid: SessionPeerKind
-    public let agentid: SessionPeerKind
-    public let shell: SessionPeerKind
-    public let cwd: SessionPeerKind
+    public let sessionid: String
+    public let agentid: String
+    public let shell: String
+    public let cwd: String
     public let confined: Bool
     public let title: String?
 
     public init(
-        sessionid: SessionPeerKind,
-        agentid: SessionPeerKind,
-        shell: SessionPeerKind,
-        cwd: SessionPeerKind,
+        sessionid: String,
+        agentid: String,
+        shell: String,
+        cwd: String,
         confined: Bool,
         title: String? = nil)
     {
@@ -14445,11 +14445,11 @@ public struct TerminalOpenResult: Codable, Sendable {
 }
 
 public struct TerminalInputParams: Codable, Sendable {
-    public let sessionid: SessionPeerKind
+    public let sessionid: String
     public let data: String
 
     public init(
-        sessionid: SessionPeerKind,
+        sessionid: String,
         data: String)
     {
         self.sessionid = sessionid
@@ -14463,12 +14463,12 @@ public struct TerminalInputParams: Codable, Sendable {
 }
 
 public struct TerminalResizeParams: Codable, Sendable {
-    public let sessionid: SessionPeerKind
+    public let sessionid: String
     public let cols: Int
     public let rows: Int
 
     public init(
-        sessionid: SessionPeerKind,
+        sessionid: String,
         cols: Int,
         rows: Int)
     {
@@ -14485,10 +14485,10 @@ public struct TerminalResizeParams: Codable, Sendable {
 }
 
 public struct TerminalCloseParams: Codable, Sendable {
-    public let sessionid: SessionPeerKind
+    public let sessionid: String
 
     public init(
-        sessionid: SessionPeerKind)
+        sessionid: String)
     {
         self.sessionid = sessionid
     }
@@ -14499,10 +14499,10 @@ public struct TerminalCloseParams: Codable, Sendable {
 }
 
 public struct TerminalAttachParams: Codable, Sendable {
-    public let sessionid: SessionPeerKind
+    public let sessionid: String
 
     public init(
-        sessionid: SessionPeerKind)
+        sessionid: String)
     {
         self.sessionid = sessionid
     }
@@ -14513,19 +14513,19 @@ public struct TerminalAttachParams: Codable, Sendable {
 }
 
 public struct TerminalAttachResult: Codable, Sendable {
-    public let sessionid: SessionPeerKind
-    public let agentid: SessionPeerKind
-    public let shell: SessionPeerKind
-    public let cwd: SessionPeerKind
+    public let sessionid: String
+    public let agentid: String
+    public let shell: String
+    public let cwd: String
     public let confined: Bool
     public let buffer: String
     public let seq: Int?
 
     public init(
-        sessionid: SessionPeerKind,
-        agentid: SessionPeerKind,
-        shell: SessionPeerKind,
-        cwd: SessionPeerKind,
+        sessionid: String,
+        agentid: String,
+        shell: String,
+        cwd: String,
         confined: Bool,
         buffer: String,
         seq: Int? = nil)
@@ -14551,20 +14551,20 @@ public struct TerminalAttachResult: Codable, Sendable {
 }
 
 public struct TerminalSessionInfo: Codable, Sendable {
-    public let sessionid: SessionPeerKind
-    public let agentid: SessionPeerKind
-    public let shell: SessionPeerKind
-    public let cwd: SessionPeerKind
+    public let sessionid: String
+    public let agentid: String
+    public let shell: String
+    public let cwd: String
     public let confined: Bool
     public let attached: Bool
     public let owner: AnyCodable?
     public let createdatms: Int
 
     public init(
-        sessionid: SessionPeerKind,
-        agentid: SessionPeerKind,
-        shell: SessionPeerKind,
-        cwd: SessionPeerKind,
+        sessionid: String,
+        agentid: String,
+        shell: String,
+        cwd: String,
         confined: Bool,
         attached: Bool,
         owner: AnyCodable? = nil,
@@ -14607,10 +14607,10 @@ public struct TerminalListResult: Codable, Sendable {
 }
 
 public struct TerminalTextParams: Codable, Sendable {
-    public let sessionid: SessionPeerKind
+    public let sessionid: String
 
     public init(
-        sessionid: SessionPeerKind)
+        sessionid: String)
     {
         self.sessionid = sessionid
     }
@@ -14635,12 +14635,12 @@ public struct TerminalTextResult: Codable, Sendable {
 }
 
 public struct TerminalUploadParams: Codable, Sendable {
-    public let sessionid: SessionPeerKind
+    public let sessionid: String
     public let name: String
     public let contentbase64: String
 
     public init(
-        sessionid: SessionPeerKind,
+        sessionid: String,
         name: String,
         contentbase64: String)
     {
@@ -14657,11 +14657,11 @@ public struct TerminalUploadParams: Codable, Sendable {
 }
 
 public struct TerminalUploadResult: Codable, Sendable {
-    public let path: SessionPeerKind
+    public let path: String
     public let size: Int
 
     public init(
-        path: SessionPeerKind,
+        path: String,
         size: Int)
     {
         self.path = path
@@ -14689,12 +14689,12 @@ public struct TerminalAckResult: Codable, Sendable {
 }
 
 public struct TerminalDataEvent: Codable, Sendable {
-    public let sessionid: SessionPeerKind
+    public let sessionid: String
     public let seq: Int
     public let data: String
 
     public init(
-        sessionid: SessionPeerKind,
+        sessionid: String,
         seq: Int,
         data: String)
     {
@@ -14711,14 +14711,14 @@ public struct TerminalDataEvent: Codable, Sendable {
 }
 
 public struct TerminalExitEvent: Codable, Sendable {
-    public let sessionid: SessionPeerKind
+    public let sessionid: String
     public let exitcode: AnyCodable?
     public let signal: AnyCodable?
     public let reason: AnyCodable?
     public let error: String?
 
     public init(
-        sessionid: SessionPeerKind,
+        sessionid: String,
         exitcode: AnyCodable? = nil,
         signal: AnyCodable? = nil,
         reason: AnyCodable? = nil,
@@ -14742,7 +14742,7 @@ public struct TerminalExitEvent: Codable, Sendable {
 
 public struct ExecApprovalPresentation: Codable, Sendable {
     public let kind: String
-    public let commandtext: SessionPeerKind
+    public let commandtext: String
     public let commandpreview: AnyCodable?
     public let warningtext: AnyCodable?
     public let host: AnyCodable?
@@ -14752,7 +14752,7 @@ public struct ExecApprovalPresentation: Codable, Sendable {
 
     public init(
         kind: String,
-        commandtext: SessionPeerKind,
+        commandtext: String,
         commandpreview: AnyCodable? = nil,
         warningtext: AnyCodable? = nil,
         host: AnyCodable? = nil,
@@ -14864,7 +14864,7 @@ public struct SystemAgentApprovalPresentation: Codable, Sendable {
 
 public struct PendingApprovalSnapshot: Codable, Sendable {
     public let id: String
-    public let urlpath: SessionPeerKind
+    public let urlpath: String
     public let createdatms: Int
     public let expiresatms: Int
     public let presentation: ApprovalPresentation
@@ -14872,7 +14872,7 @@ public struct PendingApprovalSnapshot: Codable, Sendable {
 
     public init(
         id: String,
-        urlpath: SessionPeerKind,
+        urlpath: String,
         createdatms: Int,
         expiresatms: Int,
         presentation: ApprovalPresentation,
@@ -14898,7 +14898,7 @@ public struct PendingApprovalSnapshot: Codable, Sendable {
 
 public struct AllowedApprovalSnapshot: Codable, Sendable {
     public let id: String
-    public let urlpath: SessionPeerKind
+    public let urlpath: String
     public let createdatms: Int
     public let expiresatms: Int
     public let presentation: ApprovalPresentation
@@ -14911,7 +14911,7 @@ public struct AllowedApprovalSnapshot: Codable, Sendable {
 
     public init(
         id: String,
-        urlpath: SessionPeerKind,
+        urlpath: String,
         createdatms: Int,
         expiresatms: Int,
         presentation: ApprovalPresentation,
@@ -14952,7 +14952,7 @@ public struct AllowedApprovalSnapshot: Codable, Sendable {
 
 public struct DeniedApprovalSnapshot: Codable, Sendable {
     public let id: String
-    public let urlpath: SessionPeerKind
+    public let urlpath: String
     public let createdatms: Int
     public let expiresatms: Int
     public let presentation: ApprovalPresentation
@@ -14965,7 +14965,7 @@ public struct DeniedApprovalSnapshot: Codable, Sendable {
 
     public init(
         id: String,
-        urlpath: SessionPeerKind,
+        urlpath: String,
         createdatms: Int,
         expiresatms: Int,
         presentation: ApprovalPresentation,
@@ -15006,7 +15006,7 @@ public struct DeniedApprovalSnapshot: Codable, Sendable {
 
 public struct ExpiredApprovalSnapshot: Codable, Sendable {
     public let id: String
-    public let urlpath: SessionPeerKind
+    public let urlpath: String
     public let createdatms: Int
     public let expiresatms: Int
     public let presentation: ApprovalPresentation
@@ -15018,7 +15018,7 @@ public struct ExpiredApprovalSnapshot: Codable, Sendable {
 
     public init(
         id: String,
-        urlpath: SessionPeerKind,
+        urlpath: String,
         createdatms: Int,
         expiresatms: Int,
         presentation: ApprovalPresentation,
@@ -15056,7 +15056,7 @@ public struct ExpiredApprovalSnapshot: Codable, Sendable {
 
 public struct CancelledApprovalSnapshot: Codable, Sendable {
     public let id: String
-    public let urlpath: SessionPeerKind
+    public let urlpath: String
     public let createdatms: Int
     public let expiresatms: Int
     public let presentation: ApprovalPresentation
@@ -15068,7 +15068,7 @@ public struct CancelledApprovalSnapshot: Codable, Sendable {
 
     public init(
         id: String,
-        urlpath: SessionPeerKind,
+        urlpath: String,
         createdatms: Int,
         expiresatms: Int,
         presentation: ApprovalPresentation,
@@ -15213,14 +15213,14 @@ public struct ApprovalResolveResult: Codable, Sendable {
 }
 
 public struct PendingSessionApprovalEvent: Codable, Sendable {
-    public let sessionkey: SessionPeerKind
+    public let sessionkey: String
     public let sourcesessionkey: String?
     public let updatedatms: Int
     public let phase: String
     public let approval: PendingApprovalSnapshot
 
     public init(
-        sessionkey: SessionPeerKind,
+        sessionkey: String,
         sourcesessionkey: String? = nil,
         updatedatms: Int,
         phase: String,
@@ -15243,14 +15243,14 @@ public struct PendingSessionApprovalEvent: Codable, Sendable {
 }
 
 public struct TerminalSessionApprovalEvent: Codable, Sendable {
-    public let sessionkey: SessionPeerKind
+    public let sessionkey: String
     public let sourcesessionkey: String?
     public let updatedatms: Int
     public let phase: String
     public let approval: TerminalApprovalSnapshot
 
     public init(
-        sessionkey: SessionPeerKind,
+        sessionkey: String,
         sourcesessionkey: String? = nil,
         updatedatms: Int,
         phase: String,
@@ -15273,13 +15273,13 @@ public struct TerminalSessionApprovalEvent: Codable, Sendable {
 }
 
 public struct SessionApprovalReplay: Codable, Sendable {
-    public let sessionkey: SessionPeerKind
+    public let sessionkey: String
     public let updatedatms: Int
     public let approvals: [PendingApprovalSnapshot]
     public let truncated: Bool
 
     public init(
-        sessionkey: SessionPeerKind,
+        sessionkey: String,
         updatedatms: Int,
         approvals: [PendingApprovalSnapshot],
         truncated: Bool)
@@ -15319,10 +15319,10 @@ public struct ExecApprovalsSetParams: Codable, Sendable {
 }
 
 public struct ExecApprovalsNodeGetParams: Codable, Sendable {
-    public let nodeid: SessionPeerKind
+    public let nodeid: String
 
     public init(
-        nodeid: SessionPeerKind)
+        nodeid: String)
     {
         self.nodeid = nodeid
     }
@@ -15387,13 +15387,13 @@ public struct ExecApprovalsNodeSnapshot: Codable, Sendable {
 }
 
 public struct ExecApprovalsNodeSetParams: Codable, Sendable {
-    public let nodeid: SessionPeerKind
+    public let nodeid: String
     public let file: [String: AnyCodable]?
     public let native: [String: AnyCodable]?
     public let basehash: String?
 
     public init(
-        nodeid: SessionPeerKind,
+        nodeid: String,
         file: [String: AnyCodable]? = nil,
         native: [String: AnyCodable]? = nil,
         basehash: String? = nil)
@@ -15413,15 +15413,15 @@ public struct ExecApprovalsNodeSetParams: Codable, Sendable {
 }
 
 public struct ExecApprovalsSnapshot: Codable, Sendable {
-    public let path: SessionPeerKind
+    public let path: String
     public let exists: Bool
-    public let hash: SessionPeerKind
+    public let hash: String
     public let file: [String: AnyCodable]
 
     public init(
-        path: SessionPeerKind,
+        path: String,
         exists: Bool,
-        hash: SessionPeerKind,
+        hash: String,
         file: [String: AnyCodable])
     {
         self.path = path
@@ -15439,10 +15439,10 @@ public struct ExecApprovalsSnapshot: Codable, Sendable {
 }
 
 public struct ExecApprovalGetParams: Codable, Sendable {
-    public let id: SessionPeerKind
+    public let id: String
 
     public init(
-        id: SessionPeerKind)
+        id: String)
     {
         self.id = id
     }
@@ -15575,12 +15575,12 @@ public struct ExecApprovalRequestParams: Codable, Sendable {
 }
 
 public struct ExecApprovalResolveParams: Codable, Sendable {
-    public let id: SessionPeerKind
-    public let decision: SessionPeerKind
+    public let id: String
+    public let decision: String
 
     public init(
-        id: SessionPeerKind,
-        decision: SessionPeerKind)
+        id: String,
+        decision: String)
     {
         self.id = id
         self.decision = decision
@@ -15593,11 +15593,11 @@ public struct ExecApprovalResolveParams: Codable, Sendable {
 }
 
 public struct QuestionOption: Codable, Sendable {
-    public let label: SessionPeerKind
+    public let label: String
     public let description: String?
 
     public init(
-        label: SessionPeerKind,
+        label: String,
         description: String? = nil)
     {
         self.label = label
@@ -15613,7 +15613,7 @@ public struct QuestionOption: Codable, Sendable {
 public struct Question: Codable, Sendable {
     public let questionid: String
     public let header: String
-    public let question: SessionPeerKind
+    public let question: String
     public let options: [QuestionOption]
     public let multiselect: Bool?
     public let isother: Bool?
@@ -15622,7 +15622,7 @@ public struct Question: Codable, Sendable {
     public init(
         questionid: String,
         header: String,
-        question: SessionPeerKind,
+        question: String,
         options: [QuestionOption],
         multiselect: Bool? = nil,
         isother: Bool? = nil,
@@ -15651,7 +15651,7 @@ public struct Question: Codable, Sendable {
 public struct QuestionRequestQuestion: Codable, Sendable {
     public let questionid: String
     public let header: String
-    public let question: SessionPeerKind
+    public let question: String
     public let options: [QuestionOption]
     public let multiselect: Bool?
     public let isother: Bool?
@@ -15660,7 +15660,7 @@ public struct QuestionRequestQuestion: Codable, Sendable {
     public init(
         questionid: String,
         header: String,
-        question: SessionPeerKind,
+        question: String,
         options: [QuestionOption],
         multiselect: Bool? = nil,
         isother: Bool? = nil,
@@ -15701,7 +15701,7 @@ public struct QuestionAnswers: Codable, Sendable {
 }
 
 public struct QuestionRecord: Codable, Sendable {
-    public let id: SessionPeerKind
+    public let id: String
     public let questions: [Question]
     public let agentid: String?
     public let sessionkey: String?
@@ -15713,7 +15713,7 @@ public struct QuestionRecord: Codable, Sendable {
     public let resolvedby: String?
 
     public init(
-        id: SessionPeerKind,
+        id: String,
         questions: [Question],
         agentid: String? = nil,
         sessionkey: String? = nil,
@@ -15785,11 +15785,11 @@ public struct QuestionRequestParams: Codable, Sendable {
 }
 
 public struct QuestionRequestResult: Codable, Sendable {
-    public let id: SessionPeerKind
+    public let id: String
     public let expiresatms: Int
 
     public init(
-        id: SessionPeerKind,
+        id: String,
         expiresatms: Int)
     {
         self.id = id
@@ -15803,11 +15803,11 @@ public struct QuestionRequestResult: Codable, Sendable {
 }
 
 public struct QuestionWaitAnswerParams: Codable, Sendable {
-    public let id: SessionPeerKind
+    public let id: String
     public let timeoutms: Int?
 
     public init(
-        id: SessionPeerKind,
+        id: String,
         timeoutms: Int? = nil)
     {
         self.id = id
@@ -15821,10 +15821,10 @@ public struct QuestionWaitAnswerParams: Codable, Sendable {
 }
 
 public struct QuestionGetParams: Codable, Sendable {
-    public let id: SessionPeerKind
+    public let id: String
 
     public init(
-        id: SessionPeerKind)
+        id: String)
     {
         self.id = id
     }
@@ -15943,12 +15943,12 @@ public struct PluginApprovalRequestParams: Codable, Sendable {
 }
 
 public struct PluginApprovalResolveParams: Codable, Sendable {
-    public let id: SessionPeerKind
-    public let decision: SessionPeerKind
+    public let id: String
+    public let decision: String
 
     public init(
-        id: SessionPeerKind,
-        decision: SessionPeerKind)
+        id: String,
+        decision: String)
     {
         self.id = id
         self.decision = decision
@@ -15962,11 +15962,11 @@ public struct PluginApprovalResolveParams: Codable, Sendable {
 
 public struct PluginCatalogClawHubInstall: Codable, Sendable {
     public let source: String
-    public let packagename: SessionPeerKind
+    public let packagename: String
 
     public init(
         source: String,
-        packagename: SessionPeerKind)
+        packagename: String)
     {
         self.source = source
         self.packagename = packagename
@@ -15979,8 +15979,8 @@ public struct PluginCatalogClawHubInstall: Codable, Sendable {
 }
 
 public struct PluginCatalogEntry: Codable, Sendable {
-    public let id: SessionPeerKind
-    public let name: SessionPeerKind
+    public let id: String
+    public let name: String
     public let packagename: String?
     public let description: String?
     public let version: String?
@@ -15999,8 +15999,8 @@ public struct PluginCatalogEntry: Codable, Sendable {
     public let removable: Bool?
 
     public init(
-        id: SessionPeerKind,
-        name: SessionPeerKind,
+        id: String,
+        name: String,
         packagename: String? = nil,
         description: String? = nil,
         version: String? = nil,
@@ -16062,11 +16062,11 @@ public struct PluginCatalogEntry: Codable, Sendable {
 
 public struct PluginCatalogOfficialInstall: Codable, Sendable {
     public let source: String
-    public let pluginid: SessionPeerKind
+    public let pluginid: String
 
     public init(
         source: String,
-        pluginid: SessionPeerKind)
+        pluginid: String)
     {
         self.source = source
         self.pluginid = pluginid
@@ -16079,22 +16079,22 @@ public struct PluginCatalogOfficialInstall: Codable, Sendable {
 }
 
 public struct PluginControlUiDescriptor: Codable, Sendable {
-    public let id: SessionPeerKind
-    public let pluginid: SessionPeerKind
+    public let id: String
+    public let pluginid: String
     public let pluginname: String?
     public let surface: AnyCodable
-    public let label: SessionPeerKind
+    public let label: String
     public let description: String?
     public let placement: String?
     public let schema: AnyCodable?
     public let requiredscopes: [String]?
 
     public init(
-        id: SessionPeerKind,
-        pluginid: SessionPeerKind,
+        id: String,
+        pluginid: String,
         pluginname: String? = nil,
         surface: AnyCodable,
-        label: SessionPeerKind,
+        label: String,
         description: String? = nil,
         placement: String? = nil,
         schema: AnyCodable? = nil,
@@ -16125,8 +16125,8 @@ public struct PluginControlUiDescriptor: Codable, Sendable {
 }
 
 public struct PluginSearchPackage: Codable, Sendable {
-    public let name: SessionPeerKind
-    public let displayname: SessionPeerKind
+    public let name: String
+    public let displayname: String
     public let family: AnyCodable
     public let channel: AnyCodable
     public let isofficial: Bool
@@ -16137,8 +16137,8 @@ public struct PluginSearchPackage: Codable, Sendable {
     public let verificationtier: String?
 
     public init(
-        name: SessionPeerKind,
-        displayname: SessionPeerKind,
+        name: String,
+        displayname: String,
         family: AnyCodable,
         channel: AnyCodable,
         isofficial: Bool,
@@ -16259,11 +16259,11 @@ public struct PluginsRefreshResult: Codable, Sendable {
 }
 
 public struct PluginsSearchParams: Codable, Sendable {
-    public let query: SessionPeerKind
+    public let query: String
     public let limit: Int?
 
     public init(
-        query: SessionPeerKind,
+        query: String,
         limit: Int? = nil)
     {
         self.query = query
@@ -16353,14 +16353,14 @@ public struct PluginsSessionActionFailureResult: Codable, Sendable {
 }
 
 public struct PluginsSessionActionParams: Codable, Sendable {
-    public let pluginid: SessionPeerKind
-    public let actionid: SessionPeerKind
+    public let pluginid: String
+    public let actionid: String
     public let sessionkey: String?
     public let payload: AnyCodable?
 
     public init(
-        pluginid: SessionPeerKind,
-        actionid: SessionPeerKind,
+        pluginid: String,
+        actionid: String,
         sessionkey: String? = nil,
         payload: AnyCodable? = nil)
     {
@@ -16441,11 +16441,11 @@ public struct PluginsSessionActionSuccessResult: Codable, Sendable {
 }
 
 public struct PluginsSetEnabledParams: Codable, Sendable {
-    public let pluginid: SessionPeerKind
+    public let pluginid: String
     public let enabled: Bool
 
     public init(
-        pluginid: SessionPeerKind,
+        pluginid: String,
         enabled: Bool)
     {
         self.pluginid = pluginid
@@ -16505,10 +16505,10 @@ public struct PluginsUiDescriptorsResult: Codable, Sendable {
 }
 
 public struct PluginsUninstallParams: Codable, Sendable {
-    public let pluginid: SessionPeerKind
+    public let pluginid: String
 
     public init(
-        pluginid: SessionPeerKind)
+        pluginid: String)
     {
         self.pluginid = pluginid
     }
@@ -16520,14 +16520,14 @@ public struct PluginsUninstallParams: Codable, Sendable {
 
 public struct PluginsUninstallResult: Codable, Sendable {
     public let ok: Bool
-    public let pluginid: SessionPeerKind
+    public let pluginid: String
     public let restartrequired: Bool
     public let removed: [String]
     public let warnings: [String]?
 
     public init(
         ok: Bool,
-        pluginid: SessionPeerKind,
+        pluginid: String,
         restartrequired: Bool,
         removed: [String],
         warnings: [String]? = nil)
@@ -16551,10 +16551,10 @@ public struct PluginsUninstallResult: Codable, Sendable {
 public struct DevicePairListParams: Codable, Sendable {}
 
 public struct DevicePairApproveParams: Codable, Sendable {
-    public let requestid: SessionPeerKind
+    public let requestid: String
 
     public init(
-        requestid: SessionPeerKind)
+        requestid: String)
     {
         self.requestid = requestid
     }
@@ -16565,10 +16565,10 @@ public struct DevicePairApproveParams: Codable, Sendable {
 }
 
 public struct DevicePairRejectParams: Codable, Sendable {
-    public let requestid: SessionPeerKind
+    public let requestid: String
 
     public init(
-        requestid: SessionPeerKind)
+        requestid: String)
     {
         self.requestid = requestid
     }
@@ -16579,10 +16579,10 @@ public struct DevicePairRejectParams: Codable, Sendable {
 }
 
 public struct DevicePairRemoveParams: Codable, Sendable {
-    public let deviceid: SessionPeerKind
+    public let deviceid: String
 
     public init(
-        deviceid: SessionPeerKind)
+        deviceid: String)
     {
         self.deviceid = deviceid
     }
@@ -16619,22 +16619,22 @@ public struct DevicePairSetupCodeParams: Codable, Sendable {
 }
 
 public struct DevicePairSetupCodeResult: Codable, Sendable {
-    public let setupcode: SessionPeerKind
+    public let setupcode: String
     public let qrdataurl: String?
-    public let gatewayurl: SessionPeerKind
+    public let gatewayurl: String
     public let gatewayurls: [String]?
     public let auth: AnyCodable
-    public let urlsource: SessionPeerKind
+    public let urlsource: String
     public let access: AnyCodable?
     public let accessdowngraded: Bool?
 
     public init(
-        setupcode: SessionPeerKind,
+        setupcode: String,
         qrdataurl: String? = nil,
-        gatewayurl: SessionPeerKind,
+        gatewayurl: String,
         gatewayurls: [String]? = nil,
         auth: AnyCodable,
-        urlsource: SessionPeerKind,
+        urlsource: String,
         access: AnyCodable? = nil,
         accessdowngraded: Bool? = nil)
     {
@@ -16661,11 +16661,11 @@ public struct DevicePairSetupCodeResult: Codable, Sendable {
 }
 
 public struct DevicePairRenameParams: Codable, Sendable {
-    public let deviceid: SessionPeerKind
+    public let deviceid: String
     public let label: String
 
     public init(
-        deviceid: SessionPeerKind,
+        deviceid: String,
         label: String)
     {
         self.deviceid = deviceid
@@ -16679,13 +16679,13 @@ public struct DevicePairRenameParams: Codable, Sendable {
 }
 
 public struct DeviceTokenRotateParams: Codable, Sendable {
-    public let deviceid: SessionPeerKind
-    public let role: SessionPeerKind
+    public let deviceid: String
+    public let role: String
     public let scopes: [String]?
 
     public init(
-        deviceid: SessionPeerKind,
-        role: SessionPeerKind,
+        deviceid: String,
+        role: String,
         scopes: [String]? = nil)
     {
         self.deviceid = deviceid
@@ -16701,12 +16701,12 @@ public struct DeviceTokenRotateParams: Codable, Sendable {
 }
 
 public struct DeviceTokenRevokeParams: Codable, Sendable {
-    public let deviceid: SessionPeerKind
-    public let role: SessionPeerKind
+    public let deviceid: String
+    public let role: String
 
     public init(
-        deviceid: SessionPeerKind,
-        role: SessionPeerKind)
+        deviceid: String,
+        role: String)
     {
         self.deviceid = deviceid
         self.role = role
@@ -16719,9 +16719,9 @@ public struct DeviceTokenRevokeParams: Codable, Sendable {
 }
 
 public struct DevicePairRequestedEvent: Codable, Sendable {
-    public let requestid: SessionPeerKind
-    public let deviceid: SessionPeerKind
-    public let publickey: SessionPeerKind
+    public let requestid: String
+    public let deviceid: String
+    public let publickey: String
     public let displayname: String?
     public let platform: String?
     public let devicefamily: String?
@@ -16737,9 +16737,9 @@ public struct DevicePairRequestedEvent: Codable, Sendable {
     public let ts: Int
 
     public init(
-        requestid: SessionPeerKind,
-        deviceid: SessionPeerKind,
-        publickey: SessionPeerKind,
+        requestid: String,
+        deviceid: String,
+        publickey: String,
         displayname: String? = nil,
         platform: String? = nil,
         devicefamily: String? = nil,
@@ -16793,15 +16793,15 @@ public struct DevicePairRequestedEvent: Codable, Sendable {
 }
 
 public struct DevicePairResolvedEvent: Codable, Sendable {
-    public let requestid: SessionPeerKind
-    public let deviceid: SessionPeerKind
-    public let decision: SessionPeerKind
+    public let requestid: String
+    public let deviceid: String
+    public let decision: String
     public let ts: Int
 
     public init(
-        requestid: SessionPeerKind,
-        deviceid: SessionPeerKind,
-        decision: SessionPeerKind,
+        requestid: String,
+        deviceid: String,
+        decision: String,
         ts: Int)
     {
         self.requestid = requestid
@@ -16819,7 +16819,7 @@ public struct DevicePairResolvedEvent: Codable, Sendable {
 }
 
 public struct ChatHistoryParams: Codable, Sendable {
-    public let sessionkey: SessionPeerKind
+    public let sessionkey: String
     public let agentid: String?
     public let limit: Int?
     public let offset: Int?
@@ -16828,7 +16828,7 @@ public struct ChatHistoryParams: Codable, Sendable {
     public let maxchars: Int?
 
     public init(
-        sessionkey: SessionPeerKind,
+        sessionkey: String,
         agentid: String? = nil,
         limit: Int? = nil,
         offset: Int? = nil,
@@ -16871,15 +16871,15 @@ public struct ChatMetadataParams: Codable, Sendable {
 }
 
 public struct ChatMessageGetParams: Codable, Sendable {
-    public let sessionkey: SessionPeerKind
+    public let sessionkey: String
     public let agentid: String?
-    public let messageid: SessionPeerKind
+    public let messageid: String
     public let maxchars: Int?
 
     public init(
-        sessionkey: SessionPeerKind,
+        sessionkey: String,
         agentid: String? = nil,
-        messageid: SessionPeerKind,
+        messageid: String,
         maxchars: Int? = nil)
     {
         self.sessionkey = sessionkey
@@ -16919,12 +16919,12 @@ public struct ChatMessageGetResult: Codable, Sendable {
 }
 
 public struct ChatToolTitlesParams: Codable, Sendable {
-    public let sessionkey: SessionPeerKind
+    public let sessionkey: String
     public let agentid: String?
     public let items: [[String: AnyCodable]]
 
     public init(
-        sessionkey: SessionPeerKind,
+        sessionkey: String,
         agentid: String? = nil,
         items: [[String: AnyCodable]])
     {
@@ -16982,7 +16982,7 @@ public struct ChatSendParams: Codable, Sendable {
     public let suppresscommandinterpretation: Bool?
     public let expectedleafentryid: AnyCodable?
     public let expectedsessionroutingcontract: String?
-    public let idempotencykey: SessionPeerKind
+    public let idempotencykey: String
 
     public init(
         sessionkey: String,
@@ -17007,7 +17007,7 @@ public struct ChatSendParams: Codable, Sendable {
         suppresscommandinterpretation: Bool? = nil,
         expectedleafentryid: AnyCodable? = nil,
         expectedsessionroutingcontract: String? = nil,
-        idempotencykey: SessionPeerKind)
+        idempotencykey: String)
     {
         self.sessionkey = sessionkey
         self.agentid = agentid
@@ -17056,7 +17056,7 @@ public struct ChatSendParams: Codable, Sendable {
         suppresscommandinterpretation: Bool? = nil,
         expectedleafentryid: AnyCodable? = nil,
         expectedsessionroutingcontract: String? = nil,
-        idempotencykey: SessionPeerKind)
+        idempotencykey: String)
     {
         self.init(
             sessionkey: sessionkey,
@@ -17112,13 +17112,13 @@ public struct ChatSendParams: Codable, Sendable {
 }
 
 public struct ChatAbortParams: Codable, Sendable {
-    public let sessionkey: SessionPeerKind
+    public let sessionkey: String
     public let agentid: String?
     public let runid: String?
     public let preservesideruns: Bool?
 
     public init(
-        sessionkey: SessionPeerKind,
+        sessionkey: String,
         agentid: String? = nil,
         runid: String? = nil,
         preservesideruns: Bool? = nil)
@@ -17138,15 +17138,15 @@ public struct ChatAbortParams: Codable, Sendable {
 }
 
 public struct ChatInjectParams: Codable, Sendable {
-    public let sessionkey: SessionPeerKind
+    public let sessionkey: String
     public let agentid: String?
-    public let message: SessionPeerKind
+    public let message: String
     public let label: String?
 
     public init(
-        sessionkey: SessionPeerKind,
+        sessionkey: String,
         agentid: String? = nil,
-        message: SessionPeerKind,
+        message: String,
         label: String? = nil)
     {
         self.sessionkey = sessionkey
@@ -17164,8 +17164,8 @@ public struct ChatInjectParams: Codable, Sendable {
 }
 
 public struct ChatStatusEvent: Codable, Sendable {
-    public let runid: SessionPeerKind
-    public let sessionkey: SessionPeerKind
+    public let runid: String
+    public let sessionkey: String
     public let agentid: String?
     public let spawnedby: String?
     public let seq: Int
@@ -17173,8 +17173,8 @@ public struct ChatStatusEvent: Codable, Sendable {
     public let phase: ChatRunStartupPhase
 
     public init(
-        runid: SessionPeerKind,
-        sessionkey: SessionPeerKind,
+        runid: String,
+        sessionkey: String,
         agentid: String? = nil,
         spawnedby: String? = nil,
         seq: Int,
@@ -17202,8 +17202,8 @@ public struct ChatStatusEvent: Codable, Sendable {
 }
 
 public struct ChatDeltaEvent: Codable, Sendable {
-    public let runid: SessionPeerKind
-    public let sessionkey: SessionPeerKind
+    public let runid: String
+    public let sessionkey: String
     public let agentid: String?
     public let spawnedby: String?
     public let seq: Int
@@ -17214,8 +17214,8 @@ public struct ChatDeltaEvent: Codable, Sendable {
     public let usage: AnyCodable?
 
     public init(
-        runid: SessionPeerKind,
-        sessionkey: SessionPeerKind,
+        runid: String,
+        sessionkey: String,
         agentid: String? = nil,
         spawnedby: String? = nil,
         seq: Int,
@@ -17252,8 +17252,8 @@ public struct ChatDeltaEvent: Codable, Sendable {
 }
 
 public struct ChatFinalEvent: Codable, Sendable {
-    public let runid: SessionPeerKind
-    public let sessionkey: SessionPeerKind
+    public let runid: String
+    public let sessionkey: String
     public let agentid: String?
     public let spawnedby: String?
     public let seq: Int
@@ -17264,8 +17264,8 @@ public struct ChatFinalEvent: Codable, Sendable {
     public let yielded: Bool?
 
     public init(
-        runid: SessionPeerKind,
-        sessionkey: SessionPeerKind,
+        runid: String,
+        sessionkey: String,
         agentid: String? = nil,
         spawnedby: String? = nil,
         seq: Int,
@@ -17302,8 +17302,8 @@ public struct ChatFinalEvent: Codable, Sendable {
 }
 
 public struct ChatAbortedEvent: Codable, Sendable {
-    public let runid: SessionPeerKind
-    public let sessionkey: SessionPeerKind
+    public let runid: String
+    public let sessionkey: String
     public let agentid: String?
     public let spawnedby: String?
     public let seq: Int
@@ -17313,8 +17313,8 @@ public struct ChatAbortedEvent: Codable, Sendable {
     public let stopreason: String?
 
     public init(
-        runid: SessionPeerKind,
-        sessionkey: SessionPeerKind,
+        runid: String,
+        sessionkey: String,
         agentid: String? = nil,
         spawnedby: String? = nil,
         seq: Int,
@@ -17348,8 +17348,8 @@ public struct ChatAbortedEvent: Codable, Sendable {
 }
 
 public struct ChatErrorEvent: Codable, Sendable {
-    public let runid: SessionPeerKind
-    public let sessionkey: SessionPeerKind
+    public let runid: String
+    public let sessionkey: String
     public let agentid: String?
     public let spawnedby: String?
     public let seq: Int
@@ -17361,8 +17361,8 @@ public struct ChatErrorEvent: Codable, Sendable {
     public let stopreason: String?
 
     public init(
-        runid: SessionPeerKind,
-        sessionkey: SessionPeerKind,
+        runid: String,
+        sessionkey: String,
         agentid: String? = nil,
         spawnedby: String? = nil,
         seq: Int,
@@ -17452,11 +17452,11 @@ public struct TickEvent: Codable, Sendable {
 }
 
 public struct ShutdownEvent: Codable, Sendable {
-    public let reason: SessionPeerKind
+    public let reason: String
     public let restartexpectedms: Int?
 
     public init(
-        reason: SessionPeerKind,
+        reason: String,
         restartexpectedms: Int? = nil)
     {
         self.reason = reason
