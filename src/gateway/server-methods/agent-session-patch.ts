@@ -10,6 +10,8 @@ import {
   type SessionFreshness,
 } from "../../config/sessions.js";
 import { hasProviderOwnedSession } from "../../config/sessions/entry-freshness.js";
+import { loadResolvedSessionEntryReadOnly } from "../../config/sessions/session-entry-loader.js";
+import { canonicalizeSpawnedByForAgent } from "../../config/sessions/session-store-key.js";
 import { isRecoverableTerminalSessionStatus } from "../../config/sessions/terminal-status.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
 import {
@@ -20,7 +22,6 @@ import {
   sessionDeliveryRoute,
   type DeliveryContext,
 } from "../../utils/delivery-context.shared.js";
-import { canonicalizeSpawnedByForAgent, loadSessionEntryReadOnly } from "../session-utils.js";
 import {
   normalizeTrustedGroupMetadata,
   requestGroupMatchesTrusted,
@@ -75,7 +76,7 @@ export function buildAgentSessionPatch(params: {
     (!storedGroup.groupId || !storedGroup.groupChannel || !storedGroup.groupSpace)
   ) {
     try {
-      const parentEntry = loadSessionEntryReadOnly(freshSpawnedBy)?.entry;
+      const parentEntry = loadResolvedSessionEntryReadOnly(freshSpawnedBy)?.entry;
       inheritedGroup = normalizeTrustedGroupMetadata({
         groupId: parentEntry?.groupId,
         groupChannel: parentEntry?.groupChannel,

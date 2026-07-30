@@ -47,7 +47,7 @@ const getSessionDefaultsMock = vi.fn(() => ({
   model: null,
   contextTokens: null,
 }));
-const loadCombinedSessionStoreForGatewayMock = vi.fn((_options?: unknown) => ({
+const loadCombinedSessionStoreMock = vi.fn((_options?: unknown) => ({
   storePath: "/tmp/openclaw-sessions.json",
   store: {},
 }));
@@ -145,8 +145,33 @@ vi.mock("../config/sessions.js", () => ({
   updateSessionStore: (...args: unknown[]) => updateSessionStoreMock(...args),
 }));
 
+vi.mock("../config/sessions/combined-store.js", () => ({
+  loadCombinedSessionStore: (...args: unknown[]) => loadCombinedSessionStoreMock(...args),
+}));
+
 vi.mock("../config/sessions/session-accessor.js", () => ({
   applySessionPatchProjection: (...args: unknown[]) => applySessionPatchProjectionMock(...args),
+}));
+
+vi.mock("../config/sessions/session-entry-loader.js", () => ({
+  loadResolvedSessionEntry: (sessionKey: string, opts?: { agentId?: string }) =>
+    loadSessionEntryMock(sessionKey, opts),
+  loadResolvedSessionEntryReadOnly: (sessionKey: string, opts?: { agentId?: string }) =>
+    loadSessionEntryMock(sessionKey, opts),
+}));
+
+vi.mock("../config/sessions/session-store-key-migration.js", () => ({
+  migrateAndPruneSessionStoreKey: ({ key }: { key: string }) => ({
+    primaryKey: key,
+    target: { storeKeys: [key] },
+  }),
+}));
+
+vi.mock("../config/sessions/session-store-target.js", () => ({
+  resolveSessionStoreTarget: ({ key }: { key: string }) => ({
+    canonicalKey: key,
+    storePath: "/tmp/openclaw-sessions.json",
+  }),
 }));
 
 vi.mock("../agents/agent-scope.js", () => ({
@@ -225,20 +250,6 @@ vi.mock("../gateway/session-utils.js", () => ({
   getSessionDefaults: () => getSessionDefaultsMock(),
   listAgentsForGateway: () => [],
   listSessionsFromStoreAsync: (...args: unknown[]) => listSessionsFromStoreAsyncMock(...args),
-  loadCombinedSessionStoreForGateway: (...args: unknown[]) =>
-    loadCombinedSessionStoreForGatewayMock(...args),
-  loadSessionEntry: (sessionKey: string, opts?: { agentId?: string }) =>
-    loadSessionEntryMock(sessionKey, opts),
-  loadSessionEntryReadOnly: (sessionKey: string, opts?: { agentId?: string }) =>
-    loadSessionEntryMock(sessionKey, opts),
-  migrateAndPruneGatewaySessionStoreKey: ({ key }: { key: string }) => ({
-    primaryKey: key,
-    target: { storeKeys: [key] },
-  }),
-  resolveGatewaySessionStoreTarget: ({ key }: { key: string }) => ({
-    canonicalKey: key,
-    storePath: "/tmp/openclaw-sessions.json",
-  }),
   resolveSessionModelRef: () => ({ provider: "openai", model: "gpt-5.4" }),
 }));
 
@@ -349,8 +360,8 @@ describe("EmbeddedTuiBackend", () => {
     });
     listSessionsFromStoreAsyncMock.mockReset();
     listSessionsFromStoreAsyncMock.mockResolvedValue({ sessions: [] });
-    loadCombinedSessionStoreForGatewayMock.mockReset();
-    loadCombinedSessionStoreForGatewayMock.mockReturnValue({
+    loadCombinedSessionStoreMock.mockReset();
+    loadCombinedSessionStoreMock.mockReturnValue({
       storePath: "/tmp/openclaw-sessions.json",
       store: {},
     });
@@ -937,7 +948,7 @@ describe("EmbeddedTuiBackend", () => {
 
     await backend.listSessions({ agentId: "work", includeGlobal: true, search: "global" });
 
-    expect(loadCombinedSessionStoreForGatewayMock).toHaveBeenCalledWith(
+    expect(loadCombinedSessionStoreMock).toHaveBeenCalledWith(
       {},
       { agentId: "work", projection: "list" },
     );

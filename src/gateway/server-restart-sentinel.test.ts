@@ -9,7 +9,9 @@ type RestartSentinel = NonNullable<
   Awaited<ReturnType<typeof import("../infra/restart-sentinel.js").readRestartSentinel>>
 >;
 
-type LoadedSessionEntry = ReturnType<typeof import("./session-utils.js").loadSessionEntry>;
+type LoadedSessionEntry = ReturnType<
+  typeof import("../config/sessions/session-entry-loader.js").loadResolvedSessionEntry
+>;
 type RecordInboundSessionAndDispatchReplyParams = Parameters<
   typeof import("../channels/turn/kernel.js").dispatchAssembledChannelTurn
 >[0] & {
@@ -78,7 +80,7 @@ const mocks = vi.hoisted(() => {
         threadId: undefined,
       }),
     ),
-    loadSessionEntry: vi.fn(
+    loadResolvedSessionEntry: vi.fn(
       (): LoadedSessionEntry => ({
         cfg: {},
         entry: {
@@ -288,8 +290,8 @@ vi.mock("../config/sessions/thread-info.js", () => ({
   parseSessionThreadInfo: mocks.parseSessionThreadInfo,
 }));
 
-vi.mock("./session-utils.js", () => ({
-  loadSessionEntry: mocks.loadSessionEntry,
+vi.mock("../config/sessions/session-entry-loader.js", () => ({
+  loadResolvedSessionEntry: mocks.loadResolvedSessionEntry,
 }));
 
 vi.mock("../utils/delivery-context.shared.js", async (importOriginal) => ({
@@ -561,8 +563,8 @@ describe("scheduleRestartSentinelWake", () => {
     });
     mocks.parseSessionThreadInfo.mockReset();
     mocks.parseSessionThreadInfo.mockReturnValue({ baseSessionKey: null, threadId: undefined });
-    mocks.loadSessionEntry.mockReset();
-    mocks.loadSessionEntry.mockReturnValue({
+    mocks.loadResolvedSessionEntry.mockReset();
+    mocks.loadResolvedSessionEntry.mockReturnValue({
       cfg: {},
       entry: {
         sessionId: "agent:main:main",
@@ -1149,7 +1151,7 @@ describe("scheduleRestartSentinelWake", () => {
   });
 
   it("authorizes queued media replay for an active cron continuation", async () => {
-    mocks.loadSessionEntry.mockReturnValue({
+    mocks.loadResolvedSessionEntry.mockReturnValue({
       cfg: {},
       entry: {
         sessionId: "cron-run-session",
@@ -1194,7 +1196,7 @@ describe("scheduleRestartSentinelWake", () => {
 
   it("defers a generated-media turn still owned by agent recovery", async () => {
     mocks.dispatchGatewayMethodInProcess.mockResolvedValueOnce({ status: "in_flight" });
-    mocks.loadSessionEntry.mockReturnValue({
+    mocks.loadResolvedSessionEntry.mockReturnValue({
       cfg: {},
       entry: {
         sessionId: "agent:main:main",
@@ -1242,7 +1244,7 @@ describe("scheduleRestartSentinelWake", () => {
 
   it("fails closed when a terminal agent turn has no replayable result", async () => {
     mocks.dispatchGatewayMethodInProcess.mockResolvedValueOnce({ status: "ok" });
-    mocks.loadSessionEntry.mockReturnValue({
+    mocks.loadResolvedSessionEntry.mockReturnValue({
       cfg: {},
       entry: {
         sessionId: "agent:main:main",
@@ -1269,7 +1271,7 @@ describe("scheduleRestartSentinelWake", () => {
 
   it("retries a captured empty terminal result instead of dead-lettering it", async () => {
     mocks.dispatchGatewayMethodInProcess.mockResolvedValueOnce({ status: "ok" });
-    mocks.loadSessionEntry.mockReturnValue({
+    mocks.loadResolvedSessionEntry.mockReturnValue({
       cfg: {},
       entry: {
         sessionId: "agent:main:main",
@@ -1311,7 +1313,7 @@ describe("scheduleRestartSentinelWake", () => {
 
   it("uses durable terminal evidence to retry media omitted before queue acknowledgement", async () => {
     mocks.dispatchGatewayMethodInProcess.mockResolvedValueOnce({ status: "ok" });
-    mocks.loadSessionEntry.mockReturnValue({
+    mocks.loadResolvedSessionEntry.mockReturnValue({
       cfg: {},
       entry: {
         sessionId: "agent:main:main",
@@ -1371,7 +1373,7 @@ describe("scheduleRestartSentinelWake", () => {
 
   it("does not replay private terminal media as an owning-transcript delivery", async () => {
     mocks.dispatchGatewayMethodInProcess.mockResolvedValueOnce({ status: "ok" });
-    mocks.loadSessionEntry.mockReturnValue({
+    mocks.loadResolvedSessionEntry.mockReturnValue({
       cfg: {},
       entry: {
         sessionId: "agent:main:main",
@@ -2021,7 +2023,7 @@ describe("scheduleRestartSentinelWake", () => {
         },
       },
     } as Awaited<ReturnType<typeof mocks.readRestartSentinel>>);
-    mocks.loadSessionEntry.mockReturnValue({
+    mocks.loadResolvedSessionEntry.mockReturnValue({
       cfg: {},
       entry: {
         sessionId: "agent:main:main",
@@ -2098,7 +2100,9 @@ describe("scheduleRestartSentinelWake", () => {
       },
       "thread-42",
     );
-    mocks.loadSessionEntry.mockReturnValueOnce(activeEntry).mockReturnValue(replacementEntry);
+    mocks.loadResolvedSessionEntry
+      .mockReturnValueOnce(activeEntry)
+      .mockReturnValue(replacementEntry);
 
     await scheduleRestartSentinelWake({ deps: {} as never });
 
@@ -2135,7 +2139,7 @@ describe("scheduleRestartSentinelWake", () => {
       },
       "thread-42",
     );
-    mocks.loadSessionEntry.mockReturnValue({
+    mocks.loadResolvedSessionEntry.mockReturnValue({
       cfg: {},
       entry: {
         sessionId: "agent:main:main",
@@ -2184,7 +2188,7 @@ describe("scheduleRestartSentinelWake", () => {
         },
       },
     } as Awaited<ReturnType<typeof mocks.readRestartSentinel>>);
-    mocks.loadSessionEntry.mockReturnValue({
+    mocks.loadResolvedSessionEntry.mockReturnValue({
       cfg: {},
       entry: {
         sessionId: "agent:main:group",
@@ -2232,7 +2236,7 @@ describe("scheduleRestartSentinelWake", () => {
       baseSessionKey: "agent:main:telegram:group:-1003826723328",
       threadId: "13757",
     });
-    mocks.loadSessionEntry.mockReturnValue({
+    mocks.loadResolvedSessionEntry.mockReturnValue({
       cfg: {},
       entry: {
         sessionId: "agent:main:telegram:group:-1003826723328:topic:13757",
@@ -2790,7 +2794,7 @@ describe("scheduleRestartSentinelWake", () => {
       threadId: undefined,
     });
     mocks.deliveryContextFromSession.mockReturnValue(undefined);
-    mocks.loadSessionEntry.mockReturnValue({
+    mocks.loadResolvedSessionEntry.mockReturnValue({
       cfg: {},
       entry: { sessionId: "agent:main:matrix:channel:!lowercased:example.org", updatedAt: 0 },
       store: {},
@@ -2859,7 +2863,7 @@ describe("scheduleRestartSentinelWake", () => {
       baseSessionKey: "agent:main:matrix:channel:!lowercased:example.org",
       threadId: "$thread-event",
     });
-    mocks.loadSessionEntry
+    mocks.loadResolvedSessionEntry
       .mockReturnValueOnce({
         cfg: {},
         entry: {

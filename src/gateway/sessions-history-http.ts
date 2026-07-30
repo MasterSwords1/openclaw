@@ -9,6 +9,8 @@ import {
 } from "@openclaw/normalization-core/string-coerce";
 import { getRuntimeConfig } from "../config/io.js";
 import { isSessionTranscriptProjectionUnavailableError } from "../config/sessions/session-accessor.js";
+import { resolveFreshestSessionEntryFromStoreKeys } from "../config/sessions/session-entry-loader.js";
+import { resolveSessionStoreTargetWithStore } from "../config/sessions/session-store-target.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import { normalizeAgentId } from "../routing/session-key.js";
 import { onInternalSessionTranscriptUpdate } from "../sessions/transcript-events.js";
@@ -38,11 +40,7 @@ import {
   readRecentSessionMessagesWithStatsAsync,
   readSessionMessagesWithSourceAsync,
 } from "./session-transcript-readers.js";
-import {
-  resolveFreshestSessionEntryFromStoreKeys,
-  resolveGatewaySessionStoreTargetWithStore,
-  resolveSessionTranscriptCandidates,
-} from "./session-utils.js";
+import { resolveSessionTranscriptCandidates } from "./session-utils.js";
 
 const log = createSubsystemLogger("gateway/sessions-history-sse");
 
@@ -134,7 +132,7 @@ export async function handleSessionHistoryHttpRequest(
   }
   const { cfg } = authResult;
 
-  const target = resolveGatewaySessionStoreTargetWithStore({ cfg, key: sessionKey });
+  const target = resolveSessionStoreTargetWithStore({ cfg, key: sessionKey });
   const entry = resolveFreshestSessionEntryFromStoreKeys(target.store, target.storeKeys);
   if (!entry?.sessionId) {
     sendJson(res, 404, {

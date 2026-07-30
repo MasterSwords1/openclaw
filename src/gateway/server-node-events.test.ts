@@ -4,6 +4,7 @@ import { expectDefined } from "@openclaw/normalization-core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PROTOCOL_VERSION } from "../../packages/gateway-protocol/src/index.js";
 import type { OpenClawConfig } from "../config/config.js";
+import type { loadResolvedSessionEntry as loadSessionEntryType } from "../config/sessions/session-entry-loader.js";
 import type { SessionEntry } from "../config/sessions/types.js";
 import {
   prepareGatewaySuspend,
@@ -18,7 +19,6 @@ import {
 import { createDeferred } from "../test-utils/deferred.js";
 import { NodeRegistry } from "./node-registry.js";
 import type { GatewayWsClient } from "./server/ws-types.js";
-import type { loadSessionEntry as loadSessionEntryType } from "./session-utils.js";
 
 const buildSessionLookup = (
   sessionKey: string,
@@ -98,7 +98,7 @@ const runtimeMocks = vi.hoisted(() => ({
   formatForLog: vi.fn((err: unknown) => (err instanceof Error ? err.message : String(err))),
   getRuntimeConfig: vi.fn(() => ({ session: { mainKey: "agent:main:main" } })),
   loadOrCreateProcessDeviceIdentity: loadOrCreateProcessDeviceIdentityMock,
-  loadSessionEntry: vi.fn((sessionKey: string) => buildSessionLookup(sessionKey)),
+  loadResolvedSessionEntry: vi.fn((sessionKey: string) => buildSessionLookup(sessionKey)),
   canonicalizeSessionEntryAliases: vi.fn(),
   normalizeChannelId: normalizeChannelIdMock,
   normalizeMainKey: vi.fn((key?: string | null) => key?.trim() || "agent:main:main"),
@@ -168,7 +168,7 @@ const requestHeartbeatMock = runtimeMocks.requestHeartbeat;
 const loadConfigMock = runtimeMocks.getRuntimeConfig;
 const agentCommandMock = runtimeMocks.agentCommandFromIngress;
 const canonicalizeSessionEntryAliasesMock = runtimeMocks.canonicalizeSessionEntryAliases;
-const loadSessionEntryMock = runtimeMocks.loadSessionEntry;
+const loadSessionEntryMock = runtimeMocks.loadResolvedSessionEntry;
 const registerApnsRegistrationVi = runtimeMocks.registerApnsRegistration;
 const normalizeChannelIdVi = runtimeMocks.normalizeChannelId;
 const sendDurableMessageBatchMock = runtimeMocks.sendDurableMessageBatch;

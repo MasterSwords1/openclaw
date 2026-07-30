@@ -42,7 +42,14 @@ import {
   updateSessionGoalObjective,
   updateSessionGoalStatus,
 } from "../config/sessions.js";
+import { loadCombinedSessionStore } from "../config/sessions/combined-store.js";
 import { applySessionPatchProjection } from "../config/sessions/session-accessor.js";
+import {
+  loadResolvedSessionEntry,
+  loadResolvedSessionEntryReadOnly,
+} from "../config/sessions/session-entry-loader.js";
+import { migrateAndPruneSessionStoreKey } from "../config/sessions/session-store-key-migration.js";
+import { resolveSessionStoreTarget } from "../config/sessions/session-store-target.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { isChatStopCommandText } from "../gateway/chat-abort.js";
 import {
@@ -76,11 +83,6 @@ import {
   getSessionDefaults,
   listAgentsForGateway,
   listSessionsFromStoreAsync,
-  loadCombinedSessionStoreForGateway,
-  loadSessionEntry,
-  loadSessionEntryReadOnly,
-  migrateAndPruneGatewaySessionStoreKey,
-  resolveGatewaySessionStoreTarget,
   resolveSessionModelRef,
 } from "../gateway/session-utils.js";
 import { projectSessionsPatchEntry } from "../gateway/sessions-patch.js";
@@ -471,7 +473,7 @@ export class EmbeddedTuiBackend implements TuiBackend {
     let pendingQueue: LocalRunState["pendingQueue"];
     if (queuedAfter) {
       const loadOptions = opts.agentId ? { agentId: opts.agentId } : undefined;
-      const { cfg, canonicalKey, entry } = loadSessionEntry(opts.sessionKey, loadOptions);
+      const { cfg, canonicalKey, entry } = loadResolvedSessionEntry(opts.sessionKey, loadOptions);
       let queueSettings = resolveQueueSettings({
         cfg,
         channel: INTERNAL_MESSAGE_CHANNEL,
@@ -607,7 +609,7 @@ export class EmbeddedTuiBackend implements TuiBackend {
   async loadHistory(opts: { sessionKey: string; agentId?: string; limit?: number }) {
     await this.ready;
     const loadOptions = opts.agentId ? { agentId: opts.agentId } : undefined;
-    const { cfg, storePath, store, entry, canonicalKey } = loadSessionEntryReadOnly(
+    const { cfg, storePath, store, entry, canonicalKey } = loadResolvedSessionEntryReadOnly(
       opts.sessionKey,
       { ...loadOptions, includeStoreChildEntries: true },
     );
@@ -721,7 +723,7 @@ export class EmbeddedTuiBackend implements TuiBackend {
   async listSessions(opts?: Parameters<TuiBackend["listSessions"]>[0]): Promise<TuiSessionList> {
     await this.ready;
     const cfg = getRuntimeConfig();
-    const { storePath, store } = loadCombinedSessionStoreForGateway(cfg, {
+    const { storePath, store } = loadCombinedSessionStore(cfg, {
       agentId: opts?.agentId,
       projection: "list",
     });
@@ -742,7 +744,7 @@ export class EmbeddedTuiBackend implements TuiBackend {
   ): Promise<SessionsPatchResult> {
     await this.ready;
     const cfg = getRuntimeConfig();
-    const target = resolveGatewaySessionStoreTarget({
+    const target = resolveSessionStoreTarget({
       cfg,
       key: opts.key,
       agentId: opts.agentId,
@@ -753,7 +755,7 @@ export class EmbeddedTuiBackend implements TuiBackend {
         const store = Object.fromEntries(
           entries.map(({ sessionKey, entry }) => [sessionKey, entry]),
         );
-        const { target: migratedTarget, primaryKey } = migrateAndPruneGatewaySessionStoreKey({
+        const { target: migratedTarget, primaryKey } = migrateAndPruneSessionStoreKey({
           cfg,
           key: opts.key,
           store,
@@ -796,7 +798,7 @@ export class EmbeddedTuiBackend implements TuiBackend {
 
   async resetSession(key: string, reason?: "new" | "reset", opts?: { agentId?: string }) {
     await this.ready;
-    if (loadSessionEntryReadOnly(key, opts).entry?.incognito === true) {
+    if (loadResolvedSessionEntryReadOnly(key, opts).entry?.incognito === true) {
       throw new Error("Incognito sessions cannot reset in place.");
     }
     const result = await performGatewaySessionReset({
@@ -845,7 +847,7 @@ export class EmbeddedTuiBackend implements TuiBackend {
     signal: AbortSignal;
   }) {
     const loadOptions = params.agentId ? { agentId: params.agentId } : undefined;
-    const { cfg, canonicalKey, storePath, store, entry } = loadSessionEntry(
+    const { cfg, canonicalKey, storePath, store, entry } = loadResolvedSessionEntry(
       params.sessionKey,
       loadOptions,
     );
@@ -927,7 +929,10 @@ export class EmbeddedTuiBackend implements TuiBackend {
   async runGoalCommand(opts: Parameters<NonNullable<TuiBackend["runGoalCommand"]>>[0]) {
     await this.ready;
     const loadOptions = opts.agentId ? { agentId: opts.agentId } : undefined;
-    const { canonicalKey, storePath, entry } = loadSessionEntry(opts.sessionKey, loadOptions);
+    const { canonicalKey, storePath, entry } = loadResolvedSessionEntry(
+      opts.sessionKey,
+      loadOptions,
+    );
     const sessionKey = canonicalKey ?? opts.sessionKey;
     const parsed = parseGoalCommand(opts.command.trim());
     if (!parsed) {
@@ -1532,7 +1537,7 @@ export class EmbeddedTuiBackend implements TuiBackend {
         return;
       }
       const loadOptions = params.agentId ? { agentId: params.agentId } : undefined;
-      const { canonicalKey, entry } = loadSessionEntry(params.sessionKey, loadOptions);
+      const { canonicalKey, entry } = loadResolvedSessionEntry(params.sessionKey, loadOptions);
       const result = await agentCommandFromIngress(
         {
           // The per-message timestamp prefix is applied at the single LLM

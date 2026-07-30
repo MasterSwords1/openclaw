@@ -14,7 +14,18 @@ import {
   listSessionEntriesReadOnly,
   replaceSessionEntry,
 } from "../config/sessions/session-accessor.js";
+import {
+  loadResolvedSessionEntry,
+  loadResolvedSessionEntryReadOnly,
+} from "../config/sessions/session-entry-loader.js";
 import { resolveSqliteTargetFromSessionStorePath } from "../config/sessions/session-sqlite-target.js";
+import { migrateAndPruneSessionStoreKey } from "../config/sessions/session-store-key-migration.js";
+import { canonicalizeSpawnedByForAgent } from "../config/sessions/session-store-key.js";
+import { resolveSessionStoreKey } from "../config/sessions/session-store-key.js";
+import {
+  resolveSessionStoreTarget,
+  resolveSessionStoreTargetWithStore,
+} from "../config/sessions/session-store-target.js";
 import type { CronJob } from "../cron/types.js";
 import { createEmptyPluginRegistry } from "../plugins/registry-empty.js";
 import { resetPluginRuntimeStateForTest, setActivePluginRegistry } from "../plugins/runtime.js";
@@ -28,23 +39,16 @@ import { buildGatewaySessionEventFields } from "./session-event-payload.js";
 import { capArrayByJsonBytes } from "./session-transcript-readers.js";
 import { buildSingleRowStoreChildSessionsByKey } from "./session-utils-projection.js";
 import {
-  canonicalizeSpawnedByForAgent,
   buildGatewaySessionRow,
   deriveSessionTitle,
   getSessionDefaults,
   listAgentsForGateway,
   listSessionsFromStore,
   listSessionsFromStoreAsync,
-  loadSessionEntry,
-  loadSessionEntryReadOnly,
-  migrateAndPruneGatewaySessionStoreKey,
   resolveDeletedAgentIdFromSessionKey,
   resolveGatewayModelSupportsImages,
-  resolveGatewaySessionStoreTarget,
-  resolveGatewaySessionStoreTargetWithStore,
   resolveSessionDisplayModelIdentityRef,
   resolveSessionModelRef,
-  resolveSessionStoreKey,
 } from "./session-utils.js";
 
 const providerArtifactMocks = vi.hoisted(() => ({
@@ -1740,12 +1744,12 @@ describe("gateway session utils", () => {
       agents: { list: [{ id: "ops", default: true }] },
     } as OpenClawConfig;
     expect(resolveSessionStoreKey({ cfg, sessionKey: "main" })).toBe("global");
-    const target = resolveGatewaySessionStoreTarget({ cfg, key: "main" });
+    const target = resolveSessionStoreTarget({ cfg, key: "main" });
     expect(target.canonicalKey).toBe("global");
     expect(target.agentId).toBe("ops");
   });
 
-  test("resolveGatewaySessionStoreTarget uses canonical key for main alias", () => {
+  test("resolveSessionStoreTarget uses canonical key for main alias", () => {
     const storeTemplate = path.join(
       os.tmpdir(),
       "openclaw-session-utils",
@@ -1756,14 +1760,14 @@ describe("gateway session utils", () => {
       session: { mainKey: "main", store: storeTemplate },
       agents: { list: [{ id: "ops", default: true }] },
     } as OpenClawConfig;
-    const target = resolveGatewaySessionStoreTarget({ cfg, key: "main" });
+    const target = resolveSessionStoreTarget({ cfg, key: "main" });
     expect(target.canonicalKey).toBe("agent:ops:main");
     expect(target.storeKeys).toContain("agent:ops:main");
     expect(target.storeKeys).toContain("main");
     expect(target.storePath).toBe(path.resolve(storeTemplate.replace("{agentId}", "ops")));
   });
 
-  test("resolveGatewaySessionStoreTarget resolves a customized main alias to its canonical key", () => {
+  test("resolveSessionStoreTarget resolves a customized main alias to its canonical key", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "session-utils-alias-"));
     const storePath = path.join(dir, "sessions.json");
     fs.writeFileSync(
@@ -1775,12 +1779,12 @@ describe("gateway session utils", () => {
       session: { mainKey: "work", store: storePath },
       agents: { list: [{ id: "ops", default: true }] },
     } as OpenClawConfig;
-    const target = resolveGatewaySessionStoreTarget({ cfg, key: "agent:ops:main" });
+    const target = resolveSessionStoreTarget({ cfg, key: "agent:ops:main" });
     expect(target.canonicalKey).toBe("agent:ops:work");
     expect(target.storeKeys).toContain("agent:ops:main");
   });
 
-  test("resolveGatewaySessionStoreTarget keeps a fixed configured store authoritative", async () => {
+  test("resolveSessionStoreTarget keeps a fixed configured store authoritative", async () => {
     await withStateDirEnv("session-utils-fixed-store-", async ({ stateDir }) => {
       const fixedStorePath = path.join(stateDir, "configured", "sessions.json");
       const staleStorePath = path.join(stateDir, "agents", "ops", "sessions", "sessions.json");
@@ -1795,7 +1799,7 @@ describe("gateway session utils", () => {
         agents: { list: [{ id: "ops", default: true }] },
       } as OpenClawConfig;
 
-      const target = resolveGatewaySessionStoreTargetWithStore({
+      const target = resolveSessionStoreTargetWithStore({
         cfg,
         key: "agent:ops:main",
       });
@@ -1805,7 +1809,7 @@ describe("gateway session utils", () => {
     });
   });
 
-  test("resolveGatewaySessionStoreTarget preserves discovered store paths for non-round-tripping agent dirs", async () => {
+  test("resolveSessionStoreTarget preserves discovered store paths for non-round-tripping agent dirs", async () => {
     await withStateDirEnv("session-utils-discovered-store-", async ({ stateDir }) => {
       const retiredSessionsDir = path.join(stateDir, "agents", "Retired Agent", "sessions");
       fs.mkdirSync(retiredSessionsDir, { recursive: true });
@@ -1822,13 +1826,13 @@ describe("gateway session utils", () => {
         agents: { list: [{ id: "main", default: true }] },
       } as OpenClawConfig;
 
-      const target = resolveGatewaySessionStoreTarget({ cfg, key: "agent:retired-agent:main" });
+      const target = resolveSessionStoreTarget({ cfg, key: "agent:retired-agent:main" });
 
       expect(target.storePath).toBe(path.resolve(retiredStorePath));
     });
   });
 
-  test("resolveGatewaySessionStoreTarget keeps discovered contents paired with their path", async () => {
+  test("resolveSessionStoreTarget keeps discovered contents paired with their path", async () => {
     await withStateDirEnv("session-utils-discovered-contents-", async ({ stateDir }) => {
       const retiredSessionsDir = path.join(stateDir, "agents", "Retired Agent", "sessions");
       fs.mkdirSync(retiredSessionsDir, { recursive: true });
@@ -1847,7 +1851,7 @@ describe("gateway session utils", () => {
         "agent:retired-agent:main": { sessionId: "sess-fallback", updatedAt: 99 },
       };
 
-      const target = resolveGatewaySessionStoreTargetWithStore({
+      const target = resolveSessionStoreTargetWithStore({
         cfg,
         key: "agent:retired-agent:main",
         store: fallbackStore,
@@ -1859,7 +1863,7 @@ describe("gateway session utils", () => {
     });
   });
 
-  test("resolveGatewaySessionStoreTarget ignores a retired legacy store without provisioning SQLite", async () => {
+  test("resolveSessionStoreTarget ignores a retired legacy store without provisioning SQLite", async () => {
     await withStateDirEnv("session-utils-retired-legacy-", async ({ stateDir }) => {
       const retiredSessionsDir = path.join(stateDir, "agents", "retired", "sessions");
       const retiredStorePath = path.join(retiredSessionsDir, "sessions.json");
@@ -1879,7 +1883,7 @@ describe("gateway session utils", () => {
         agents: { list: [{ id: "main", default: true }] },
       } as OpenClawConfig;
 
-      const target = resolveGatewaySessionStoreTargetWithStore({
+      const target = resolveSessionStoreTargetWithStore({
         cfg,
         key: "agent:retired:main",
       });
@@ -1895,7 +1899,7 @@ describe("gateway session utils", () => {
     });
   });
 
-  test("loadSessionEntry reads discovered stores from non-round-tripping agent dirs", async () => {
+  test("loadResolvedSessionEntry reads discovered stores from non-round-tripping agent dirs", async () => {
     resetConfigRuntimeState();
     try {
       await withStateDirEnv("session-utils-load-entry-", async ({ stateDir }) => {
@@ -1914,7 +1918,7 @@ describe("gateway session utils", () => {
         } as OpenClawConfig;
         setRuntimeConfigSnapshot(cfg, cfg);
 
-        const loaded = loadSessionEntry("agent:retired-agent:main");
+        const loaded = loadResolvedSessionEntry("agent:retired-agent:main");
 
         expect(loaded.storePath).toBe(path.resolve(retiredStorePath));
         expect(loaded.entry?.sessionId).toBe("sess-retired");
@@ -1924,7 +1928,7 @@ describe("gateway session utils", () => {
     }
   });
 
-  test("loadSessionEntry can borrow the cached store for read-only hot paths", async () => {
+  test("loadResolvedSessionEntry can borrow the cached store for read-only hot paths", async () => {
     resetConfigRuntimeState();
     try {
       await withStateDirEnv("session-utils-load-entry-borrowed-", async ({ stateDir }) => {
@@ -1943,7 +1947,7 @@ describe("gateway session utils", () => {
         } as OpenClawConfig;
         setRuntimeConfigSnapshot(cfg, cfg);
 
-        const loaded = loadSessionEntry("agent:main:main", { clone: false });
+        const loaded = loadResolvedSessionEntry("agent:main:main", { clone: false });
 
         expect(loaded.entry).toEqual({
           sessionId: "sess-main",
@@ -1956,7 +1960,7 @@ describe("gateway session utils", () => {
     }
   });
 
-  test("loadSessionEntryReadOnly does not materialize a missing configured agent", async () => {
+  test("loadResolvedSessionEntryReadOnly does not materialize a missing configured agent", async () => {
     resetConfigRuntimeState();
     try {
       await withStateDirEnv("session-utils-load-entry-read-only-", async ({ stateDir }) => {
@@ -1969,7 +1973,7 @@ describe("gateway session utils", () => {
         } as OpenClawConfig;
         setRuntimeConfigSnapshot(cfg, cfg);
 
-        const loaded = loadSessionEntryReadOnly("agent:missing:main");
+        const loaded = loadResolvedSessionEntryReadOnly("agent:missing:main");
 
         expect(loaded.entry).toBeUndefined();
         expect(fs.existsSync(path.join(stateDir, "agents", "missing"))).toBe(false);
@@ -1979,7 +1983,7 @@ describe("gateway session utils", () => {
     }
   });
 
-  test("loadSessionEntryReadOnly clones only the selected row and direct children", async () => {
+  test("loadResolvedSessionEntryReadOnly clones only the selected row and direct children", async () => {
     resetConfigRuntimeState();
     try {
       await withStateDirEnv("session-utils-exact-read-only-", async ({ stateDir }) => {
@@ -2007,7 +2011,7 @@ describe("gateway session utils", () => {
         ).toContain(childKey);
         const cloneSpy = vi.spyOn(globalThis, "structuredClone");
         try {
-          expect(loadSessionEntryReadOnly(childKey, { clone: false }).entry).toMatchObject({
+          expect(loadResolvedSessionEntryReadOnly(childKey, { clone: false }).entry).toMatchObject({
             sessionId: "child",
             spawnedBy: parentKey,
           });
@@ -2019,7 +2023,7 @@ describe("gateway session utils", () => {
               storePath,
             }).map((item) => item.sessionKey),
           ).toEqual([childKey]);
-          const loaded = loadSessionEntryReadOnly("main", {
+          const loaded = loadResolvedSessionEntryReadOnly("main", {
             includeStoreChildEntries: true,
           });
 
@@ -2068,7 +2072,7 @@ describe("gateway session utils", () => {
     expect(spawnedByReads).toBe(1);
   });
 
-  test("loadSessionEntryReadOnly keeps children linked through a main alias", async () => {
+  test("loadResolvedSessionEntryReadOnly keeps children linked through a main alias", async () => {
     resetConfigRuntimeState();
     try {
       await withStateDirEnv("session-utils-exact-alias-children-", async ({ stateDir }) => {
@@ -2090,7 +2094,7 @@ describe("gateway session utils", () => {
         });
         setRuntimeConfigSnapshot(cfg, cfg);
 
-        const loaded = loadSessionEntryReadOnly("main", {
+        const loaded = loadResolvedSessionEntryReadOnly("main", {
           clone: false,
           includeStoreChildEntries: true,
         });
@@ -2104,7 +2108,7 @@ describe("gateway session utils", () => {
     }
   });
 
-  test("resolveGatewaySessionStoreTargetWithStore returns the caller-provided store", async () => {
+  test("resolveSessionStoreTargetWithStore returns the caller-provided store", async () => {
     resetConfigRuntimeState();
     try {
       await withStateDirEnv("session-utils-target-store-", async ({ stateDir }) => {
@@ -2119,7 +2123,7 @@ describe("gateway session utils", () => {
           "agent:main:main": { sessionId: "sess-main", updatedAt: 7 },
         };
 
-        const target = resolveGatewaySessionStoreTargetWithStore({
+        const target = resolveSessionStoreTargetWithStore({
           cfg,
           key: "agent:main:main",
           store,
@@ -2133,7 +2137,7 @@ describe("gateway session utils", () => {
     }
   });
 
-  test("loadSessionEntry preserves a listed deleted main session over the live default main", async () => {
+  test("loadResolvedSessionEntry preserves a listed deleted main session over the live default main", async () => {
     resetConfigRuntimeState();
     try {
       await withStateDirEnv("session-utils-load-deleted-main-entry-", async ({ stateDir }) => {
@@ -2162,8 +2166,8 @@ describe("gateway session utils", () => {
         } as OpenClawConfig;
         setRuntimeConfigSnapshot(cfg, cfg);
 
-        const target = resolveGatewaySessionStoreTarget({ cfg, key: "agent:main:main" });
-        const loaded = loadSessionEntry("agent:main:main");
+        const target = resolveSessionStoreTarget({ cfg, key: "agent:main:main" });
+        const loaded = loadResolvedSessionEntry("agent:main:main");
 
         expect(target.canonicalKey).toBe("agent:main:main");
         expect(target.agentId).toBe("main");
@@ -2177,7 +2181,7 @@ describe("gateway session utils", () => {
     }
   });
 
-  test("loadSessionEntry resolves deleted main aliases when mainKey is customized", async () => {
+  test("loadResolvedSessionEntry resolves deleted main aliases when mainKey is customized", async () => {
     resetConfigRuntimeState();
     try {
       await withStateDirEnv("session-utils-load-deleted-main-alias-", async ({ stateDir }) => {
@@ -2205,7 +2209,7 @@ describe("gateway session utils", () => {
         } as OpenClawConfig;
         setRuntimeConfigSnapshot(cfg, cfg);
 
-        const loaded = loadSessionEntry("agent:main:work");
+        const loaded = loadResolvedSessionEntry("agent:main:work");
 
         expect(loaded.canonicalKey).toBe("agent:main:work");
         expect(loaded.storePath).toBe(path.resolve(deletedStorePath));
@@ -2216,7 +2220,7 @@ describe("gateway session utils", () => {
     }
   });
 
-  test("loadSessionEntry prefers the freshest duplicate row across discovered stores", async () => {
+  test("loadResolvedSessionEntry prefers the freshest duplicate row across discovered stores", async () => {
     resetConfigRuntimeState();
     try {
       await withStateDirEnv("session-utils-load-entry-cross-store-", async ({ stateDir }) => {
@@ -2241,7 +2245,7 @@ describe("gateway session utils", () => {
         } as OpenClawConfig;
         setRuntimeConfigSnapshot(cfg, cfg);
 
-        const loaded = loadSessionEntry("agent:main:main");
+        const loaded = loadResolvedSessionEntry("agent:main:main");
 
         expect(loaded.entry?.sessionId).toBe("sess-canonical-fresh");
       });
@@ -2250,7 +2254,7 @@ describe("gateway session utils", () => {
     }
   });
 
-  test("migrateAndPruneGatewaySessionStoreKey promotes the freshest alias row to canonical", () => {
+  test("migrateAndPruneSessionStoreKey promotes the freshest alias row to canonical", () => {
     const cfg = {
       session: { mainKey: "work" },
       agents: { list: [{ id: "ops", default: true }] },
@@ -2266,7 +2270,7 @@ describe("gateway session utils", () => {
       } as SessionEntry,
     };
 
-    const result = migrateAndPruneGatewaySessionStoreKey({
+    const result = migrateAndPruneSessionStoreKey({
       cfg,
       key: "agent:ops:main",
       store,

@@ -2,15 +2,15 @@ import { resolveDefaultAgentId } from "../agents/agent-scope.js";
 import { buildLatestSubagentRunReadIndex } from "../agents/subagent-registry-read.js";
 import { getRuntimeConfig } from "../config/io.js";
 import { loadSessionEntryReadOnly } from "../config/sessions/session-accessor.js";
-import type { SessionEntry } from "../config/sessions/types.js";
-import type { OpenClawConfig } from "../config/types.openclaw.js";
-import { normalizeAgentId, parseAgentSessionKey } from "../routing/session-key.js";
-import { OPERATOR_APPROVAL_MAX_AUDIENCE_SESSION_KEYS } from "./operator-approval-store.js";
 import {
   canonicalizeSpawnedByForAgent,
   resolveSessionStoreAgentId,
   resolveSessionStoreKey,
-} from "./session-store-key.js";
+} from "../config/sessions/session-store-key.js";
+import type { SessionEntry } from "../config/sessions/types.js";
+import type { OpenClawConfig } from "../config/types.openclaw.js";
+import { normalizeAgentId, parseAgentSessionKey } from "../routing/session-key.js";
+import { OPERATOR_APPROVAL_MAX_AUDIENCE_SESSION_KEYS } from "./operator-approval-store.js";
 
 // The walker cap must never exceed the store cap: insertOperatorApproval
 // throws past OPERATOR_APPROVAL_MAX_AUDIENCE_SESSION_KEYS, which would fail

@@ -1,12 +1,7 @@
-// Builds the gateway-visible combined session store across agent-specific stores.
-// Gateway callers need canonical per-agent keys even when stores are split by `{agentId}`.
+// Builds the combined session store across agent-specific stores.
 
 import { expectDefined } from "@openclaw/normalization-core";
 import { listAgentEntries, resolveDefaultAgentId } from "../../agents/agent-scope.js";
-import {
-  canonicalizeSpawnedByForAgent,
-  resolveStoredSessionKeyForAgentStore,
-} from "../../gateway/session-store-key.js";
 import {
   isIncognitoSessionKey,
   LEGACY_IMPLICIT_AGENT_ID,
@@ -19,6 +14,10 @@ import { resolveStorePath } from "./paths.js";
 import { listSessionEntries, listSessionEntriesReadOnly } from "./session-accessor.js";
 import type { SessionEntryListScope } from "./session-accessor.types.js";
 import {
+  canonicalizeSpawnedByForAgent,
+  resolveStoredSessionKeyForAgentStore,
+} from "./session-store-key.js";
+import {
   dedupeSessionStoreTargetsBySqliteTarget,
   listConfiguredSessionStoreAgentIds,
   listKnownSessionStoreAgentIds,
@@ -28,9 +27,9 @@ import {
 } from "./targets.js";
 import type { SessionEntry } from "./types.js";
 
-type GatewaySessionEntryProjection = NonNullable<SessionEntryListScope["projection"]>;
+type SessionEntryProjection = NonNullable<SessionEntryListScope["projection"]>;
 
-// Template-backed stores need per-agent scans before they can be merged for Gateway views.
+// Template-backed stores need per-agent scans before they can be merged.
 function isStorePathTemplate(store?: string): boolean {
   return typeof store === "string" && store.includes("{agentId}");
 }
@@ -43,10 +42,10 @@ function resolveCombinedStorePath(paths: string[], storeConfig?: string): string
       : "(multiple)";
 }
 
-function loadGatewayStoreEntries(params: {
+function loadStoreEntries(params: {
   agentId: string;
   includeOpenDatabases?: boolean;
-  projection: GatewaySessionEntryProjection;
+  projection: SessionEntryProjection;
   storePath: string;
 }) {
   const listEntries = params.includeOpenDatabases ? listSessionEntries : listSessionEntriesReadOnly;
@@ -104,7 +103,7 @@ function mergeOpenIncognitoStores(params: {
   cfg: OpenClawConfig;
   combined: Record<string, SessionEntry>;
   agentId?: string;
-  projection: GatewaySessionEntryProjection;
+  projection: SessionEntryProjection;
 }): string[] {
   const storePaths: string[] = [];
   for (const target of listOpenIncognitoAgentDatabases()) {
@@ -114,7 +113,7 @@ function mergeOpenIncognitoStores(params: {
     if (params.agentId && target.agentId !== params.agentId) {
       continue;
     }
-    const store = loadGatewayStoreEntries({
+    const store = loadStoreEntries({
       agentId: target.agentId,
       includeOpenDatabases: true,
       projection: params.projection,
@@ -141,8 +140,8 @@ function mergeOpenIncognitoStores(params: {
   return storePaths;
 }
 
-/** Loads and canonicalizes session entries for gateway views across one or more agent stores. */
-export function loadCombinedSessionStoreForGateway(
+/** Loads and canonicalizes session entries across one or more agent stores. */
+export function loadCombinedSessionStore(
   cfg: OpenClawConfig,
   opts: {
     agentId?: string;
@@ -198,7 +197,7 @@ export function loadCombinedSessionStoreForGateway(
       },
     );
     for (const { agentId, storePath } of ownerTargets) {
-      const store = loadGatewayStoreEntries({ agentId, projection, storePath });
+      const store = loadStoreEntries({ agentId, projection, storePath });
       for (const { sessionKey: key, entry } of store) {
         const canonicalKey = resolveStoredSessionKeyForAgentStore({
           cfg,
@@ -249,7 +248,7 @@ export function loadCombinedSessionStoreForGateway(
   for (const target of targets) {
     const agentId = target.agentId;
     const storePath = target.storePath;
-    const store = loadGatewayStoreEntries({ agentId, projection, storePath });
+    const store = loadStoreEntries({ agentId, projection, storePath });
     for (const { sessionKey: key, entry } of store) {
       const canonicalKey = resolveStoredSessionKeyForAgentStore({
         cfg,

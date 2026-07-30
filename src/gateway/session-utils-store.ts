@@ -22,7 +22,6 @@ import { resolveDefaultModelForAgent } from "../agents/model-selection.js";
 import { resolveEffectiveAgentRuntime } from "../agents/thinking-runtime.js";
 import { insideGitCheckout } from "../agents/worktrees/git.js";
 import { listThinkingLevelOptions } from "../auto-reply/thinking.js";
-import { getRuntimeConfig } from "../config/io.js";
 import { resolveAgentModelFallbackValues } from "../config/model-input.js";
 import {
   resolveAgentMainSessionKey,
@@ -34,10 +33,6 @@ import { normalizeAgentId, parseAgentSessionKey } from "../routing/session-key.j
 import { isAcpSessionKey } from "../sessions/session-key-utils.js";
 import { listGatewayAgentsBasic } from "./agent-list.js";
 import { resolveGatewaySessionThinkingDefault } from "./session-utils-model.js";
-import {
-  resolveGatewaySessionStoreTarget,
-  resolveGatewaySessionStoreTargetWithStore,
-} from "./session-utils-store-lookup.js";
 import type { GatewayAgentRow } from "./session-utils.types.js";
 
 /**
@@ -118,137 +113,6 @@ function readAcpMetaForDeletedAgentCheck(params: {
     sessionKey: params.sessionKey,
     entry: params.entry ?? undefined,
   });
-}
-
-function loadSessionEntryWithMode(
-  sessionKey: string,
-  opts: { agentId?: string; clone?: boolean; includeStoreChildEntries?: boolean } | undefined,
-  readOnly: boolean,
-) {
-  const cfg = getRuntimeConfig();
-  const key = normalizeOptionalString(sessionKey) ?? "";
-  const target = resolveGatewaySessionStoreTargetWithStore({
-    cfg,
-    key,
-    ...(opts?.clone === false ? { clone: false } : {}),
-    ...(opts?.agentId ? { agentId: opts.agentId } : {}),
-    ...(readOnly
-      ? {
-          exactRead: true,
-          readOnly: true,
-          ...(opts?.includeStoreChildEntries ? { includeStoreChildEntries: true } : {}),
-        }
-      : {}),
-  });
-  const storePath = target.storePath;
-  const store = target.store;
-  const freshestMatch = resolveFreshestSessionStoreMatchFromStoreKeys(store, target.storeKeys);
-  const legacyKey = freshestMatch?.key !== target.canonicalKey ? freshestMatch?.key : undefined;
-  const entry =
-    readOnly && opts?.clone !== false && freshestMatch?.entry
-      ? structuredClone(freshestMatch.entry)
-      : freshestMatch?.entry;
-  return {
-    cfg,
-    storePath,
-    store,
-    entry,
-    canonicalKey: target.canonicalKey,
-    storeKeys: target.storeKeys,
-    legacyKey,
-  };
-}
-
-export function loadSessionEntry(sessionKey: string, opts?: { agentId?: string; clone?: boolean }) {
-  return loadSessionEntryWithMode(sessionKey, opts, false);
-}
-
-export function loadSessionEntryReadOnly(
-  sessionKey: string,
-  opts?: { agentId?: string; clone?: boolean; includeStoreChildEntries?: boolean },
-) {
-  return loadSessionEntryWithMode(sessionKey, opts, true);
-}
-
-/** Returns both the freshest entry and the exact persisted key that owns it. */
-export function resolveFreshestSessionStoreMatchFromStoreKeys(
-  store: Record<string, SessionEntry>,
-  storeKeys: string[],
-): { key: string; entry: SessionEntry } | undefined {
-  let freshest: { key: string; entry: SessionEntry } | undefined;
-  for (const key of storeKeys) {
-    const entry = store[key];
-    if (!entry) {
-      continue;
-    }
-    const match = { key, entry };
-    if (!freshest || (match.entry.updatedAt ?? 0) > (freshest.entry.updatedAt ?? 0)) {
-      freshest = match;
-    }
-  }
-  return freshest;
-}
-
-export function resolveFreshestSessionEntryFromStoreKeys(
-  store: Record<string, SessionEntry>,
-  storeKeys: string[],
-): SessionEntry | undefined {
-  return resolveFreshestSessionStoreMatchFromStoreKeys(store, storeKeys)?.entry;
-}
-
-/**
- * Remove legacy key variants for one canonical session key.
- * Candidates can include aliases (for example, "agent:ops:main" when canonical is "agent:ops:work").
- */
-function pruneLegacyStoreKeys(params: {
-  store: Record<string, unknown>;
-  canonicalKey: string;
-  candidates: Iterable<string>;
-}) {
-  const keysToDelete = new Set<string>();
-  for (const candidate of params.candidates) {
-    const trimmed = normalizeOptionalString(candidate ?? "") ?? "";
-    if (!trimmed) {
-      continue;
-    }
-    if (trimmed !== params.canonicalKey) {
-      keysToDelete.add(trimmed);
-    }
-  }
-  for (const key of keysToDelete) {
-    delete params.store[key];
-  }
-}
-
-export function migrateAndPruneGatewaySessionStoreKey(params: {
-  cfg: OpenClawConfig;
-  key: string;
-  store: Record<string, SessionEntry>;
-  agentId?: string;
-}) {
-  const target = resolveGatewaySessionStoreTarget({
-    cfg: params.cfg,
-    key: params.key,
-    store: params.store,
-    ...(params.agentId ? { agentId: params.agentId } : {}),
-  });
-  const primaryKey = target.canonicalKey;
-  const freshestMatch = resolveFreshestSessionStoreMatchFromStoreKeys(
-    params.store,
-    target.storeKeys,
-  );
-  if (freshestMatch) {
-    const currentPrimary = params.store[primaryKey];
-    if (!currentPrimary || (freshestMatch.entry.updatedAt ?? 0) > (currentPrimary.updatedAt ?? 0)) {
-      params.store[primaryKey] = freshestMatch.entry;
-    }
-  }
-  pruneLegacyStoreKeys({
-    store: params.store,
-    canonicalKey: primaryKey,
-    candidates: target.storeKeys,
-  });
-  return { target, primaryKey, entry: params.store[primaryKey] };
 }
 
 export function parseGroupKey(

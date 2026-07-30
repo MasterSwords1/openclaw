@@ -12,13 +12,13 @@ import {
   resolveTranscriptStemToSessionKeys,
 } from "./session-transcript-hit.js";
 
-const loadGatewaySessionStore = vi.hoisted(() => vi.fn());
-vi.mock("../config/sessions/combined-store-gateway.js", () => ({
-  loadCombinedSessionStoreForGateway: loadGatewaySessionStore,
+const loadSessionStore = vi.hoisted(() => vi.fn());
+vi.mock("../config/sessions/combined-store.js", () => ({
+  loadCombinedSessionStore: loadSessionStore,
 }));
 
 it("filters incognito rows from the plugin cross-session store view", () => {
-  loadGatewaySessionStore.mockReturnValue({
+  loadSessionStore.mockReturnValue({
     storePath: "(multiple)",
     store: {
       "agent:main:dashboard:visible": { sessionId: "visible", updatedAt: 1 },

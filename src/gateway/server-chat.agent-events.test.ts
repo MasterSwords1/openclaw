@@ -45,8 +45,8 @@ vi.mock("./server-chat.load-gateway-session-row.runtime.js", () => ({
   loadGatewaySessionRow: vi.fn(),
 }));
 
-vi.mock("./session-utils.js", () => {
-  const loadSessionEntry = vi.fn(() => ({
+vi.mock("../config/sessions/session-entry-loader.js", () => {
+  const loadResolvedSessionEntryReadOnly = vi.fn(() => ({
     cfg: {},
     storePath: "/tmp/sessions.json",
     store: {},
@@ -56,12 +56,12 @@ vi.mock("./session-utils.js", () => {
     legacyKey: undefined,
   }));
   return {
-    loadSessionEntry,
-    loadSessionEntryReadOnly: loadSessionEntry,
+    loadResolvedSessionEntryReadOnly,
   };
 });
 
 import { getRuntimeConfig } from "../config/io.js";
+import { loadResolvedSessionEntryReadOnly } from "../config/sessions/session-entry-loader.js";
 import { resolveHeartbeatVisibility } from "../infra/heartbeat-visibility.js";
 import {
   emitAgentEvent,
@@ -80,7 +80,6 @@ import {
   type AgentEventHandlerOptions,
 } from "./server-chat.js";
 import { loadGatewaySessionRow } from "./server-chat.load-gateway-session-row.runtime.js";
-import { loadSessionEntry } from "./session-utils.js";
 
 function waitForFast<T>(
   callback: () => T | Promise<T>,
@@ -98,7 +97,7 @@ describe("agent event handler", () => {
       showAlerts: true,
       useIndicator: true,
     });
-    vi.mocked(loadSessionEntry)
+    vi.mocked(loadResolvedSessionEntryReadOnly)
       .mockReset()
       .mockReturnValue({
         cfg: {},
@@ -194,10 +193,10 @@ describe("agent event handler", () => {
   }
 
   function mockSessionEntry(
-    entry: ReturnType<typeof loadSessionEntry>["entry"],
+    entry: ReturnType<typeof loadResolvedSessionEntryReadOnly>["entry"],
     canonicalKey = "session-1",
   ) {
-    vi.mocked(loadSessionEntry).mockReturnValue({
+    vi.mocked(loadResolvedSessionEntryReadOnly).mockReturnValue({
       cfg: {},
       storePath: "/tmp/sessions.json",
       store: {},

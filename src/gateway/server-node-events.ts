@@ -36,7 +36,7 @@ import {
   formatForLog,
   getRuntimeConfig,
   loadOrCreateProcessDeviceIdentity,
-  loadSessionEntry,
+  loadResolvedSessionEntry,
   normalizeChannelId,
   normalizeMainKey,
   normalizeRpcAttachmentsToChatAttachments,
@@ -389,7 +389,7 @@ function compactNotificationEventText(raw: string) {
   return `${sliceUtf16Safe(normalized, 0, safe)}…`;
 }
 
-type LoadedSessionEntry = ReturnType<typeof loadSessionEntry>;
+type LoadedSessionEntry = ReturnType<typeof loadResolvedSessionEntry>;
 
 async function touchSessionStore(params: {
   storePath: LoadedSessionEntry["storePath"];
@@ -584,7 +584,7 @@ export const handleNodeEvent = async (
       const cfg = getRuntimeConfig();
       const rawMainKey = normalizeMainKey(cfg.session?.mainKey);
       const sessionKey = sessionKeyRaw.length > 0 ? sessionKeyRaw : rawMainKey;
-      const { storePath, entry, canonicalKey, storeKeys } = loadSessionEntry(sessionKey);
+      const { storePath, entry, canonicalKey, storeKeys } = loadResolvedSessionEntry(sessionKey);
       if (resolveAgentHarnessSessionContextError(canonicalKey, entry)) {
         return undefined;
       }
@@ -673,7 +673,7 @@ export const handleNodeEvent = async (
       const sessionKeyRaw = (link?.sessionKey ?? "").trim();
       const sessionKey = sessionKeyRaw.length > 0 ? sessionKeyRaw : `node-${nodeId}`;
       const cfg = getRuntimeConfig();
-      const { storePath, entry, canonicalKey, storeKeys } = loadSessionEntry(sessionKey);
+      const { storePath, entry, canonicalKey, storeKeys } = loadResolvedSessionEntry(sessionKey);
       if (resolveAgentHarnessSessionContextError(canonicalKey, entry)) {
         return undefined;
       }
@@ -901,7 +901,7 @@ export const handleNodeEvent = async (
       }
       const key = keyRaw;
       const sessionKeyRaw = normalizeOptionalString(obj.sessionKey) ?? `node-${nodeId}`;
-      const { canonicalKey: sessionKey, entry } = loadSessionEntry(sessionKeyRaw);
+      const { canonicalKey: sessionKey, entry } = loadResolvedSessionEntry(sessionKeyRaw);
       if (resolveAgentHarnessSessionContextError(sessionKey, entry)) {
         return undefined;
       }
@@ -944,7 +944,7 @@ export const handleNodeEvent = async (
       if (!sessionKey) {
         return undefined;
       }
-      const { canonicalKey } = loadSessionEntry(sessionKey);
+      const { canonicalKey } = loadResolvedSessionEntry(sessionKey);
       // Fanout is keyed by the canonical session; retain the connection owner for safe reconnect.
       await ctx.nodeSubscribe(nodeId, canonicalKey, opts?.connId);
       return undefined;
@@ -957,7 +957,7 @@ export const handleNodeEvent = async (
       if (!sessionKey) {
         return undefined;
       }
-      const { canonicalKey } = loadSessionEntry(sessionKey);
+      const { canonicalKey } = loadResolvedSessionEntry(sessionKey);
       await ctx.nodeUnsubscribe(nodeId, canonicalKey, opts?.connId);
       return undefined;
     }
@@ -972,7 +972,7 @@ export const handleNodeEvent = async (
       if (!sessionKeyRaw) {
         return undefined;
       }
-      const { canonicalKey: sessionKey } = loadSessionEntry(sessionKeyRaw);
+      const { canonicalKey: sessionKey } = loadResolvedSessionEntry(sessionKeyRaw);
 
       const cfg = getRuntimeConfig();
       const runId = normalizeOptionalString(obj.runId) ?? "";
