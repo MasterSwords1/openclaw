@@ -10,10 +10,16 @@ import {
   type RetryConfig,
 } from "openclaw/plugin-sdk/retry-runtime";
 import { sleepWithAbort } from "openclaw/plugin-sdk/runtime-env";
+import { createDiscordEndpointFetch, resolveDiscordEndpointRuntime } from "./endpoint-runtime.js";
 import { isDiscordHtmlResponseBody, summarizeDiscordResponseBody } from "./error-body.js";
 import { parseDiscordRetryAfterBodySeconds } from "./retry-after.js";
 
 const DISCORD_API_BASE = "https://discord.com/api/v10";
+
+function resolveDiscordApiBaseUrl(): string {
+  const endpoint = resolveDiscordEndpointRuntime();
+  return endpoint ? `${endpoint.apiRoot}/v10` : DISCORD_API_BASE;
+}
 const DISCORD_API_RETRY_DEFAULTS = {
   attempts: 3,
   minDelayMs: 500,
@@ -174,7 +180,10 @@ export async function requestDiscord<T>(
   token: string,
   options?: DiscordApiRequestOptions,
 ): Promise<T> {
-  const fetchImpl = resolveFetch(options?.fetcher ?? fetch);
+  const endpoint = resolveDiscordEndpointRuntime();
+  const fetchImpl = resolveFetch(
+    options?.fetcher ?? (endpoint ? createDiscordEndpointFetch(endpoint) : fetch),
+  );
   if (!fetchImpl) {
     throw new Error("fetch is not available");
   }
@@ -187,7 +196,7 @@ export async function requestDiscord<T>(
       const body = normalizeDiscordRequestBody(options?.body, headers);
       const requestSignal = createDiscordRequestSignal(options ?? {});
       try {
-        const res = await fetchImpl(`${DISCORD_API_BASE}${path}`, {
+        const res = await fetchImpl(`${resolveDiscordApiBaseUrl()}${path}`, {
           method: options?.method ?? (body === undefined ? "GET" : "POST"),
           headers,
           body,

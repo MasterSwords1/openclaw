@@ -21,6 +21,7 @@ import {
   createCrablineProviderDelivery,
   createCrablineProviderInboundInput,
   resolveCrablineStateConversation,
+  resolveDiscordQaId,
   resolveTelegramQaSenderId,
 } from "./crabline-provider-targets.js";
 import { QaSuiteInfraError } from "./errors.js";
@@ -47,6 +48,7 @@ import type {
 } from "./runtime-api.js";
 
 const CRABLINE_TRANSPORT_ID = "crabline";
+const DISCORD_ENDPOINT_RUNTIME_FILE = "discord-endpoint-runtime.json";
 
 type QaCrablineTransportState = QaTransportState & {
   cleanup: () => Promise<void>;
@@ -89,6 +91,11 @@ function normalizeCrablineSignalGatewayConfig(config: OpenClawConfig): OpenClawC
 function formatLogicalQaTarget({ conversation, threadId }: QaBusInboundMessageInput) {
   const prefix = conversation.kind === "direct" ? "dm" : conversation.kind;
   return threadId ? `thread:${conversation.id}/${threadId}` : `${prefix}:${conversation.id}`;
+}
+
+function formatLogicalQaConversationTarget({ conversation }: QaBusInboundMessageInput) {
+  const prefix = conversation.kind === "direct" ? "dm" : conversation.kind;
+  return `${prefix}:${conversation.id}`;
 }
 
 const TELEGRAM_LIFECYCLE_METHOD_RE = /\/(sendMessage|editMessageText|deleteMessage)$/u;
@@ -273,6 +280,7 @@ function createCrablineState(params: {
 }): QaCrablineTransportState {
   const baseState = params.state;
   const targetByProviderTarget = new Map<string, string>();
+  const logicalRouteByTarget = new Map<string, { target: string; threadId?: string }>();
   const telegramMessageByProviderId = new Map<string, QaBusMessage>();
   const pendingTelegramMessagesByChat = new Map<string, QaBusMessage[]>();
   const outboundEvents: QaTransportOutboundEvent[] = [];
@@ -281,6 +289,7 @@ function createCrablineState(params: {
     reset() {
       baseState.reset();
       targetByProviderTarget.clear();
+      logicalRouteByTarget.clear();
       telegramMessageByProviderId.clear();
       pendingTelegramMessagesByChat.clear();
       outboundEvents.length = 0;
@@ -319,16 +328,47 @@ function createCrablineState(params: {
         targetByProviderTarget,
       }) as QaBusOutboundMessageInput | null;
       if (outbound) {
-        baseState.addOutboundMessage(outbound);
+        const logicalRoute = logicalRouteByTarget.get(outbound.to);
+        baseState.addOutboundMessage(
+          logicalRoute
+            ? {
+                ...outbound,
+                to: logicalRoute.target,
+                ...(logicalRoute.threadId ? { threadId: logicalRoute.threadId } : {}),
+              }
+            : outbound,
+        );
       }
     },
     async addInboundMessage(input: QaBusInboundMessageInput) {
-      const providerInbound = params.adapter.createInbound({
+      let providerInbound = params.adapter.createInbound({
         input: createCrablineProviderInboundInput(params.adapter, input),
       });
+      if (
+        params.adapter.channel === "telegram" &&
+        input.threadId &&
+        input.conversation.kind !== "direct" &&
+        isRecord(providerInbound.providerBody)
+      ) {
+        // Crabline's Telegram server requires provider-native forum metadata before accepting a
+        // topic. Scenario inputs carry only portable thread identity, so add that server fact here.
+        providerInbound = {
+          ...providerInbound,
+          providerBody: {
+            ...providerInbound.providerBody,
+            chatType: "supergroup",
+            isForum: true,
+          },
+        };
+      }
       // Providers may coerce channel conversations to groups; preserve the scenario's logical
       // target so outbound waits and assertions still match the original input.
-      targetByProviderTarget.set(providerInbound.providerTargetKey, formatLogicalQaTarget(input));
+      const logicalTarget = formatLogicalQaTarget(input);
+      targetByProviderTarget.set(providerInbound.providerTargetKey, logicalTarget);
+      logicalRouteByTarget.set(logicalTarget, {
+        target: formatLogicalQaConversationTarget(input),
+        ...(input.threadId ? { threadId: input.threadId } : {}),
+      });
       const providerMessageId = await postCrablineInbound({
         adapter: params.adapter,
         providerInbound,
@@ -340,7 +380,11 @@ function createCrablineState(params: {
           input,
           providerInbound,
         }),
-        ...(providerInbound.threadId ? { threadId: providerInbound.threadId } : {}),
+        ...(input.threadId
+          ? { threadId: input.threadId }
+          : providerInbound.threadId
+            ? { threadId: providerInbound.threadId }
+            : {}),
       });
       if (providerMessageId) {
         message.id = providerMessageId;
@@ -365,6 +409,7 @@ class QaCrablineTransport extends QaStateBackedTransportAdapter {
   readonly #selection: OpenClawCrablineChannelDriverSelection;
   readonly #transportPolicy?: QaTransportPolicy;
   readonly #state: QaCrablineTransportState;
+  #cleanupPromise?: Promise<void>;
   readonly sendNativeCommand?: (input: QaTransportNativeCommandInput) => Promise<void>;
   readonly waitForOutboundSequence?: (input: QaTransportOutboundSequenceMatch) => Promise<{
     events: QaTransportOutboundEvent[];
@@ -411,6 +456,39 @@ class QaCrablineTransport extends QaStateBackedTransportAdapter {
       this.#selection.channel === "signal"
         ? normalizeCrablineSignalGatewayConfig(rawConfig)
         : rawConfig;
+    if (this.#selection.channel === "discord") {
+      const discord = config.channels?.discord;
+      const wildcardGuild = discord?.guilds?.["*"];
+      const wildcardChannel = wildcardGuild?.channels?.["*"];
+      const senderAllowlist = this.#transportPolicy?.senderAllowlist?.map(resolveDiscordQaId);
+      if (!this.#transportPolicy?.requireGroupMention && !senderAllowlist) {
+        return config as QaTransportGatewayConfig;
+      }
+      return {
+        ...config,
+        channels: {
+          ...config.channels,
+          discord: {
+            ...discord,
+            ...(senderAllowlist ? { groupPolicy: "allowlist" as const } : {}),
+            guilds: {
+              ...discord?.guilds,
+              "*": {
+                ...wildcardGuild,
+                ...(senderAllowlist ? { users: [...senderAllowlist] } : {}),
+                channels: {
+                  ...wildcardGuild?.channels,
+                  "*": {
+                    ...wildcardChannel,
+                    ...(this.#transportPolicy?.requireGroupMention ? { requireMention: true } : {}),
+                  },
+                },
+              },
+            },
+          },
+        },
+      } as QaTransportGatewayConfig;
+    }
     if (this.#selection.channel !== "telegram") {
       return config as QaTransportGatewayConfig;
     }
@@ -460,7 +538,28 @@ class QaCrablineTransport extends QaStateBackedTransportAdapter {
     return delivery;
   };
 
-  createRuntimeEnvPatch = () => this.#adapter.createChannelDriverSmokeEnv({});
+  createRuntimeEnvPatch = () => this.#adapter.createProviderReadinessEnv({});
+
+  stageGatewayRuntime = async ({ tempRoot }: { tempRoot: string }) => {
+    if (this.#adapter.manifest.provider !== "discord") {
+      return;
+    }
+    // The Discord plugin reads this fixed private descriptor only inside the child QA root.
+    // Keeping credentials in normal plugin config prevents this endpoint seam becoming auth state.
+    await fs.writeFile(
+      path.join(tempRoot, DISCORD_ENDPOINT_RUNTIME_FILE),
+      `${JSON.stringify(
+        {
+          apiRoot: this.#adapter.manifest.endpoints.apiRoot,
+          gatewayBotUrl: this.#adapter.manifest.endpoints.gatewayBotUrl,
+          version: 1,
+        },
+        null,
+        2,
+      )}\n`,
+      { encoding: "utf8", flag: "wx", mode: 0o600 },
+    );
+  };
 
   handleAction = async (_params: {
     action: QaTransportActionName;
@@ -476,8 +575,24 @@ class QaCrablineTransport extends QaStateBackedTransportAdapter {
     "No live channel service or external credential lease is required.",
   ];
 
+  #cleanupTransport() {
+    this.#cleanupPromise ??= this.#state.cleanup();
+    void this.#cleanupPromise.catch(() => {
+      this.#cleanupPromise = undefined;
+    });
+    return this.#cleanupPromise;
+  }
+
   async cleanup() {
-    await this.#state.cleanup();
+    if (this.#selection.channel !== "discord") {
+      await this.#cleanupTransport();
+    }
+  }
+
+  async cleanupAfterGatewayStop() {
+    if (this.#selection.channel === "discord") {
+      await this.#cleanupTransport();
+    }
   }
 }
 
@@ -487,19 +602,23 @@ export async function createQaCrablineTransportAdapter(params: {
   selection: OpenClawCrablineChannelDriverSelection;
   state?: QaBusState;
 }) {
-  const requiresTelegramPolicy =
+  const requiresGroupPolicy =
     params.transportPolicy?.requireGroupMention === true ||
     params.transportPolicy?.senderAllowlist !== undefined;
-  if (params.selection.channel !== "telegram" && requiresTelegramPolicy) {
+  if (
+    params.selection.channel !== "telegram" &&
+    params.selection.channel !== "discord" &&
+    requiresGroupPolicy
+  ) {
     throw new Error(
-      `Crabline ${params.selection.channel} does not support the requested group transport policy; use the Crabline Telegram bridge or a live channel adapter`,
+      `Crabline ${params.selection.channel} does not support the requested group transport policy; use the Crabline Telegram or Discord bridge, or a live channel adapter`,
     );
   }
   const recorderPath = path.join(
     params.outputDir,
     "artifacts",
     "crabline",
-    `${params.selection.channel}-fake-provider.jsonl`,
+    `${params.selection.channel}-provider.jsonl`,
   );
   await fs.mkdir(path.dirname(recorderPath), { recursive: true });
   let observeEvent = (_event: unknown) => {};

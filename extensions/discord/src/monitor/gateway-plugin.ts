@@ -13,6 +13,11 @@ import { danger, warn } from "openclaw/plugin-sdk/runtime-env";
 import type { RuntimeEnv } from "openclaw/plugin-sdk/runtime-env";
 import { truncateUtf16Safe } from "openclaw/plugin-sdk/text-utility-runtime";
 import * as ws from "ws";
+import {
+  assertDiscordEndpointGatewayUrl,
+  createDiscordEndpointFetch,
+  resolveDiscordEndpointRuntime,
+} from "../endpoint-runtime.js";
 import * as discordGateway from "../internal/gateway.js";
 import { createDiscordDnsLookup } from "../network-config.js";
 import { validateDiscordProxyUrl } from "../proxy-fetch.js";
@@ -197,6 +202,9 @@ function createGatewayPlugin(params: {
   gatewayInfoTimeoutMs: number;
   fetchImpl: DiscordGatewayFetch;
   fetchInit?: DiscordGatewayFetchInit;
+  gatewayBotUrl?: string;
+  allowGatewayInfoFallback?: boolean;
+  validateGatewayUrl?: (url: string) => void;
   wsAgent?: DiscordGatewayWebSocketAgent;
   runtime?: RuntimeEnv;
   testing?: GatewayPluginTestingOptions;
@@ -227,15 +235,19 @@ function createGatewayPlugin(params: {
           token: client.options.token,
           fetchImpl: params.fetchImpl,
           fetchInit: params.fetchInit,
+          ...(params.gatewayBotUrl ? { gatewayBotUrl: params.gatewayBotUrl } : {}),
           timeoutMs: params.gatewayInfoTimeoutMs,
         })
           .then((info) => ({
             info,
             usedFallback: false,
           }))
-          .catch((error: unknown) =>
-            resolveGatewayInfoWithFallback({ runtime: params.runtime, error }),
-          );
+          .catch((error: unknown) => {
+            if (params.allowGatewayInfoFallback === false) {
+              throw error;
+            }
+            return resolveGatewayInfoWithFallback({ runtime: params.runtime, error });
+          });
         this.gatewayInfo = resolved.info;
         this.gatewayInfoUsedFallback = resolved.usedFallback;
       }
@@ -255,6 +267,7 @@ function createGatewayPlugin(params: {
       if (!url) {
         throw new Error("Gateway URL is required");
       }
+      params.validateGatewayUrl?.(url);
       const wsFlowId = randomUUID();
       // Avoid Node's undici-backed global WebSocket here. We have seen late
       // close-path crashes during Discord gateway teardown; the ws transport is
@@ -391,12 +404,19 @@ export function createDiscordGatewayPlugin(params: {
   const gatewayInfoTimeoutMs = resolveDiscordGatewayInfoTimeoutMs({
     env: process.env,
   });
-  let fetchImpl = createDiscordGatewayMetadataFetch(debugProxySettings.enabled);
-  let wsAgent: DiscordGatewayWebSocketAgent = new HttpsAgent({
-    lookup: discordDnsLookup,
-  });
+  const endpoint = resolveDiscordEndpointRuntime();
+  let fetchImpl: DiscordGatewayFetch;
+  let wsAgent: DiscordGatewayWebSocketAgent | undefined;
+  if (endpoint) {
+    fetchImpl = createDiscordEndpointFetch(endpoint);
+  } else {
+    fetchImpl = createDiscordGatewayMetadataFetch(debugProxySettings.enabled);
+    wsAgent = new HttpsAgent({
+      lookup: discordDnsLookup,
+    });
+  }
 
-  if (proxy) {
+  if (!endpoint && proxy) {
     try {
       validateDiscordProxyUrl(proxy);
       wsAgent =
@@ -422,6 +442,13 @@ export function createDiscordGatewayPlugin(params: {
     fetchImpl,
     runtime: params.runtime,
     testing: params.testing,
+    ...(endpoint
+      ? {
+          allowGatewayInfoFallback: false,
+          gatewayBotUrl: endpoint.gatewayBotUrl,
+          validateGatewayUrl: (url: string) => assertDiscordEndpointGatewayUrl(endpoint, url),
+        }
+      : {}),
     ...(wsAgent ? { wsAgent } : {}),
   });
 }

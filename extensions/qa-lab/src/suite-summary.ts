@@ -61,7 +61,7 @@ export type QaSuiteSummaryJson = {
     channelDriver: QaScorecardChannelDriver | null;
     channel: string | null;
     channelCapabilityMatrixPath: string | null;
-    channelDriverSmokePath: string | null;
+    channelProviderReadinessPath: string | null;
     scenarioIds: string[] | null;
     runtimePair?: [RuntimeId, RuntimeId] | null;
   };

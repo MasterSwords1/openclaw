@@ -172,10 +172,11 @@ async function fetchDiscordGatewayInfo(params: {
   token: string;
   fetchImpl: DiscordGatewayFetch;
   fetchInit?: DiscordGatewayFetchInit;
+  gatewayBotUrl?: string;
 }): Promise<APIGatewayBotInfo> {
   let response: DiscordGatewayMetadataResponse;
   try {
-    response = await params.fetchImpl(DISCORD_GATEWAY_BOT_URL, {
+    response = await params.fetchImpl(params.gatewayBotUrl ?? DISCORD_GATEWAY_BOT_URL, {
       ...params.fetchInit,
       headers: {
         ...params.fetchInit?.headers,
@@ -225,6 +226,7 @@ export async function fetchDiscordGatewayInfoWithTimeout(params: {
   token: string;
   fetchImpl: DiscordGatewayFetch;
   fetchInit?: DiscordGatewayFetchInit;
+  gatewayBotUrl?: string;
   timeoutMs?: number;
 }): Promise<APIGatewayBotInfo> {
   const timeoutMs = Math.max(1, params.timeoutMs ?? DEFAULT_DISCORD_GATEWAY_INFO_TIMEOUT_MS);
@@ -244,6 +246,7 @@ export async function fetchDiscordGatewayInfoWithTimeout(params: {
           ...params.fetchInit,
           signal,
         },
+        ...(params.gatewayBotUrl ? { gatewayBotUrl: params.gatewayBotUrl } : {}),
       }),
   });
 }

@@ -1593,8 +1593,8 @@ importers:
         specifier: 1.30.0
         version: 1.30.0(supports-color@10.2.2)(zod@4.4.3)
       '@openclaw/crabline':
-        specifier: 0.1.11
-        version: 0.1.11
+        specifier: 0.1.13
+        version: 0.1.13
       '@openclaw/matrix':
         specifier: workspace:*
         version: link:../matrix
@@ -4097,9 +4097,10 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@openclaw/crabline@0.1.11':
-    resolution: {integrity: sha512-A7KH6gi7tXfJmdyeCzhZ65cSrLk4lALbto3lNBOHp1C6uIirAgM4tcF9I7/LhNDX/dq/T+q2QytpVPhhsfwgQQ==}
+  '@openclaw/crabline@0.1.13':
+    resolution: {integrity: sha512-BfoppEVLAxMDdiTHujAmJlVW/mzqPI5P5FVYAN0Wa334ZadpJULUUKpn3gIfcFIMZnNm97G/hxDW/2QqK1k1kA==}
     engines: {node: '>=22'}
+    hasBin: true
 
   '@openclaw/fs-safe@0.5.0':
     resolution: {integrity: sha512-TPpFG8PkAKlM/eP7glzHhCeZnDX3sSqyjXgeoc0jeyii0y957/zePB62BIwc75gOFmxaeKLWkd4iF41/Ghlgjg==}
@@ -11251,7 +11252,7 @@ snapshots:
   '@openai/codex@0.146.0-win32-x64':
     optional: true
 
-  '@openclaw/crabline@0.1.11':
+  '@openclaw/crabline@0.1.13':
     dependencies:
       '@types/node': 22.20.1
       commander: 15.0.0
@@ -12044,14 +12045,14 @@ snapshots:
 
   '@slack/logger@5.0.0':
     dependencies:
-      '@types/node': 26.1.1
+      '@types/node': 26.1.2
 
   '@slack/oauth@4.0.0':
     dependencies:
       '@slack/logger': 5.0.0
       '@slack/web-api': 8.0.0
       '@types/jsonwebtoken': 9.0.10
-      '@types/node': 26.1.1
+      '@types/node': 26.1.2
       jsonwebtoken: 9.0.3
 
   '@slack/socket-mode@3.0.0(undici@7.28.0)':
@@ -12374,7 +12375,7 @@ snapshots:
   '@types/jsonwebtoken@9.0.10':
     dependencies:
       '@types/ms': 2.1.0
-      '@types/node': 26.1.1
+      '@types/node': 26.1.2
 
   '@types/linkify-it@5.0.0': {}
 

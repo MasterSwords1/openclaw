@@ -16,6 +16,7 @@ import { danger } from "openclaw/plugin-sdk/runtime-env";
 import type { RuntimeEnv } from "openclaw/plugin-sdk/runtime-env";
 import { fetchWithRuntimeDispatcher } from "openclaw/plugin-sdk/runtime-fetch";
 import { Agent } from "undici";
+import { createDiscordEndpointFetch, resolveDiscordEndpointRuntime } from "../endpoint-runtime.js";
 import { createDiscordDnsLookup } from "../network-config.js";
 import { withValidatedDiscordProxy } from "../proxy-fetch.js";
 
@@ -75,6 +76,10 @@ export function resolveDiscordRestFetch(
   proxyUrl: string | undefined,
   runtime: RuntimeEnv,
 ): typeof fetch {
+  const endpoint = resolveDiscordEndpointRuntime();
+  if (endpoint) {
+    return createDiscordEndpointFetch(endpoint);
+  }
   const effectiveProxyUrl = resolveEffectiveDebugProxyUrl(proxyUrl);
   if (effectiveProxyUrl) {
     const fetcher = withValidatedDiscordProxy(effectiveProxyUrl, runtime, (proxy) =>

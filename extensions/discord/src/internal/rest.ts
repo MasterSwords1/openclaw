@@ -7,6 +7,7 @@ import {
   resolveTimerTimeoutMs,
 } from "openclaw/plugin-sdk/number-runtime";
 import { readResponseWithLimit } from "openclaw/plugin-sdk/response-limit-runtime";
+import { resolveDiscordEndpointRuntime } from "../endpoint-runtime.js";
 import { serializeRequestBody } from "./rest-body.js";
 import {
   DiscordError,
@@ -319,7 +320,12 @@ function normalizeIntegerOption(
 function normalizeRequestClientOptions(
   options?: RequestClientOptions,
 ): NormalizedRequestClientOptions {
-  const merged = { ...defaultOptions, ...options };
+  const injectedBaseUrl = options?.baseUrl ? undefined : resolveDiscordEndpointRuntime()?.apiRoot;
+  const merged = {
+    ...defaultOptions,
+    ...(injectedBaseUrl ? { baseUrl: injectedBaseUrl } : {}),
+    ...options,
+  };
   return {
     ...merged,
     apiVersion: normalizeIntegerOption(merged.apiVersion, defaultOptions.apiVersion, { min: 1 }),
