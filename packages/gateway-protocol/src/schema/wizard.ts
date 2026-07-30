@@ -60,18 +60,10 @@ const WizardDeviceCodeSchema = closedObject({
   message: Type.Optional(Type.String()),
 });
 
-/** UI contract for one wizard step rendered by gateway clients. */
-export const WizardStepSchema = closedObject({
+const WizardStepExecutorSchema = Type.Union([Type.Literal("gateway"), Type.Literal("client")]);
+
+const WizardStepCommonFields = {
   id: NonEmptyString,
-  type: Type.Union([
-    Type.Literal("note"),
-    Type.Literal("select"),
-    Type.Literal("text"),
-    Type.Literal("confirm"),
-    Type.Literal("multiselect"),
-    Type.Literal("progress"),
-    Type.Literal("action"),
-  ]),
   title: Type.Optional(Type.String()),
   message: Type.Optional(Type.String()),
   format: Type.Optional(Type.Union([Type.Literal("plain")])),
@@ -79,10 +71,53 @@ export const WizardStepSchema = closedObject({
   initialValue: Type.Optional(Type.Unknown()),
   placeholder: Type.Optional(Type.String()),
   sensitive: Type.Optional(Type.Boolean()),
-  executor: Type.Optional(Type.Union([Type.Literal("gateway"), Type.Literal("client")])),
   externalUrl: Type.Optional(Type.String()),
   deviceCode: Type.Optional(WizardDeviceCodeSchema),
-});
+};
+
+function wizardStepSchema<const StepType extends string, const RequiresUserInput extends boolean>(
+  type: StepType,
+  requiresUserInput: RequiresUserInput,
+) {
+  return closedObject({
+    ...WizardStepCommonFields,
+    type: Type.Literal(type),
+    // Optional on the wire so current clients remain compatible with N-1 gateways.
+    // Current producers require this literal through the internal WizardStep type.
+    requiresUserInput: Type.Optional(Type.Literal(requiresUserInput)),
+    executor: Type.Optional(WizardStepExecutorSchema),
+  });
+}
+
+function wizardActionStepSchema<
+  const Executor extends "gateway" | "client",
+  const RequiresUserInput extends boolean,
+>(executor: Executor, requiresUserInput: RequiresUserInput) {
+  return closedObject({
+    ...WizardStepCommonFields,
+    type: Type.Literal("action"),
+    requiresUserInput: Type.Optional(Type.Literal(requiresUserInput)),
+    executor: Type.Literal(executor),
+  });
+}
+
+/** UI contract for one wizard step rendered by gateway clients. */
+export const WizardStepSchema = Type.Union([
+  wizardStepSchema("note", false),
+  wizardStepSchema("select", true),
+  wizardStepSchema("text", true),
+  wizardStepSchema("confirm", true),
+  wizardStepSchema("multiselect", true),
+  wizardStepSchema("progress", false),
+  wizardActionStepSchema("client", true),
+  wizardActionStepSchema("gateway", false),
+  // Compatibility branch for gateways that predate required action executors.
+  closedObject({
+    ...WizardStepCommonFields,
+    type: Type.Literal("action"),
+    executor: Type.Optional(WizardStepExecutorSchema),
+  }),
+]);
 
 /** Channel/account pair the channels flow actually configured. */
 const WizardConfiguredAccountSchema = closedObject({

@@ -4,7 +4,7 @@ import { isSensitiveConfigPath } from "../config/sensitive-paths.js";
 import { formatErrorMessage } from "../infra/errors.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import type { RuntimeEnv } from "../runtime.js";
-import { WizardSession, wizardStepAwaitsInput, type WizardStep } from "../wizard/session.js";
+import { WizardSession, type WizardStep } from "../wizard/session.js";
 import type {
   MemoryImportProviderOutcome,
   SetupMemoryImportOutcome,
@@ -750,7 +750,7 @@ export class SystemAgentChatEngine {
     // ended must not offer a cancel that can no longer happen.
     const awaitedStep = this.wizardBridge?.step;
     const reply: SystemAgentChatReply =
-      resolved.text && awaitedStep && wizardStepAwaitsInput(awaitedStep)
+      resolved.text && awaitedStep?.requiresUserInput
         ? { ...resolved, text: `${resolved.text}\n${WIZARD_CANCEL_HINT}` }
         : resolved;
     this.history.push({
