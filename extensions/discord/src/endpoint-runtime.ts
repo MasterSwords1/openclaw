@@ -9,6 +9,7 @@ import {
   realpathSync,
 } from "node:fs";
 import path from "node:path";
+import { fetchWithSsrFGuard } from "openclaw/plugin-sdk/ssrf-runtime";
 
 const QA_TEMP_ROOT_ENV = "OPENCLAW_QA_TEMP_ROOT";
 const DISCORD_ENDPOINT_RUNTIME_FILE = "discord-endpoint-runtime.json";
@@ -165,7 +166,51 @@ function resolveEndpointFetchUrl(
 export function createDiscordEndpointFetch(endpoint: DiscordEndpointRuntime): typeof fetch {
   return (async (input: string | URL | Request, init?: RequestInit) => {
     const url = resolveEndpointFetchUrl(endpoint, input);
-    return await fetch(url, { ...init, redirect: "error" });
+    const guarded = await fetchWithSsrFGuard({
+      url: url.toString(),
+      init,
+      maxRedirects: 0,
+      policy: { allowedHostnames: [url.hostname], allowPrivateNetwork: true },
+      auditContext: "discord.injected-endpoint",
+    });
+    let released = false;
+    const releaseOnce = async () => {
+      if (released) {
+        return;
+      }
+      released = true;
+      await guarded.release();
+    };
+    if (!guarded.response.body) {
+      void releaseOnce();
+      return guarded.response;
+    }
+    const reader = guarded.response.body.getReader();
+    const body = new ReadableStream<Uint8Array>({
+      async pull(controller) {
+        try {
+          const next = await reader.read();
+          if (next.done) {
+            controller.close();
+            await releaseOnce();
+            return;
+          }
+          controller.enqueue(next.value);
+        } catch (error) {
+          await releaseOnce();
+          throw error;
+        }
+      },
+      async cancel(reason) {
+        void reader.cancel(reason).catch(() => undefined);
+        await releaseOnce();
+      },
+    });
+    return new Response(body, {
+      status: guarded.response.status,
+      statusText: guarded.response.statusText,
+      headers: guarded.response.headers,
+    });
   }) as typeof fetch;
 }
 

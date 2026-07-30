@@ -335,6 +335,7 @@ function normalizeQaSuiteConcurrency(
   value: number | undefined,
   scenarioCount: number,
   defaultConcurrency = DEFAULT_QA_SUITE_CONCURRENCY,
+  maxConcurrency = Number.POSITIVE_INFINITY,
 ) {
   const envValue = parseStrictNonNegativeInteger(process.env.OPENCLAW_QA_SUITE_CONCURRENCY);
   const raw =
@@ -343,7 +344,10 @@ function normalizeQaSuiteConcurrency(
       : envValue !== undefined
         ? envValue
         : defaultConcurrency;
-  return Math.max(1, Math.min(Math.floor(raw), Math.max(1, scenarioCount)));
+  return Math.max(
+    1,
+    Math.min(Math.floor(raw), Math.max(1, scenarioCount), Math.max(1, Math.floor(maxConcurrency))),
+  );
 }
 
 function resolveQaSuiteWorkerStartStaggerMs(

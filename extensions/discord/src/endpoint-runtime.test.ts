@@ -6,6 +6,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const QA_TEMP_ROOT_ENV = "OPENCLAW_QA_TEMP_ROOT";
 const DESCRIPTOR_FILE = "discord-endpoint-runtime.json";
 const originalTempRoot = process.env[QA_TEMP_ROOT_ENV];
+const fetchWithSsrFGuardMock = vi.hoisted(() => vi.fn());
+
+vi.mock("openclaw/plugin-sdk/ssrf-runtime", () => ({
+  fetchWithSsrFGuard: fetchWithSsrFGuardMock,
+}));
 
 async function writeDescriptor(
   tempRoot: string,
@@ -26,6 +31,7 @@ afterEach(() => {
   } else {
     process.env[QA_TEMP_ROOT_ENV] = originalTempRoot;
   }
+  fetchWithSsrFGuardMock.mockReset();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   vi.resetModules();
@@ -96,8 +102,11 @@ describe("Discord endpoint runtime", () => {
     await withTempDir("discord-endpoint-runtime-", async (tempRoot) => {
       await writeDescriptor(tempRoot);
       process.env[QA_TEMP_ROOT_ENV] = tempRoot;
-      const fetchMock = vi.fn(async () => new Response("{}"));
-      vi.stubGlobal("fetch", fetchMock);
+      const release = vi.fn(async () => {});
+      fetchWithSsrFGuardMock.mockResolvedValue({
+        response: new Response("{}"),
+        release,
+      });
       const {
         assertDiscordEndpointGatewayUrl,
         createDiscordEndpointFetch,
@@ -108,10 +117,18 @@ describe("Discord endpoint runtime", () => {
         throw new Error("expected injected Discord endpoint");
       }
 
-      await createDiscordEndpointFetch(endpoint)("http://127.0.0.1:43123/api/v10/users/@me");
-      expect(fetchMock).toHaveBeenCalledWith(new URL("http://127.0.0.1:43123/api/v10/users/@me"), {
-        redirect: "error",
+      const response = await createDiscordEndpointFetch(endpoint)(
+        "http://127.0.0.1:43123/api/v10/users/@me",
+      );
+      await response.text();
+      expect(fetchWithSsrFGuardMock).toHaveBeenCalledWith({
+        url: "http://127.0.0.1:43123/api/v10/users/@me",
+        init: undefined,
+        maxRedirects: 0,
+        policy: { allowedHostnames: ["127.0.0.1"], allowPrivateNetwork: true },
+        auditContext: "discord.injected-endpoint",
       });
+      expect(release).toHaveBeenCalledTimes(1);
       await expect(
         createDiscordEndpointFetch(endpoint)("https://discord.com/api/v10/users/@me"),
       ).rejects.toThrow("rejected a non-provider URL");
