@@ -22,6 +22,10 @@ function readObject(value: unknown): Record<string, unknown> | undefined {
     : undefined;
 }
 
+function readString(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
 async function readRecorderEvents(recorderPath: string): Promise<RecorderEvent[]> {
   const raw = await fs.readFile(recorderPath, "utf8");
   if (raw.includes("discord.com") || raw.includes("discordapp.com")) {
@@ -96,26 +100,26 @@ describe("Discord Crabline real-plugin roundtrip", () => {
           event.accepted === true,
       );
       const inboundBody = readObject(inbound?.body);
-      const inboundChannelId = String(inboundBody?.channelId ?? "");
-      const parentChannelId = String(inboundBody?.parentChannelId ?? "");
+      const inboundChannelId = readString(inboundBody?.channelId);
+      const parentChannelId = readString(inboundBody?.parentChannelId);
       expect(inboundChannelId).toMatch(/^\d{17,20}$/u);
       expect(parentChannelId).toMatch(/^\d{17,20}$/u);
       expect(inboundChannelId).not.toBe(parentChannelId);
-      expect(String(inboundBody?.content ?? "")).toMatch(/<@\d{17,20}>/u);
+      expect(readString(inboundBody?.content)).toMatch(/<@\d{17,20}>/u);
 
       const outbound = events.find(
         (event) =>
           event.type === "api" &&
           event.method === "POST" &&
           event.path === `/api/v10/channels/${inboundChannelId}/messages` &&
-          String(readObject(event.body)?.content ?? "").includes(EXPECTED_MARKER) &&
+          readString(readObject(event.body)?.content).includes(EXPECTED_MARKER) &&
           event.accepted === true,
       );
       const outboundBody = readObject(outbound?.body);
       const messageReference = readObject(outboundBody?.message_reference);
       expect(outbound).toBeDefined();
-      expect(String(outboundBody?.content ?? "")).toContain(EXPECTED_MARKER);
-      expect(String(outboundBody?.content ?? "")).not.toMatch(/<@\d{17,20}>/u);
+      expect(readString(outboundBody?.content)).toContain(EXPECTED_MARKER);
+      expect(readString(outboundBody?.content)).not.toMatch(/<@\d{17,20}>/u);
       expect(messageReference).toMatchObject({
         message_id: expect.stringMatching(/^\d{17,20}$/u),
       });
