@@ -1,27 +1,39 @@
 // Wizard session helpers track onboarding session ids and state.
 import { randomUUID } from "node:crypto";
-import type { WizardStep as ProtocolWizardStep } from "../../packages/gateway-protocol/src/schema/wizard.js";
+import type { WizardStep as ProtocolWizardStep } from "../../packages/gateway-protocol/src/index.js";
 import { createDeferred, type Deferred } from "../shared/deferred.js";
 import { WizardCancelledError, type WizardProgress, type WizardPrompter } from "./prompts.js";
 
 // WizardSession exposes interactive setup as a step/answer protocol for remote
 // clients while reusing the same WizardPrompter contract as the local CLI.
-// The wire flag is optional for N-1 compatibility; session-produced steps require it.
-type RequireUserInputFlag<Step> = Step extends unknown
-  ? "requiresUserInput" extends keyof Step
-    ? Omit<Step, "requiresUserInput"> & {
-        requiresUserInput: Exclude<
-          Step extends { requiresUserInput?: infer RequiresInput } ? RequiresInput : never,
-          undefined
-        >;
-      }
-    : never
-  : never;
+export type WizardStep = ProtocolWizardStep;
 
-export type WizardStep = RequireUserInputFlag<ProtocolWizardStep>;
+type WizardStepInputRequirement = "always" | "never" | "client-executor";
 
-type WithoutId<Step> = Step extends { id: string } ? Omit<Step, "id"> : never;
-type WizardStepWithoutId = WithoutId<WizardStep>;
+const WIZARD_STEP_INPUT_REQUIREMENT_BY_TYPE = {
+  note: "never",
+  select: "always",
+  text: "always",
+  confirm: "always",
+  multiselect: "always",
+  progress: "never",
+  action: "client-executor",
+} as const satisfies Record<WizardStep["type"], WizardStepInputRequirement>;
+
+/** Whether a step needs a user answer instead of client or gateway acknowledgement. */
+export function wizardStepAwaitsInput(step: WizardStep): boolean {
+  const requirement = WIZARD_STEP_INPUT_REQUIREMENT_BY_TYPE[step.type];
+  switch (requirement) {
+    case "always":
+      return true;
+    case "never":
+      return false;
+    case "client-executor":
+      return step.executor === "client";
+  }
+  const unhandledRequirement: never = requirement;
+  return unhandledRequirement;
+}
 
 type WizardSessionStatus = "running" | "done" | "cancelled" | "error";
 
@@ -55,7 +67,6 @@ class WizardSessionPrompter implements WizardPrompter {
       type: "note",
       title,
       message: "",
-      requiresUserInput: false,
       executor: "client",
     });
   }
@@ -65,7 +76,6 @@ class WizardSessionPrompter implements WizardPrompter {
       type: "note",
       title: "Done",
       message,
-      requiresUserInput: false,
       executor: "client",
     });
   }
@@ -75,7 +85,6 @@ class WizardSessionPrompter implements WizardPrompter {
       type: "note",
       title,
       message,
-      requiresUserInput: false,
       executor: "client",
     });
   }
@@ -102,7 +111,6 @@ class WizardSessionPrompter implements WizardPrompter {
         ...(params.expiresInMinutes ? { expiresInMinutes: params.expiresInMinutes } : {}),
         ...(params.message ? { message: params.message } : {}),
       },
-      requiresUserInput: false,
       executor: "client",
     });
   }
@@ -112,7 +120,6 @@ class WizardSessionPrompter implements WizardPrompter {
       type: "note",
       message,
       format: "plain",
-      requiresUserInput: false,
       executor: "client",
     });
   }
@@ -131,7 +138,6 @@ class WizardSessionPrompter implements WizardPrompter {
         hint: opt.hint,
       })),
       initialValue: params.initialValue,
-      requiresUserInput: true,
       executor: "client",
     });
     return res as T;
@@ -151,7 +157,6 @@ class WizardSessionPrompter implements WizardPrompter {
         hint: opt.hint,
       })),
       initialValue: params.initialValues,
-      requiresUserInput: true,
       executor: "client",
     });
     return (Array.isArray(res) ? res : []) as T[];
@@ -171,7 +176,6 @@ class WizardSessionPrompter implements WizardPrompter {
         initialValue: params.initialValue,
         placeholder: params.placeholder,
         sensitive: params.sensitive,
-        requiresUserInput: true,
         executor: "client",
       }),
       params.validate,
@@ -192,7 +196,6 @@ class WizardSessionPrompter implements WizardPrompter {
       type: "confirm",
       message: params.message,
       initialValue: params.initialValue,
-      requiresUserInput: true,
       executor: "client",
     });
     return Boolean(res);
@@ -223,11 +226,11 @@ class WizardSessionPrompter implements WizardPrompter {
     this.session.queueExternalUrl(url);
   }
 
-  private async prompt(step: WizardStepWithoutId): Promise<unknown> {
+  private async prompt(step: Omit<WizardStep, "id">): Promise<unknown> {
     return await this.session.awaitAnswer(this.createStep(step));
   }
 
-  private createStep(step: WizardStepWithoutId): WizardStep {
+  private createStep(step: Omit<WizardStep, "id">): WizardStep {
     // Each emitted step receives an id so remote clients can answer the exact
     // pending prompt and stale answers can be rejected. Explicit browser
     // destinations bind to the very next step regardless of its input type.
@@ -391,7 +394,6 @@ export class WizardSession {
       id: randomUUID(),
       type: "progress",
       message,
-      requiresUserInput: false,
       executor: "gateway",
     };
     if (this.stepDeferred) {

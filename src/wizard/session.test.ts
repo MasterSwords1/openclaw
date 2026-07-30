@@ -1,8 +1,7 @@
 // Wizard session tests cover session creation and state transitions.
 
-import { describe, expect, expectTypeOf, test, vi } from "vitest";
-import type { WizardStep as ProtocolWizardStep } from "../../packages/gateway-protocol/src/schema/wizard.js";
-import { WizardSession, type WizardStep } from "./session.js";
+import { describe, expect, test, vi } from "vitest";
+import { WizardSession, wizardStepAwaitsInput, type WizardStep } from "./session.js";
 
 function noteRunner() {
   return new WizardSession(async (prompter) => {
@@ -13,20 +12,19 @@ function noteRunner() {
 }
 
 describe("WizardSession", () => {
-  test("requires every current step variant to declare its input behavior", () => {
-    expectTypeOf<WizardStep["type"]>().toEqualTypeOf<ProtocolWizardStep["type"]>();
-    expectTypeOf<
-      Extract<WizardStep, { type: "text" }>["requiresUserInput"]
-    >().toEqualTypeOf<true>();
-    expectTypeOf<
-      Extract<WizardStep, { type: "note" }>["requiresUserInput"]
-    >().toEqualTypeOf<false>();
-    expectTypeOf<
-      Extract<WizardStep, { type: "action"; executor: "client" }>["requiresUserInput"]
-    >().toEqualTypeOf<true>();
-    expectTypeOf<
-      Extract<WizardStep, { type: "action"; executor: "gateway" }>["requiresUserInput"]
-    >().toEqualTypeOf<false>();
+  test.each([
+    ["select", undefined, true],
+    ["multiselect", undefined, true],
+    ["text", undefined, true],
+    ["confirm", undefined, true],
+    ["action", "client", true],
+    ["action", "gateway", false],
+    ["note", undefined, false],
+    ["progress", undefined, false],
+  ] as const satisfies ReadonlyArray<
+    readonly [WizardStep["type"], WizardStep["executor"], boolean]
+  >)("classifies whether %s/%s awaits user input", (type, executor, expected) => {
+    expect(wizardStepAwaitsInput({ id: "step", type, executor })).toBe(expected);
   });
 
   test("steps progress in order", async () => {
@@ -34,7 +32,7 @@ describe("WizardSession", () => {
 
     const first = await session.next();
     expect(first.done).toBe(false);
-    expect(first.step).toMatchObject({ type: "note", requiresUserInput: false });
+    expect(first.step?.type).toBe("note");
 
     const secondPeek = await session.next();
     expect(secondPeek.step?.id).toBe(first.step?.id);
@@ -46,7 +44,7 @@ describe("WizardSession", () => {
 
     const second = await session.next();
     expect(second.done).toBe(false);
-    expect(second.step).toMatchObject({ type: "text", requiresUserInput: true });
+    expect(second.step?.type).toBe("text");
 
     if (!second.step) {
       throw new Error("expected second step");
@@ -54,7 +52,7 @@ describe("WizardSession", () => {
     await session.answer(second.step.id, "Peter");
 
     const third = await session.next();
-    expect(third.step).toMatchObject({ type: "note", requiresUserInput: false });
+    expect(third.step?.type).toBe("note");
 
     if (!third.step) {
       throw new Error("expected third step");
