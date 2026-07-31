@@ -2,6 +2,7 @@
 import { normalizeSqliteNumber } from "../infra/sqlite-number.js";
 import { closeOpenClawStateDatabaseForTest } from "../state/openclaw-state-db.js";
 import { resolveOpenClawStateSqlitePath } from "../state/openclaw-state-db.paths.js";
+import { resolvePluginBlobStorageNamespace } from "../state/openclaw-state-snapshot-policy.js";
 import {
   MAX_PLUGIN_BLOB_BYTES_PER_ENTRY,
   MAX_PLUGIN_BLOB_BYTES_PER_PLUGIN,
@@ -22,6 +23,7 @@ import type {
   PluginBlobEntry,
   PluginBlobEntryInfo,
   PluginBlobOverflowPolicy,
+  PluginBlobSnapshotPolicy,
   PluginBlobStore,
   PluginBlobStoreOperation,
 } from "./plugin-blob-store.types.js";
@@ -47,6 +49,7 @@ type BlobStoreOptionSignature = {
   maxBytesPerNamespace: number;
   overflowPolicy: PluginBlobOverflowPolicy;
   defaultTtlMs?: number;
+  snapshotPolicy: PluginBlobSnapshotPolicy;
 };
 
 type PreparedBlob = {
@@ -118,6 +121,16 @@ function validateOverflowPolicy(value: unknown): PluginBlobOverflowPolicy {
   throw invalidInput("plugin blob overflowPolicy must be evict-oldest or reject-new", "open");
 }
 
+function validateSnapshotPolicy(value: unknown): PluginBlobSnapshotPolicy {
+  if (value === undefined || value === "restorable") {
+    return "restorable";
+  }
+  if (value === "exclude") {
+    return value;
+  }
+  throw invalidInput("plugin blob snapshotPolicy must be restorable or exclude", "open");
+}
+
 function validateTtl(
   value: number | undefined,
   operation: PluginBlobStoreOperation,
@@ -145,7 +158,8 @@ function assertConsistentOptions(
     existing.maxBytesPerEntry !== signature.maxBytesPerEntry ||
     existing.maxBytesPerNamespace !== signature.maxBytesPerNamespace ||
     existing.overflowPolicy !== signature.overflowPolicy ||
-    existing.defaultTtlMs !== signature.defaultTtlMs
+    existing.defaultTtlMs !== signature.defaultTtlMs ||
+    existing.snapshotPolicy !== signature.snapshotPolicy
   ) {
     // Namespace limits are a shared contract. Reopening with different limits
     // would make quota and eviction behavior depend on call order.
@@ -258,17 +272,20 @@ function createPluginBlobStoreInternal<TMetadata>(
   }
   const overflowPolicy = validateOverflowPolicy(options.overflowPolicy);
   const defaultTtlMs = validateTtl(options.defaultTtlMs, "open");
+  const snapshotPolicy = validateSnapshotPolicy(options.snapshotPolicy);
   assertConsistentOptions(pluginId, namespace, {
     maxEntries,
     maxBytesPerEntry,
     maxBytesPerNamespace,
     overflowPolicy,
     defaultTtlMs,
+    snapshotPolicy,
   });
+  const storageNamespace = resolvePluginBlobStorageNamespace({ namespace, snapshotPolicy });
 
   const writeParams = (blob: PreparedBlob) => ({
     pluginId,
-    namespace,
+    namespace: storageNamespace,
     key: blob.key,
     bytes: blob.bytes,
     metadataJson: blob.metadataJson,
@@ -305,21 +322,23 @@ function createPluginBlobStoreInternal<TMetadata>(
     async lookup(key) {
       const row = pluginBlobLookup({
         pluginId,
-        namespace,
+        namespace: storageNamespace,
         key: validateKey(key, "lookup"),
         ...(env ? { env } : {}),
       });
       return row ? storedEntryToEntry<TMetadata>(row, env) : undefined;
     },
     async entries() {
-      return pluginBlobEntries({ pluginId, namespace, ...(env ? { env } : {}) }).map((row) =>
-        storedInfoToEntryInfo<TMetadata>(row, "entries", env),
-      );
+      return pluginBlobEntries({
+        pluginId,
+        namespace: storageNamespace,
+        ...(env ? { env } : {}),
+      }).map((row) => storedInfoToEntryInfo<TMetadata>(row, "entries", env));
     },
     async delete(key) {
       return pluginBlobDelete({
         pluginId,
-        namespace,
+        namespace: storageNamespace,
         key: validateKey(key, "delete"),
         ...(env ? { env } : {}),
       });
@@ -327,7 +346,7 @@ function createPluginBlobStoreInternal<TMetadata>(
     async deleteExpiredKey(key) {
       const row = pluginBlobDeleteExpiredKey({
         pluginId,
-        namespace,
+        namespace: storageNamespace,
         key: validateKey(key, "sweep"),
         validateMetadataJson: (raw) => {
           parseMetadata(raw, "sweep", env);
@@ -339,7 +358,7 @@ function createPluginBlobStoreInternal<TMetadata>(
     async deleteExpired() {
       return pluginBlobDeleteExpired({
         pluginId,
-        namespace,
+        namespace: storageNamespace,
         validateMetadataJson: (raw) => {
           parseMetadata(raw, "sweep", env);
         },
@@ -347,7 +366,11 @@ function createPluginBlobStoreInternal<TMetadata>(
       }).map((row) => storedInfoToEntryInfo<TMetadata>(row, "sweep", env));
     },
     async clear() {
-      pluginBlobClear({ pluginId, namespace, ...(env ? { env } : {}) });
+      pluginBlobClear({
+        pluginId,
+        namespace: storageNamespace,
+        ...(env ? { env } : {}),
+      });
     },
   };
 }

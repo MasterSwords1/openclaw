@@ -33,6 +33,7 @@ export type PluginBlobStore<TMetadata> = {
 };
 
 export type PluginBlobOverflowPolicy = "evict-oldest" | "reject-new";
+export type PluginBlobSnapshotPolicy = "restorable" | "exclude";
 
 export type OpenBlobStoreOptions = {
   namespace: string;
@@ -41,6 +42,8 @@ export type OpenBlobStoreOptions = {
   maxBytesPerNamespace: number;
   overflowPolicy?: PluginBlobOverflowPolicy;
   defaultTtlMs?: number;
+  /** Whether rows from this namespace may be included in restorable snapshots. */
+  snapshotPolicy?: PluginBlobSnapshotPolicy;
 };
 
 export type PluginBlobStoreErrorCode =

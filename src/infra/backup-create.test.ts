@@ -17,6 +17,7 @@ import {
   openOpenClawStateDatabase,
 } from "../state/openclaw-state-db.js";
 import { resolveOpenClawStateSqlitePath } from "../state/openclaw-state-db.paths.js";
+import { PLUGIN_BLOB_SNAPSHOT_EXCLUDED_NAMESPACE_PREFIX } from "../state/openclaw-state-snapshot-policy.js";
 import {
   sanitizeOpenClawGlobalStateSnapshot,
   sanitizeOpenClawStateLeaseRows,
@@ -952,6 +953,7 @@ describe("createBackupArchive", () => {
         ).run();
         const transientBlobMarker = `transient-diffs-blob-${"sensitive".repeat(32)}`;
         const durableBlobMarker = "durable-plugin-blob-control";
+        const snapshotExcludedBlobMarker = `matrix-recovery-plan-${"sensitive".repeat(32)}`;
         const insertPluginBlob = db.prepare(
           `
             INSERT INTO plugin_blob_entries (
@@ -974,6 +976,15 @@ describe("createBackupArchive", () => {
           "durable",
           JSON.stringify({ kind: "durable" }),
           Buffer.from(durableBlobMarker),
+          10,
+          null,
+        );
+        insertPluginBlob.run(
+          "matrix",
+          `${PLUGIN_BLOB_SNAPSHOT_EXCLUDED_NAMESPACE_PREFIX}outbound-delivery-plans`,
+          "provider-plan",
+          JSON.stringify({ kind: "recovery-plan" }),
+          Buffer.from(snapshotExcludedBlobMarker),
           10,
           null,
         );
@@ -1025,6 +1036,7 @@ describe("createBackupArchive", () => {
           }
           const archivedBytes = await fs.readFile(path.join(extractDir, archivedDbEntry!));
           expect(archivedBytes.includes(transientBlobMarker)).toBe(false);
+          expect(archivedBytes.includes(snapshotExcludedBlobMarker)).toBe(false);
           expect(archivedBytes.includes(durableBlobMarker)).toBe(true);
 
           expect(db.prepare("SELECT COUNT(*) AS count FROM delivery_queue_entries").get()).toEqual({
@@ -1039,6 +1051,7 @@ describe("createBackupArchive", () => {
           ).toEqual([
             { plugin_id: "diffs", entry_key: "transient" },
             { plugin_id: "durable-plugin", entry_key: "durable" },
+            { plugin_id: "matrix", entry_key: "provider-plan" },
           ]);
           expect(db.prepare("SELECT COUNT(*) AS count FROM state_leases").get()).toEqual({
             count: 1,

@@ -300,7 +300,7 @@ export async function deliverOutboundPayloadsCore(
       params.onPayload?.(payloadSummary);
       const replyToResolution = resolveCurrentReplyTo(effectivePayload);
       const sendOverrides: OutboundMessageSendOverrides = {
-        ...(params.deliveryQueueId !== undefined ? { deliveryPayloadIndex: payloadIndex } : {}),
+        ...(params.deliveryQueueId !== undefined ? { deliveryPayloadIndex } : {}),
         replyToId: replyToResolution.replyToId,
         replyToIdSource: replyToResolution.source,
         ...(params.threadId !== undefined ? { threadId: params.threadId } : {}),

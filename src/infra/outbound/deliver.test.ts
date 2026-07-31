@@ -1299,6 +1299,49 @@ describe("deliverOutboundPayloads", () => {
     expect(messageSendText.mock.calls.map(([ctx]) => ctx.deliveryPayloadIndex)).toEqual([0, 1]);
   });
 
+  it("compacts provider-plan coordinates after an earlier payload is suppressed", async () => {
+    const messageSendText = vi.fn(async (ctx: ChannelMessageSendTextContext) => ({
+      messageId: `message-adapter-${ctx.deliveryPayloadIndex}`,
+      receipt: createMessageReceiptFromOutboundResults({
+        results: [{ channel: "matrix", messageId: `message-adapter-${ctx.deliveryPayloadIndex}` }],
+        kind: "text",
+      }),
+    }));
+    setMatrixMessageAdapter({
+      id: "matrix",
+      durableFinal: {
+        capabilities: { text: true, reconcileUnknownSend: true },
+        reconcileUnknownSendKinds: { text: true },
+        reconcileUnknownSend: async () => ({ status: "not_sent" }),
+      },
+      send: { text: messageSendText },
+    });
+
+    await deliverMatrix({
+      payloads: [{ text: "suppressed" }, { text: "visible" }],
+      preparedBatch: {
+        schemaVersion: 1,
+        sourcePayloadCount: 2,
+        entries: [
+          { sourceIndex: 0, status: "suppressed", reason: "no_visible_payload" },
+          {
+            sourceIndex: 1,
+            status: "accepted",
+            payload: { text: "visible" },
+            replyHookChanged: false,
+            messageHookChanged: false,
+            preparedMediaCount: 0,
+          },
+        ],
+      },
+      queuePolicy: "required",
+    });
+
+    expect(messageSendText).toHaveBeenCalledWith(
+      expect.objectContaining({ deliveryQueueId: "mock-queue-id", deliveryPayloadIndex: 0 }),
+    );
+  });
+
   it("rejects explicitly reconciled multi-payload sends before enqueue or platform I/O", async () => {
     const messageSendText = vi.fn();
     setMatrixMessageAdapter({

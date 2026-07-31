@@ -18,7 +18,7 @@ export type OutboundMessageSendOverrides = ReplyToOverride & {
   formatting?: OutboundDeliveryFormattingOptions;
   /** Stable zero-based platform-send index within one durable payload. */
   deliveryPartIndex?: number;
-  /** Stable source payload index within one durable intent. */
+  /** Stable accepted-payload index within one durable provider plan. */
   deliveryPayloadIndex?: number;
 };
 

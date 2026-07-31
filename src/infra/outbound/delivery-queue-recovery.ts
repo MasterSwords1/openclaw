@@ -936,6 +936,12 @@ async function drainQueuedEntry(opts: {
       await (producerClaimId
         ? moveToFailed(entry.id, opts.stateDir, producerClaimId)
         : moveToFailed(entry.id, opts.stateDir));
+      await runRecoveryTerminalHook({
+        entry,
+        cfg: opts.cfg,
+        log: opts.log,
+        stateDir: opts.stateDir,
+      });
       emitRecoveredTerminalFailure(entry, errMsg);
     } catch (moveErr) {
       if (getErrnoCode(moveErr) === "ENOENT") {

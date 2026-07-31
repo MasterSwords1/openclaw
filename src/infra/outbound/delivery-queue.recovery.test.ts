@@ -1019,6 +1019,37 @@ describe("delivery-queue recovery", () => {
     expect(await loadPendingDeliveries(tmpDir())).toHaveLength(0);
   });
 
+  it("cleans provider plans when a replay-safe entry exhausts its attempt budget", async () => {
+    const id = await enqueueRecoveryDelivery({ maxRetries: 1 });
+    await reserveDeliveryAttempt(id, 1, tmpDir());
+    setQueuedEntryState(tmpDir(), id, {
+      retryCount: 0,
+      lastAttemptAt: Date.now() - 10_000_000,
+      platformSendStartedAt: Date.now(),
+      recoveryState: "unknown_after_send",
+    });
+    const afterQueueTerminal = vi.fn();
+    const reconcileUnknownSend = vi.fn().mockResolvedValue({ status: "replay_safe" });
+    resolveOutboundChannelMessageAdapterMock.mockReturnValue({
+      durableFinal: {
+        capabilities: { reconcileUnknownSend: true },
+        reconcileUnknownSend,
+        afterQueueTerminal,
+      },
+    });
+    const deliver = vi.fn();
+
+    const { result } = await runRecovery({ deliver });
+
+    expect(reconcileUnknownSend).toHaveBeenCalledOnce();
+    expect(deliver).not.toHaveBeenCalled();
+    expect(afterQueueTerminal).toHaveBeenCalledWith(
+      expect.objectContaining({ queueId: id, deliveryQueueStateDir: tmpDir() }),
+    );
+    expect(result).toMatchObject({ failed: 1, skippedMaxRetries: 0 });
+    expect(readOutboundQueueStatus(tmpDir(), id)).toBe("failed");
+  });
+
   it("keeps a recovered delivery terminal when provider cleanup resolution throws", async () => {
     const id = await enqueueRecoveryDelivery();
     resolveOutboundChannelMessageAdapterMock

@@ -61,6 +61,7 @@ function createDeliveryPlanStore() {
     maxBytesPerEntry: DELIVERY_PLAN_MAX_BYTES,
     maxBytesPerNamespace: DELIVERY_PLAN_NAMESPACE_MAX_BYTES,
     overflowPolicy: "reject-new",
+    snapshotPolicy: "exclude",
   });
 }
 

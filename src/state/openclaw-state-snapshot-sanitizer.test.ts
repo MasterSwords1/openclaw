@@ -1,5 +1,6 @@
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { PLUGIN_BLOB_SNAPSHOT_EXCLUDED_NAMESPACE_PREFIX } from "./openclaw-state-snapshot-policy.js";
 import { sanitizeOpenClawGlobalStateSnapshot } from "./openclaw-state-snapshot-sanitizer.js";
 
 describe("OpenClaw state snapshot sanitizer", () => {
@@ -102,5 +103,31 @@ describe("OpenClaw state snapshot sanitizer", () => {
     });
     expect(JSON.parse(row.raw_json).defaults).toMatchObject({ security: "deny", ask: "off" });
     expect(row.raw_json).not.toContain(secret);
+  });
+
+  it("removes TTL and snapshot-excluded plugin blobs while retaining durable controls", () => {
+    database.exec(`
+      CREATE TABLE plugin_blob_entries (
+        plugin_id TEXT NOT NULL,
+        namespace TEXT NOT NULL,
+        entry_key TEXT NOT NULL,
+        expires_at INTEGER
+      ) STRICT;
+      INSERT INTO plugin_blob_entries VALUES
+        ('plugin-a', 'documents', 'durable', NULL),
+        ('plugin-a', 'cache', 'transient', 9999999999999),
+        ('matrix', '${PLUGIN_BLOB_SNAPSHOT_EXCLUDED_NAMESPACE_PREFIX}outbound-delivery-plans', 'plan', NULL);
+    `);
+
+    sanitizeOpenClawGlobalStateSnapshot(database);
+
+    expect(
+      database
+        .prepare(
+          `SELECT plugin_id, namespace, entry_key
+           FROM plugin_blob_entries ORDER BY plugin_id, namespace, entry_key`,
+        )
+        .all(),
+    ).toEqual([{ plugin_id: "plugin-a", namespace: "documents", entry_key: "durable" }]);
   });
 });

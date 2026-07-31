@@ -97,8 +97,9 @@ outbound adapter.
 The boundary that stays dangerous: after the platform call succeeds and before
 the receipt commits. If the process dies there, core cannot know whether the
 platform message exists unless the adapter declares `reconcileUnknownSend`.
-That hook classifies an interrupted send as `sent`, `not_sent`, or
-`unresolved`; only `not_sent` permits replay. Channels without reconciliation
+That hook classifies an interrupted send as `sent`, `not_sent`, `replay_safe`,
+or `unresolved`. `not_sent` permits a fresh send, while `replay_safe` permits
+only an exact provider-plan replay under the adapter's idempotency contract. Channels without reconciliation
 fall back to `unknown_after_send` state (`src/channels/message/state.ts`,
 `src/infra/outbound/delivery-queue-recovery.ts`) and may choose at-least-once
 replay only if duplicate visible messages are an acceptable, documented
