@@ -16,6 +16,21 @@ import { normalizeStringEntries } from "./string-coerce-runtime.js";
 export { writeGatewayRestartIntentSync } from "../infra/restart-intent.js";
 
 type QaRuntimeSurface = {
+  acquireQaCredentialLease: <TPayload>(options: {
+    env?: NodeJS.ProcessEnv;
+    kind: string;
+    parsePayload: (payload: unknown) => TPayload;
+    resolveEnvPayload: () => TPayload;
+    role?: string;
+    source?: string;
+  }) => Promise<{
+    heartbeat(): Promise<void>;
+    heartbeatIntervalMs: number;
+    kind: string;
+    payload: TPayload;
+    release(): Promise<void>;
+    source: "convex" | "env";
+  }>;
   defaultQaRuntimeModelForMode: (
     mode: string,
     options?: {
@@ -25,6 +40,15 @@ type QaRuntimeSurface = {
   ) => string;
   startQaLiveLaneGateway: (...args: unknown[]) => Promise<unknown>;
   runLiveTransportQaSuiteCommand: (params: LiveTransportQaSuiteCommandOptions) => Promise<unknown>;
+  startQaCredentialLeaseHeartbeat: (lease: {
+    heartbeat(): Promise<void>;
+    heartbeatIntervalMs: number;
+    kind: string;
+    source: "convex" | "env";
+  }) => {
+    stop(): Promise<void>;
+    throwIfFailed(): void;
+  };
 };
 
 function isMissingQaRuntimeError(error: unknown) {
