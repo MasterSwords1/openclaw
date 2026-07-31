@@ -210,7 +210,7 @@ export function reconcileSlackNativeTaskChunks(params: {
   const taskChunks = (params.chunks ?? []).filter(
     (chunk): chunk is TaskChunk => chunk.type === "task_update",
   );
-  const previousActive = [...params.previousTasks].filter(([, task]) => task.active !== false);
+  const previousActive = [...params.previousTasks].filter(([, task]) => task.active);
   const assignedIds = new Map<TaskChunk, string>();
   const usedPreviousIds = new Set<string>();
 
