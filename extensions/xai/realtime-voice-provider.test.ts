@@ -868,6 +868,7 @@ describe("buildXaiRealtimeVoiceProvider", () => {
 
     const { connecting, socket } = await openRealtimeBridge(bridge);
     await connecting;
+    socket.deferClose = true;
     socket.emit(
       "message",
       Buffer.from(JSON.stringify({ type: "response.output_audio.delta", delta: "ZE==" })),
@@ -880,9 +881,11 @@ describe("buildXaiRealtimeVoiceProvider", () => {
     );
     expect(onError).toHaveBeenCalledTimes(1);
     expect(onAudio).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(socket.closed).toBe(true);
+    socket.flushClose();
     expect(onClose).toHaveBeenCalledWith("error");
     expect(onClose).toHaveBeenCalledTimes(1);
-    expect(socket.closed).toBe(true);
     if (!retry) {
       throw new Error("expected synchronous retry from onError");
     }
