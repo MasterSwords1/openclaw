@@ -217,7 +217,10 @@ describe("sendWebhookMessageDiscord activity", () => {
       });
 
       const request = firstMockCall(vi.mocked(fetch), "fetch")[1] as RequestInit;
-      const body = JSON.parse(String(request.body)) as { flags?: number };
+      if (typeof request.body !== "string") {
+        throw new Error("expected a serialized Discord webhook request body");
+      }
+      const body = JSON.parse(request.body) as { flags?: number };
       expect(body.flags).toBe(expectedFlags);
     },
   );
