@@ -41,7 +41,6 @@ import { collapseSlackProgressReceipt } from "./dispatch-progress-io.js";
 import {
   buildNativeProgressChunks as buildRenderedNativeProgressChunks,
   combineProgressHeadlineAndExplanation,
-  resolveNativeProgressLines,
   resolveNativeProgressPlan,
   resolveStructuredProgressLines,
 } from "./dispatch-progress-render.js";
@@ -72,47 +71,61 @@ export function createSlackProgressRuntime(runtimeParams: {
     useStreaming,
     previewStreamingEnabled,
   } = setup;
-  const draftStream = shouldUseDraftStream
-    ? createSlackDraftStream({
-        target: prepared.replyTarget,
-        cfg,
-        token: ctx.botToken,
-        accountId: account.accountId,
-        ...(prepared.eventScope ? { eventScope: prepared.eventScope } : {}),
-        // Impersonated Slack messages cannot be deleted. Keep the temporary
-        // preview app-authored and apply custom identity only to final delivery.
-        ...(!hasSlackCustomIdentity && slackIdentity ? { identity: slackIdentity } : {}),
-        ...(slackMessageMetadata ? { metadata: slackMessageMetadata } : {}),
-        maxChars: Math.min(ctx.textLimit, SLACK_TEXT_LIMIT),
-        resolveThreadTs: () => {
-          const ts = replyPlan.peekThreadTs();
-          if (ts) {
-            delivery.usedReplyThreadTs ??= ts;
-          }
-          return ts;
-        },
-        log: logVerbose,
-        warn: logVerbose,
-      })
-    : undefined;
-  let hasStreamedMessage = false;
   const streamMode = slackStreaming.draftMode;
   const useNativeProgressStreaming = useStreaming && slackStreaming.mode === "progress";
+  // Native progress is preferred, but the shared portable draft remains warm
+  // as its transport fallback when Slack rejects start/append for this target.
+  const draftStream =
+    shouldUseDraftStream || useNativeProgressStreaming
+      ? createSlackDraftStream({
+          target: prepared.replyTarget,
+          cfg,
+          token: ctx.botToken,
+          accountId: account.accountId,
+          ...(prepared.eventScope ? { eventScope: prepared.eventScope } : {}),
+          // Impersonated Slack messages cannot be deleted. Keep the temporary
+          // preview app-authored and apply custom identity only to final delivery.
+          ...(!hasSlackCustomIdentity && slackIdentity ? { identity: slackIdentity } : {}),
+          ...(slackMessageMetadata ? { metadata: slackMessageMetadata } : {}),
+          maxChars: Math.min(ctx.textLimit, SLACK_TEXT_LIMIT),
+          resolveThreadTs: () => {
+            const ts = replyPlan.peekThreadTs();
+            if (ts) {
+              delivery.usedReplyThreadTs ??= ts;
+            }
+            return ts;
+          },
+          log: logVerbose,
+          warn: logVerbose,
+        })
+      : undefined;
+  let hasStreamedMessage = false;
   const progressDraftActive = Boolean(draftStream) || useNativeProgressStreaming;
+  // Preserve the released tool-row default for operators who explicitly chose
+  // a stream mode. Only the new unset Slack progress default is semantic-only.
+  const toolProgressDefault = Boolean(account.config.streaming?.mode);
   const previewToolProgressEnabled =
     progressDraftActive &&
-    resolveChannelStreamingPreviewToolProgress(account.config, true, slackStreaming.mode);
+    resolveChannelStreamingPreviewToolProgress(
+      account.config,
+      toolProgressDefault,
+      slackStreaming.mode,
+    );
   let shouldYieldDraftProgress: () => boolean = () => false;
+  // The shared helper can only see configured modes; Slack's unset mode resolves
+  // to progress here, so suppress standalone tool messages at this owner boundary.
   const suppressDefaultToolProgressMessages =
-    resolveChannelStreamingSuppressDefaultToolProgressMessages(account.config, {
-      draftStreamActive: Boolean(draftStream) || useNativeProgressStreaming,
-      previewToolProgressEnabled,
-      previewStreamingEnabled,
-    });
+    progressDraftActive && previewStreamingEnabled && slackStreaming.mode === "progress"
+      ? true
+      : resolveChannelStreamingSuppressDefaultToolProgressMessages(account.config, {
+          draftStreamActive: Boolean(draftStream) || useNativeProgressStreaming,
+          previewToolProgressEnabled,
+          previewStreamingEnabled,
+        });
   let previewToolProgressSuppressed = false;
   let legacyPreviewToolProgressLines: ChannelProgressDraftLine[] = [];
   // Last task rows emitted to the native stream; reconciliation terminalizes
-  // ids that drop out (plan shrinks, tool-line <-> plan source switches).
+  // ids that drop out when a structured plan shrinks or changes.
   let nativeTaskState: SlackNativeTaskSnapshot = new Map();
   let appendRenderedText = "";
   let appendSourceText = "";
@@ -131,8 +144,8 @@ export function createSlackProgressRuntime(runtimeParams: {
   const progressDraftMaxLineChars = resolveChannelProgressDraftMaxLineChars(account.config);
 
   const waitForNativeProgressStreamStart = async (): Promise<boolean> => {
-    if (delivery.streamSession || !delivery.nativeProgressStreamStartPromise) {
-      return true;
+    if (!delivery.nativeProgressStreamStartPromise) {
+      return !delivery.streamFailed;
     }
     try {
       await delivery.nativeProgressStreamStartPromise;
@@ -175,7 +188,6 @@ export function createSlackProgressRuntime(runtimeParams: {
         explicitProgressTitle ?? snapshot.statusHeadline,
         snapshot.planExplanation,
       ),
-      maxLineChars: progressDraftMaxLineChars,
     });
 
   const resolveNativeProgressTitle = (snapshot: ChannelProgressDraftCompositorSnapshot) =>
@@ -256,18 +268,13 @@ export function createSlackProgressRuntime(runtimeParams: {
 
   const updateNativeProgressStream = async () => {
     const snapshot = progressDraft.getSnapshot();
-    const progressLines = resolveNativeProgressLines(snapshot);
     const hasRetirableNativeTasks = [...nativeTaskState.values()].some(
       (task) => task.status !== "complete" && task.status !== "error",
     );
     if (
       !useNativeProgressStreaming ||
       delivery.streamFailed ||
-      (progressLines.length === 0 &&
-        !snapshot.plan?.length &&
-        !snapshot.statusHeadline &&
-        !explicitProgressTitle &&
-        !hasRetirableNativeTasks)
+      (!snapshot.plan?.length && !hasRetirableNativeTasks)
     ) {
       return;
     }
@@ -332,7 +339,9 @@ export function createSlackProgressRuntime(runtimeParams: {
     update: async (previewText, options) => {
       if (useNativeProgressStreaming) {
         await updateNativeProgressStream();
-        return;
+        if (!delivery.streamFailed) {
+          return;
+        }
       }
       if (!draftStream) {
         return;
@@ -367,20 +376,17 @@ export function createSlackProgressRuntime(runtimeParams: {
 
   const buildNativeProgressCompletionChunks = (finalInProgressStatus: "complete" | "error") => {
     const snapshot = progressDraft.getSnapshot();
-    const lines = resolveNativeProgressLines(snapshot);
     const hasRetirableNativeTasks = [...nativeTaskState.values()].some(
       (task) => task.status !== "complete" && task.status !== "error",
     );
-    if (lines.length === 0 && !snapshot.plan?.length && !hasRetirableNativeTasks) {
+    if (!snapshot.plan?.length && !hasRetirableNativeTasks) {
       return undefined;
     }
     return reconcileSlackNativeTaskChunks({
       previousTasks: nativeTaskState,
       chunks: buildSlackProgressStreamCompletionChunks({
         title: resolveNativeProgressTitle(snapshot),
-        lines,
         plan: resolveNativeProgressPlan(snapshot),
-        maxLineChars: progressDraftMaxLineChars,
         finalInProgressStatus,
       }),
     }).chunks;
@@ -463,6 +469,9 @@ export function createSlackProgressRuntime(runtimeParams: {
     if (streamMode === "status_final") {
       if (!line || !normalized) {
         await progressDraft.noteActivity();
+        return;
+      }
+      if (!previewToolProgressEnabled) {
         return;
       }
       await progressDraft.pushToolProgress(line, options);

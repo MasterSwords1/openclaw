@@ -26,8 +26,8 @@ export const slackChannelConfigUiHints = {
     nativeCommands: true,
     implicitMentions: true,
     streaming: {
-      "": 'Unified Slack stream preview mode: "off" | "partial" | "block" | "progress". Legacy boolean/streamMode keys are auto-mapped.',
-      mode: 'Canonical Slack preview mode: "off" | "partial" | "block" | "progress".',
+      "": 'Unified Slack stream preview mode: "off" | "partial" | "block" | "progress" (default: "progress"). Legacy boolean/streamMode keys are auto-mapped.',
+      mode: 'Canonical Slack preview mode: "off" | "partial" | "block" | "progress" (default: "progress").',
       chunkMode: 'Chunking mode for outbound Slack text delivery: "length" (default) or "newline".',
       "block.enabled":
         'Enable chunked block-style Slack preview delivery when channels.slack.streaming.mode="block".',
@@ -41,10 +41,14 @@ export const slackChannelConfigUiHints = {
       "progress.render":
         'Progress draft renderer: "text" uses one portable text body; "rich" renders structured Slack Block Kit fields with the same text fallback.',
       "progress.nativeTaskCards":
-        'Opt in to Slack native task-card progress updates when channels.slack.streaming.mode="progress" and streaming.nativeTransport is enabled. Default: false.',
+        'Use Slack native task-card progress updates for structured update_plan steps when channels.slack.streaming.mode="progress" and streaming.nativeTransport is enabled. Default: true when Slack streaming is unset; existing explicit progress-mode configs remain portable unless this is true.',
     },
     progress: { labels: "openclaw" },
   }),
+  "streaming.progress.toolProgress": {
+    label: "Slack Progress Tool Lines",
+    help: "Show raw tool-progress lines in Slack progress mode. The unset Slack default hides them; existing explicit progress-mode configs retain the released default. Explicitly enabling this uses the portable edited draft because native task cards contain only structured plan steps.",
+  },
   allowBots: {
     label: "Slack Allow Bot Messages",
     help: "Allow bot-authored messages to trigger Slack replies (default: false).",

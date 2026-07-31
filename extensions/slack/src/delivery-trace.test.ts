@@ -19,6 +19,7 @@ import {
   type TraceEvent,
   type TraceNormalizer,
 } from "openclaw/plugin-sdk/channel-contract-testing";
+import type { AgentPlanStep } from "openclaw/plugin-sdk/channel-outbound";
 import type { OpenClawConfig } from "openclaw/plugin-sdk/config-contracts";
 import type { ReplyDispatchKind, ReplyPayload } from "openclaw/plugin-sdk/reply-runtime";
 import { afterAll, afterEach, describe, it, vi } from "vitest";
@@ -44,8 +45,21 @@ type CapturedDispatcherOptions = {
 type CapturedReplyOptions = {
   suppressDefaultToolProgressMessages?: boolean;
   onPartialReply?: (payload: { text: string }) => Promise<void> | void;
+  onPlanUpdate?: (payload: {
+    phase: "update";
+    explanation?: string;
+    steps?: AgentPlanStep[];
+  }) => Promise<void> | void;
   onToolStart?: (payload: { name: string; phase: "start" | "result" }) => Promise<void> | void;
 };
+
+type SlackPlanTraceStep = {
+  kind: "plan";
+  explanation?: string;
+  steps: AgentPlanStep[];
+};
+
+type SlackTraceStep = DeliveryTraceStep | SlackPlanTraceStep;
 
 type TurnCounts = Record<ReplyDispatchKind, number>;
 
@@ -171,12 +185,25 @@ type SlackTraceScenarioName =
   | "stream-stop-first-network-call"
   | "final-blocks-and-text"
   | "cancel-mid-stream"
-  | "preview-edit-fallback";
+  | "preview-edit-fallback"
+  | "semantic-progress-greeting"
+  | "semantic-progress-plan"
+  | "semantic-progress-error"
+  | "semantic-progress-start-fallback"
+  | "semantic-progress-thread-fallback";
 
 const NATIVE_SCENARIOS = new Set<SlackTraceScenarioName>([
   "streaming-happy-native",
   "stream-stop-first-network-call",
   "final-blocks-and-text",
+]);
+
+const SEMANTIC_PROGRESS_SCENARIOS = new Set<SlackTraceScenarioName>([
+  "semantic-progress-greeting",
+  "semantic-progress-plan",
+  "semantic-progress-error",
+  "semantic-progress-start-fallback",
+  "semantic-progress-thread-fallback",
 ]);
 
 // Long enough that the second stream append pushes the SDK buffer past
@@ -196,6 +223,7 @@ const PREVIEW_PARTIAL_TWO = "Compiling the changelog for 2026.1.0.";
 const PREVIEW_FINAL_TEXT = "Compiling the changelog for 2026.1.0.\n\nDone: 12 entries.";
 
 const BLOCKS_FINAL_TEXT = "Release 2026.1.0 is ready to ship.";
+const SEMANTIC_FINAL_TEXT = "Slack progress cards are ready.";
 // Portable presentation actions; slack renders them as Block Kit and must
 // synthesize accessible fallback text because blocks hide top-level text.
 const BLOCKS_FINAL_PRESENTATION = {
@@ -212,7 +240,7 @@ const BLOCKS_FINAL_PRESENTATION = {
 
 // Slack-specific scenario scripts; the runner only consumes `steps` and the
 // name (outside the shared scenario library) keys the golden filename.
-const slackTraceScenarios: Record<SlackTraceScenarioName, readonly DeliveryTraceStep[]> = {
+const slackTraceScenarios: Record<SlackTraceScenarioName, readonly SlackTraceStep[]> = {
   "streaming-happy-native": [
     { kind: "reply-start" },
     // Native streaming has no partial preview (onPartialReply is undefined);
@@ -259,6 +287,64 @@ const slackTraceScenarios: Record<SlackTraceScenarioName, readonly DeliveryTrace
     { kind: "partial", text: PREVIEW_PARTIAL_TWO },
     { kind: "advance", ms: 1100 },
     { kind: "final", text: PREVIEW_FINAL_TEXT },
+    { kind: "idle" },
+  ],
+  "semantic-progress-greeting": [
+    { kind: "reply-start" },
+    { kind: "final", text: "Hello! How can I help?" },
+    { kind: "idle" },
+  ],
+  "semantic-progress-plan": [
+    { kind: "reply-start" },
+    {
+      kind: "plan",
+      explanation: "Implement semantic Slack progress",
+      steps: [
+        { step: "Inspect the Slack lifecycle", status: "in_progress" },
+        { step: "Validate wire delivery", status: "pending" },
+      ],
+    },
+    { kind: "tool-progress", name: "bash", phase: "start" },
+    { kind: "tool-progress", name: "message", phase: "start" },
+    {
+      kind: "plan",
+      explanation: "Implement semantic Slack progress",
+      steps: [
+        { step: "Inspect the Slack lifecycle", status: "completed" },
+        { step: "Validate wire delivery", status: "in_progress" },
+      ],
+    },
+    { kind: "final", text: SEMANTIC_FINAL_TEXT },
+    { kind: "idle" },
+  ],
+  "semantic-progress-error": [
+    { kind: "reply-start" },
+    {
+      kind: "plan",
+      explanation: "Validate the failure path",
+      steps: [{ step: "Run the failing operation", status: "in_progress" }],
+    },
+    { kind: "final", text: "The operation failed.", isError: true },
+    { kind: "idle" },
+  ],
+  "semantic-progress-start-fallback": [
+    { kind: "reply-start" },
+    {
+      kind: "plan",
+      explanation: "Exercise native fallback",
+      steps: [{ step: "Start the Slack task card", status: "in_progress" }],
+    },
+    { kind: "final", text: SEMANTIC_FINAL_TEXT },
+    { kind: "idle" },
+  ],
+  "semantic-progress-thread-fallback": [
+    { kind: "reply-start" },
+    {
+      kind: "plan",
+      explanation: "Exercise thread fallback",
+      steps: [{ step: "Prepare the portable progress draft", status: "in_progress" }],
+    },
+    { kind: "final", text: SEMANTIC_FINAL_TEXT },
     { kind: "idle" },
   ],
 };
@@ -476,9 +562,11 @@ function createPreparedTraceMessage(scenario: SlackTraceScenarioName): PreparedS
     },
     account: {
       accountId: "default",
-      config: {
-        streaming: { mode: "partial", nativeTransport: NATIVE_SCENARIOS.has(scenario) },
-      },
+      config: SEMANTIC_PROGRESS_SCENARIOS.has(scenario)
+        ? {}
+        : {
+            streaming: { mode: "partial", nativeTransport: NATIVE_SCENARIOS.has(scenario) },
+          },
     },
     message: {
       type: "message",
@@ -500,7 +588,7 @@ function createPreparedTraceMessage(scenario: SlackTraceScenarioName): PreparedS
     replyTarget: `channel:${CHANNEL_ID}`,
     ctxPayload: { SessionKey: "slack:channel:c0trace", ChatType: "channel" },
     turn: { storePath: "/unused/slack-trace-sessions.json", record: {} },
-    replyToMode: "all",
+    replyToMode: scenario === "semantic-progress-thread-fallback" ? "off" : "all",
     requireMention: true,
     isDirectMessage: false,
     isRoomish: true,
@@ -525,7 +613,7 @@ async function setupSlackTrace(
   // stop() rejections with a benign finalize code while text is still buffered
   // must fall back to the durable full-text path (streaming.ts contract).
   traceState.rejectStartStreamCode =
-    scenario === "stream-stop-first-network-call"
+    scenario === "stream-stop-first-network-call" || scenario === "semantic-progress-start-fallback"
       ? "method_not_supported_for_channel_type"
       : undefined;
   traceState.client = createRecordingSlackClient();
@@ -549,7 +637,10 @@ async function setupSlackTrace(
     }
   };
 
-  return async (step: DeliveryTraceInStep) => {
+  return async (inputStep: DeliveryTraceInStep) => {
+    // The shared harness records arbitrary channel-local step kinds at runtime;
+    // Slack adds a structured plan step without expanding the portable product protocol.
+    const step = inputStep as DeliveryTraceInStep | SlackPlanTraceStep;
     switch (step.kind) {
       case "reply-start":
         await turn.options.typingCallbacks?.onReplyStart?.();
@@ -558,6 +649,13 @@ async function setupSlackTrace(
         // Present only on the draft-preview tier; native streaming leaves
         // onPartialReply undefined and partials stay IN-only script context.
         await turn.replyOptions.onPartialReply?.({ text: step.text });
+        break;
+      case "plan":
+        await turn.replyOptions.onPlanUpdate?.({
+          phase: "update",
+          ...(step.explanation ? { explanation: step.explanation } : {}),
+          steps: step.steps,
+        });
         break;
       case "tool-progress":
         await turn.replyOptions.onToolStart?.({ name: step.name, phase: step.phase });
@@ -611,7 +709,12 @@ describe("slack delivery trace goldens", () => {
   for (const scenarioName of Object.keys(slackTraceScenarios) as SlackTraceScenarioName[]) {
     it(`records ${scenarioName}`, async () => {
       const events = await runDeliveryTraceScenario({
-        scenario: { name: scenarioName, steps: slackTraceScenarios[scenarioName] },
+        scenario: {
+          name: scenarioName,
+          // Delivery traces permit channel-specific scenarios; the shared step
+          // union does not need a product-surface plan-event expansion for this fixture.
+          steps: slackTraceScenarios[scenarioName] as readonly DeliveryTraceStep[],
+        },
         setup: (recorder) => setupSlackTrace(recorder, scenarioName),
         normalize: createSlackTsNormalizer(),
       });

@@ -1,9 +1,8 @@
-import {
-  buildChannelProgressDraftLine,
-  type AgentPlanStep,
-  type ChannelProgressDraftCompositorLine,
-  type ChannelProgressDraftCompositorSnapshot,
-  type ChannelProgressDraftLine,
+import type {
+  AgentPlanStep,
+  ChannelProgressDraftCompositorLine,
+  ChannelProgressDraftCompositorSnapshot,
+  ChannelProgressDraftLine,
 } from "openclaw/plugin-sdk/channel-outbound";
 import {
   buildSlackProgressStreamStartChunks,
@@ -33,27 +32,12 @@ export function resolveStructuredProgressLines(
   });
 }
 
-// Native cards derive from the compositor snapshot. Empty plans fall back
-// to line tasks, and reconciliation retires rows from the prior source.
+// Native cards derive only from structured update_plan steps. Tool and status
+// lines remain portable progress data and never become Slack checklist rows.
 export function resolveNativeProgressPlan(
   snapshot: ChannelProgressDraftCompositorSnapshot,
 ): readonly AgentPlanStep[] | undefined {
   return snapshot.plan?.length ? snapshot.plan : undefined;
-}
-
-export function resolveNativeProgressLines(
-  snapshot: ChannelProgressDraftCompositorSnapshot,
-): ChannelProgressDraftLine[] {
-  const lines = resolveStructuredProgressLines(snapshot.lines);
-  if (snapshot.plan?.length || !snapshot.planExplanation) {
-    return lines;
-  }
-  const explanationLine = buildChannelProgressDraftLine({
-    event: "plan",
-    phase: "update",
-    explanation: snapshot.planExplanation,
-  });
-  return explanationLine ? [...lines, explanationLine] : lines;
 }
 
 export function combineProgressHeadlineAndExplanation(
@@ -69,13 +53,10 @@ export function buildNativeProgressChunks(params: {
   snapshot: ChannelProgressDraftCompositorSnapshot;
   streamStarted: boolean;
   title?: string;
-  maxLineChars?: number;
 }) {
   const input = {
     title: params.title,
-    lines: resolveNativeProgressLines(params.snapshot),
     plan: resolveNativeProgressPlan(params.snapshot),
-    maxLineChars: params.maxLineChars,
   };
   return params.streamStarted
     ? buildSlackProgressStreamUpdateChunks(input)

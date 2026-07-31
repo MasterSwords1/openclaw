@@ -102,15 +102,32 @@ export function resolveSlackNativeProgressTaskCards(
 ): boolean {
   const streaming = entry?.streaming;
   if (!streaming || typeof streaming !== "object" || Array.isArray(streaming)) {
+    return true;
+  }
+  const streamingConfig = streaming as Record<string, unknown>;
+  const progressValue = streamingConfig.progress;
+  const progressConfig =
+    progressValue && typeof progressValue === "object" && !Array.isArray(progressValue)
+      ? (progressValue as Record<string, unknown>)
+      : undefined;
+  const previewValue = streamingConfig.preview;
+  const previewConfig =
+    previewValue && typeof previewValue === "object" && !Array.isArray(previewValue)
+      ? (previewValue as Record<string, unknown>)
+      : undefined;
+  // Explicit raw progress is rendered by the portable edited draft. Native
+  // task cards are semantic-only and never synthesize tool calls into tasks.
+  const toolProgress = progressConfig?.toolProgress ?? previewConfig?.toolProgress;
+  if (toolProgress === true) {
     return false;
   }
-  const progressConfig = (streaming as Record<string, unknown>).progress;
-  return (
-    Boolean(progressConfig) &&
-    typeof progressConfig === "object" &&
-    !Array.isArray(progressConfig) &&
-    (progressConfig as { nativeTaskCards?: unknown }).nativeTaskCards === true
-  );
+  const nativeTaskCards = progressConfig?.nativeTaskCards;
+  if (typeof nativeTaskCards === "boolean") {
+    return nativeTaskCards;
+  }
+  // A configured mode predates semantic-only defaults and historically showed
+  // portable tool progress. Only an unset mode defaults to native task cards.
+  return streamingConfig.mode === undefined;
 }
 
 export function resolveSlackStreamingThreadHint(params: {

@@ -1,0 +1,15 @@
+{"seq":1,"at":0,"dir":"in","kind":"reply-start"}
+{"seq":2,"at":0,"dir":"out","kind":"assistant.threads.setStatus","data":{"payload":{"channel_id":"C0TRACE","status":"is typing...","thread_ts":"ts#1"},"result":{"ok":true},"target":"C0TRACE/ts#1"}}
+{"seq":3,"at":0,"dir":"in","kind":"plan","data":{"explanation":"Implement semantic Slack progress","steps":[{"status":"in_progress","step":"Inspect the Slack lifecycle"},{"status":"pending","step":"Validate wire delivery"}]}}
+{"seq":4,"at":0,"dir":"out","kind":"users.info","data":{"payload":{"user":"U0TRACE"},"result":{"team_id":"T0TRACE"},"target":"U0TRACE"}}
+{"seq":5,"at":0,"dir":"out","kind":"chat.startStream","data":{"payload":{"channel":"C0TRACE","chunks":[{"title":"Implement semantic Slack progress","type":"plan_update"},{"id":"plan_step_1","status":"in_progress","title":"Inspect the Slack lifecycle","type":"task_update"},{"id":"plan_step_2","status":"pending","title":"Validate wire delivery","type":"task_update"}],"recipient_team_id":"T0TRACE","recipient_user_id":"U0TRACE","task_display_mode":"plan","thread_ts":"ts#1"},"result":{"ts":"ts#2"},"target":"C0TRACE"}}
+{"seq":6,"at":0,"dir":"in","kind":"tool-progress","data":{"name":"bash","phase":"start"}}
+{"seq":7,"at":0,"dir":"in","kind":"tool-progress","data":{"name":"message","phase":"start"}}
+{"seq":8,"at":0,"dir":"in","kind":"plan","data":{"explanation":"Implement semantic Slack progress","steps":[{"status":"completed","step":"Inspect the Slack lifecycle"},{"status":"in_progress","step":"Validate wire delivery"}]}}
+{"seq":9,"at":0,"dir":"out","kind":"chat.appendStream","data":{"payload":{"channel":"C0TRACE","chunks":[{"title":"Implement semantic Slack progress","type":"plan_update"},{"id":"plan_step_1","status":"complete","title":"Inspect the Slack lifecycle","type":"task_update"},{"id":"plan_step_2","status":"in_progress","title":"Validate wire delivery","type":"task_update"}],"ts":"ts#2"},"result":{"ok":true},"target":"ts#2"}}
+{"seq":10,"at":0,"dir":"in","kind":"final","data":{"text":"Slack progress cards are ready."}}
+{"seq":11,"at":0,"dir":"out","kind":"chat.postMessage","data":{"payload":{"channel":"C0TRACE","text":"Slack progress cards are ready.","thread_ts":"ts#1","unfurl_links":false},"result":{"ts":"ts#3"},"target":"C0TRACE"}}
+{"seq":12,"at":0,"dir":"out","kind":"chat.appendStream","data":{"payload":{"channel":"C0TRACE","chunks":[{"title":"Implement semantic Slack progress","type":"plan_update"},{"id":"plan_step_1","status":"complete","title":"Inspect the Slack lifecycle","type":"task_update"},{"id":"plan_step_2","status":"complete","title":"Validate wire delivery","type":"task_update"}],"ts":"ts#2"},"result":{"ok":true},"target":"ts#2"}}
+{"seq":13,"at":0,"dir":"in","kind":"idle"}
+{"seq":14,"at":0,"dir":"out","kind":"assistant.threads.setStatus","data":{"payload":{"channel_id":"C0TRACE","status":"","thread_ts":"ts#1"},"result":{"ok":true},"target":"C0TRACE/ts#1"}}
+{"seq":15,"at":0,"dir":"out","kind":"chat.stopStream","data":{"payload":{"channel":"C0TRACE","chunks":[],"ts":"ts#2"},"result":{"ok":true},"target":"ts#2"}}

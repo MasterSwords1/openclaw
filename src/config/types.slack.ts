@@ -68,7 +68,7 @@ type SlackPresenceEventsConfig = {
 export type SlackReactionNotificationMode = "off" | "own" | "all" | "allowlist";
 export type SlackStreamingMode = "off" | "partial" | "block" | "progress";
 export type SlackStreamingProgressConfig = ChannelStreamingProgressConfig & {
-  /** Opt in to Slack-native task cards for progress mode. Default: false. */
+  /** Use native cards for structured plans. Default: true only when Slack streaming is unset. */
   nativeTaskCards?: boolean;
 };
 export type SlackChannelStreamingConfig = {

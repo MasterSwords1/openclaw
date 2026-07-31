@@ -95,22 +95,23 @@ export async function dispatchPreparedSlackMessage(prepared: PreparedSlackMessag
       const hadProgressDraft = progress.progressDraft.hasStarted;
       progress.progressDraft.markFinalReplyStarted();
       if (progress.useNativeProgressStreaming) {
-        await progress.waitForNativeProgressStreamStart();
-        const finalThreadTs =
-          delivery.streamSession?.threadTs ?? delivery.nativeProgressStreamThreadTs;
-        await delivery.deliverNormally({
-          payload,
-          kind: info.kind,
-          forcedThreadTs: finalThreadTs,
-        });
-        // Complete the cards only after the fresh final landed; a failed send
-        // leaves completion to the outer cleanup, which can mark error state.
-        await progress.appendNativeProgressCompletion(payload.isError === true);
-        progress.progressDraft.markFinalReplyDelivered();
-        if (!payload.isError && hadProgressDraft && delivery.streamSession) {
-          progress.pendingNativeProgressReceipt = progress.progressReceipt.buildSummaryLine();
+        const nativeReady = await progress.waitForNativeProgressStreamStart();
+        if (nativeReady && delivery.streamSession) {
+          const finalThreadTs = delivery.streamSession.threadTs;
+          await delivery.deliverNormally({
+            payload,
+            kind: info.kind,
+            forcedThreadTs: finalThreadTs,
+          });
+          // Complete the cards only after the fresh final landed; a failed send
+          // leaves completion to the outer cleanup, which can mark error state.
+          await progress.appendNativeProgressCompletion(payload.isError === true);
+          progress.progressDraft.markFinalReplyDelivered();
+          if (!payload.isError && hadProgressDraft && progress.previewToolProgressEnabled) {
+            progress.pendingNativeProgressReceipt = progress.progressReceipt.buildSummaryLine();
+          }
+          return;
         }
-        return;
       }
 
       if (hadProgressDraft) {

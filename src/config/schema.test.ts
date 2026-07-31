@@ -543,6 +543,9 @@ describe("config schema", () => {
     expect(res.uiHints["channels.slack.streaming.progress.nativeTaskCards"]?.label).toBe(
       "Slack Native Progress Task Cards",
     );
+    expect(res.uiHints["channels.slack.streaming.progress.toolProgress"]?.help).toContain(
+      "unset Slack default hides them",
+    );
     expect(res.uiHints["channels.discord.streaming.progress.nativeTaskCards"]).toBeUndefined();
     expect(res.uiHints["channels.telegram.streaming.progress.nativeTaskCards"]).toBeUndefined();
     expect(res.uiHints["channels.discord.streaming.progress.toolProgress"]?.label).toBe(

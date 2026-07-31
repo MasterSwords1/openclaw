@@ -1,5 +1,4 @@
 // Slack plugin module implements progress blocks behavior.
-import { createHash } from "node:crypto";
 import type { AnyChunk } from "@slack/types";
 import type { Block, KnownBlock } from "@slack/web-api";
 import {
@@ -13,10 +12,9 @@ import { truncateSlackText } from "./truncate.js";
 
 const SLACK_PROGRESS_FIELD_MAX = 1800;
 const DEFAULT_SLACK_PROGRESS_DETAIL_MAX_CHARS = 120;
-const DEFAULT_SLACK_PROGRESS_TASK_DETAIL_MAX_CHARS = 48;
 const SLACK_PROGRESS_CHUNK_TEXT_MAX = 256;
 const SLACK_PROGRESS_TASK_TITLE_MAX = 120;
-const SLACK_PROGRESS_PLAN_FALLBACK_TITLE = "Thinking";
+const SLACK_PROGRESS_PLAN_FALLBACK_TITLE = "Task progress";
 
 type SlackPlanTaskStatus = "pending" | "in_progress" | "complete" | "error";
 
@@ -82,114 +80,15 @@ function legacyLineDetail(line: ChannelProgressDraftLine, maxChars: number): str
   return detail ? escapeSlackMrkdwn(compactDetail(detail, maxChars)) : "—";
 }
 
-function lineTaskTitle(line: ChannelProgressDraftLine, maxLineChars: number): string {
-  const label = line.label.replace(/\s+/g, " ").trim() || line.toolName || line.kind || "Update";
-  const detail = lineDetailParts(line).join(" · ") || line.status?.trim();
-  const fallback = line.text.replace(/\s+/g, " ").trim();
-  if (detail) {
-    return compactTitle(`${label} — ${compactDetail(detail, maxLineChars)}`);
-  }
-  if (fallback && fallback !== label) {
-    return compactTitle(fallback);
-  }
-  return compactTitle(label);
-}
-
-function lineTaskStatus(line: ChannelProgressDraftLine): SlackPlanTaskStatus {
-  const normalized = line.status?.replace(/\s+/g, " ").trim().toLowerCase();
-  if (!normalized) {
-    return "in_progress";
-  }
-  if (
-    normalized === "complete" ||
-    normalized === "completed" ||
-    normalized === "done" ||
-    normalized === "ok" ||
-    normalized === "success" ||
-    normalized === "succeeded" ||
-    normalized === "successful" ||
-    normalized === "exit 0"
-  ) {
-    return "complete";
-  }
-  if (
-    normalized === "error" ||
-    normalized === "failed" ||
-    normalized === "failure" ||
-    normalized.startsWith("exit ")
-  ) {
-    return normalized === "exit 0" ? "complete" : "error";
-  }
-  return "in_progress";
-}
-
-function slugTaskIdPart(value: string | undefined): string {
-  const normalized = value
-    ?.trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "");
-  return normalized || "task";
-}
-
-function stableTaskIdPart(value: string, slugValue = value): string {
-  const suffix = createHash("sha256").update(value).digest("hex").slice(0, 8);
-  return `${slugTaskIdPart(slugValue).slice(0, 48)}_${suffix}`;
-}
-
-function resolveLineTaskIdentity(line: ChannelProgressDraftLine): {
-  id: string;
-  contentDerived: boolean;
-} {
-  if (line.id?.trim()) {
-    return { id: stableTaskIdPart(line.id), contentDerived: false };
-  }
-  const contentKey = [line.kind, line.toolName, line.label, line.text].join("\0");
-  return {
-    id: stableTaskIdPart(contentKey, line.toolName ?? line.kind ?? line.label),
-    contentDerived: true,
-  };
-}
-
-function buildPlanTasks(params: {
-  lines: readonly ChannelProgressDraftLine[];
-  plan?: readonly AgentPlanStep[];
-  maxLineChars?: number;
-}): SlackPlanTask[] {
-  if (params.plan) {
-    // Slack keys task_update chunks by id with no removal primitive, so
-    // position-keyed ids make each snapshot rewrite row i in place: renames,
-    // reorders, and insertions reconcile in place. Dropped ids (shrinks, mode
-    // switches) are terminalized by reconcileSlackNativeTaskChunks.
-    return params.plan.slice(-SLACK_MAX_BLOCKS).map((entry, index) => ({
-      id: `plan_step_${index + 1}`,
-      title: compactTitle(entry.step),
-      status: entry.status === "completed" ? ("complete" as const) : entry.status,
-    }));
-  }
-  const maxLineChars = resolveMaxLineChars(
-    params.maxLineChars,
-    DEFAULT_SLACK_PROGRESS_TASK_DETAIL_MAX_CHARS,
-  );
-  const lines = params.lines.slice(-SLACK_MAX_BLOCKS);
-  const identities = lines.map(resolveLineTaskIdentity);
-  const contentIdOccurrences = new Map<string, number>();
-  return lines.map((line, index) => {
-    const identity = identities[index]!;
-    let id = identity.id;
-    if (identity.contentDerived) {
-      // Suffix every occurrence (singletons stay `_1`): identity must not
-      // re-key when a duplicate line enters or leaves the rolling window.
-      const occurrence = (contentIdOccurrences.get(id) ?? 0) + 1;
-      contentIdOccurrences.set(id, occurrence);
-      id = `${id}_${occurrence}`;
-    }
-    return {
-      id,
-      title: lineTaskTitle(line, maxLineChars),
-      status: lineTaskStatus(line),
-    };
-  });
+function buildPlanTasks(plan: readonly AgentPlanStep[]): SlackPlanTask[] {
+  // Codex and the portable plan event expose ordered full snapshots but no
+  // item id. Position is therefore the only identity that survives a title
+  // refinement; Slack updates the same row instead of duplicating it.
+  return plan.slice(-SLACK_MAX_BLOCKS).map((entry, index) => ({
+    id: `plan_step_${index + 1}`,
+    title: compactTitle(entry.step),
+    status: entry.status === "completed" ? ("complete" as const) : entry.status,
+  }));
 }
 
 function resolvePlanTitle(params: {
@@ -198,30 +97,23 @@ function resolvePlanTitle(params: {
   tasks: readonly SlackPlanTask[];
 }): string {
   return compactChunkText(
-    params.title?.trim() ||
-      params.label?.trim() ||
-      params.tasks.at(-1)?.title ||
-      SLACK_PROGRESS_PLAN_FALLBACK_TITLE,
+    params.title?.trim() || params.label?.trim() || SLACK_PROGRESS_PLAN_FALLBACK_TITLE,
   );
 }
 
 function buildSlackProgressStreamChunks(params: {
   label?: string;
   title?: string;
-  lines: readonly ChannelProgressDraftLine[];
   plan?: readonly AgentPlanStep[];
-  maxLineChars?: number;
   completeInProgress?: boolean;
   finalInProgressStatus?: SlackPlanTaskStatus;
 }): AnyChunk[] | undefined {
-  const tasks = buildPlanTasks({
-    lines: params.lines,
-    plan: params.plan,
-    maxLineChars: params.maxLineChars,
-  });
+  if (!params.plan?.length) {
+    return undefined;
+  }
+  const tasks = buildPlanTasks(params.plan);
   if (tasks.length === 0) {
-    const title = params.title?.trim() || params.label?.trim();
-    return title ? [{ type: "plan_update", title: compactChunkText(title) }] : undefined;
+    return undefined;
   }
   const title = resolvePlanTitle({ label: params.label, title: params.title, tasks });
   const chunks: AnyChunk[] = [
@@ -307,9 +199,8 @@ export type SlackNativeTaskSnapshot = ReadonlyMap<
 
 /**
  * Slack native streams key task rows by persistent id with no removal chunk.
- * When the task source switches representation (tool lines <-> typed plan) or
- * a snapshot drops ids, previously emitted non-terminal rows must receive a
- * final update or they linger in_progress forever.
+ * When a structured plan snapshot drops ids, previously emitted non-terminal
+ * rows must receive a final update or they linger in_progress forever.
  */
 export function reconcileSlackNativeTaskChunks(params: {
   previousTasks: SlackNativeTaskSnapshot;
@@ -356,9 +247,7 @@ export function reconcileSlackNativeTaskChunks(params: {
 export function buildSlackProgressStreamStartChunks(params: {
   label?: string;
   title?: string;
-  lines: readonly ChannelProgressDraftLine[];
   plan?: readonly AgentPlanStep[];
-  maxLineChars?: number;
 }): AnyChunk[] | undefined {
   return buildSlackProgressStreamChunks(params);
 }
@@ -366,9 +255,7 @@ export function buildSlackProgressStreamStartChunks(params: {
 export function buildSlackProgressStreamUpdateChunks(params: {
   label?: string;
   title?: string;
-  lines: readonly ChannelProgressDraftLine[];
   plan?: readonly AgentPlanStep[];
-  maxLineChars?: number;
 }): AnyChunk[] | undefined {
   return buildSlackProgressStreamChunks(params);
 }
@@ -376,9 +263,7 @@ export function buildSlackProgressStreamUpdateChunks(params: {
 export function buildSlackProgressStreamCompletionChunks(params: {
   label?: string;
   title?: string;
-  lines: readonly ChannelProgressDraftLine[];
   plan?: readonly AgentPlanStep[];
-  maxLineChars?: number;
   finalInProgressStatus?: SlackPlanTaskStatus;
 }): AnyChunk[] | undefined {
   return buildSlackProgressStreamChunks({ ...params, completeInProgress: true });

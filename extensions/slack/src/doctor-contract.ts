@@ -18,7 +18,7 @@ const streamingAliasMigration = defineChannelAliasMigration({
   streaming: {
     // Slack maps its legacy draft stream modes (replace/status_final/append)
     // through its own resolver instead of the generic mode parser.
-    defaultMode: "partial",
+    defaultMode: "progress",
     resolveMode: resolveSlackStreamingMode,
     resolveNativeTransport: resolveSlackNativeStreaming,
   },
