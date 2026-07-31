@@ -379,6 +379,8 @@ export const ar: TranslationMap = {
       "تم تثبيت التحديث لكن الإصدار قيد التشغيل لم يتغيّر — ربما جرى منع إعادة التشغيل. المتوقع v{expectedVersion}، قيد التشغيل v{actualVersion}.",
     handoffTimeout:
       "بدأ تسليم التحديث، لكن لم يتم الإبلاغ عن اكتماله بعد إعادة الاتصال. شغّل `openclaw update status` للحصول على النتيجة النهائية.",
+    outcomeUnknown:
+      "قد يكون طلب التحديث قد قُبل، لكن Gateway لم يُبلّغ عن نتيجة نهائية بعد إعادة الاتصال. شغّل `openclaw update status` قبل إعادة المحاولة.",
     failureReasons: {
       dirty: "قم بإيداع التغييرات أو خزّنها، ثم أعد المحاولة.",
       noUpstream: "عيّن فرعًا رئيسيًا (upstream)، ثم أعد المحاولة.",
@@ -677,6 +679,8 @@ export const ar: TranslationMap = {
     loadError: "تعذّر تحميل لوحات المعلومات: {error}",
   },
   sessionsView: {
+    subagentPrefix: "وكيل فرعي:",
+    automationPrefix: "أتمتة:",
     deletePreservedWorktrees:
       "تم الاحتفاظ بـ {count} شجرة/أشجار عمل للجلسة تحتوي على عمل غير ملتزم به أو غير مدفوع ({branches}). أدرها من الإعدادات -> أشجار العمل.",
     deletePreservedWorktreeConfirm:
@@ -755,6 +759,7 @@ export const ar: TranslationMap = {
     noArchivedSessions: "لا توجد جلسات مؤرشفة.",
     noSessionsMatchFilters: "لا توجد جلسات تطابق عوامل التصفية لديك.",
     pagination: "{start}-{end} من أصل {total} صفوف",
+    pageSize: "الصفوف لكل صفحة",
     rowsPerPage: "{count} لكل صفحة",
     showAll: "عرض الكل",
     inherit: "وراثة",
@@ -1107,9 +1112,15 @@ export const ar: TranslationMap = {
     structuredSecretRaw: "قيمة منظّمة (SecretRef) - استخدم الوضع Raw للتحرير",
     structuredSecretFile: "قيمة منظَّمة (SecretRef) - عدّل ملف الإعداد مباشرةً",
     defaultValue: "الافتراضي: {value}",
+    usingDefault: "استخدام الافتراضي: {value}",
     resetToDefault: "إعادة التعيين إلى الافتراضي",
     select: "تحديد...",
+    nullValue: "null",
     jsonValue: "قيمة JSON",
+    invalidJson: "أدخل JSON صالحًا قبل مغادرة هذا الحقل.",
+    invalidString: "أدخل قيمة تطابق قيود هذا الإعداد.",
+    invalidNumber: "أدخل قيمة ضمن النطاق والخطوة المسموح بهما.",
+    draftRejected: "تعذّر حفظ هذا الإعداد. لا تزال مسوّدتك موجودة هنا.",
     unsupportedArray: "مخطط المصفوفة غير مدعوم. استخدم الوضع الخام.",
     itemCountOne: "{count} عنصر",
     itemCount: "{count} عناصر",
@@ -1256,6 +1267,8 @@ export const ar: TranslationMap = {
       model: "النموذج",
       thinking: "التفكير",
       fastMode: "الوضع السريع",
+      default: "الافتراضي",
+      modelPolicy: "سياسة النموذج",
       thinkingLevels: {
         off: "إيقاف",
         low: "منخفضة",
@@ -1424,6 +1437,7 @@ export const ar: TranslationMap = {
       xxl: "كبير جدًا جدًا",
     },
     syncedHint: "متزامن عبر أجهزتك من خلال Gateway.",
+    syncPendingHint: "بانتظار المزامنة عبر Gateway.",
     notifications: {
       title: "الإشعارات الفورية",
       nativeTitle: "الإشعارات",
@@ -2035,25 +2049,35 @@ export const ar: TranslationMap = {
     prepare: {
       title: "إعداد نموذج محلي",
       intro: "نزّل أو جهّز نموذجًا محليًا على Gateway هذا.",
-      button: "إعداد / تنزيل النموذج",
+      ollamaButton: "التحقق والإعداد",
       ollamaLabel: "Ollama",
       ollamaHint: "قم بتنزيل نموذج داعم للأدوات من خادم Ollama الخاص بك",
       llamaCppLabel: "نموذج محلي (llama.cpp)",
-      llamaCppHint: "قم بتنزيل نموذج محلي بحجم 5.0 غيغابايت تقريبًا؛ يتطلب 16 غيغابايت من الذاكرة",
+      providerNotReady:
+        "لم يُتِح {provider} نموذجًا محليًا قابلاً للاستخدام. راجع نتيجة الإعداد ثم أعد المحاولة.",
     },
     manual: {
       title: "الاتصال باستخدام مفتاح API أو رمز مميز",
       provider: "المزوّد",
       selectProvider: "اختر مزوّدًا",
+      selectProviderHint: "اختر مصدر هذا الاعتماد",
       accessValue: "مفتاح API أو رمز مميز",
+      accessValueFor: "مفتاح أو رمز API الخاص بـ {provider}",
       accessValuePlaceholder: "الصق مفتاح API أو رمزًا مميزًا",
       connect: "اتصال",
+      connectAndVerify: "الاتصال والتحقق",
+      verifyHint: "يتحقق OpenClaw من رد نموذج حقيقي قبل وضع علامة على أن الاتصال جاهز.",
       required: "اختر مزودًا وأدخل مفتاح API أو رمزًا مميزًا.",
     },
     success: {
       title: "الذكاء الاصطناعي جاهز",
+      body: "تلقّى OpenClaw ردًا حقيقيًا من {modelRef}. يمكنك بدء المحادثة الآن.",
+      activeModel: "النموذج النشط",
+      latency: "تم التحقق في {latencyMs} مللي ثانية",
       detail: "{modelRef} · {latencyMs} مللي ثانية",
       openChat: "فتح الدردشة",
+      continueSetup: "متابعة الإعداد",
+      stayHere: "البقاء في الإعدادات",
       configuredModel: "النموذج الذي تم إعداده",
     },
     failure: {
@@ -2236,6 +2260,11 @@ export const ar: TranslationMap = {
       channelDegraded: "حالة {channel} متدهورة — اسألني عمّا حدث",
       channelFallback: "قناة",
       dismiss: "تجاهل هذا التحديث",
+      channelSetupTitle: "تواصل مع OpenClaw خارج هذا التطبيق",
+      channelSetupBody:
+        "يعمل تطبيق الويب بالفعل. أضف قناة فقط إذا أردت مراسلة OpenClaw من خدمة أخرى.",
+      channelSetupAction: "إعداد قناة",
+      channelSetupDismiss: "متابعة استخدام تطبيق الويب",
     },
   },
   mcpServers: {
@@ -2249,6 +2278,9 @@ export const ar: TranslationMap = {
     targetLabel: "عنوان URL أو أمر",
     nameInvalid: "تستخدم أسماء الخوادم الأحرف والأرقام والنقاط والشرطات أو الشرطات السفلية.",
     targetInvalid: "أدخل عنوان URL لعمليات نقل HTTP أو سطر أوامر صالحًا لـ stdio.",
+    sessionEnableFailed: "تم حفظ الخادم معطلاً عالمياً، لكن فشل تفعيله لهذه الجلسة: {error}",
+    sessionChanged: "تغيرت الجلسة النشطة قبل أن يتم تفعيلها.",
+    sessionUnavailable: "الجلسة النشطة غير متاحة؛ قم بالتحديث وحاول مرة أخرى.",
     nameTaken: "يوجد بالفعل خادم MCP باسم ”{name}“.",
     missing: "لم يتم العثور على خادم MCP ”{name}“ في الإعدادات.",
     missingTransport: "وسيلة النقل مفقودة",
@@ -2414,7 +2446,9 @@ export const ar: TranslationMap = {
       title: "المحرك",
       description: "إضافة ذاكرة واحدة فقط تملك خانة الذاكرة. اختيار محرك يُفعّله ويعطّل الآخرين.",
       rowTitle: "محرك الذاكرة",
+      openClawMemory: "OpenClaw Memory",
       off: "إيقاف",
+      unavailable: "غير متاح",
       autoHint: "لا يوجد محرك مثبّت في الإعدادات، لذا تعود الخانة إلى مالكها الافتراضي.",
       explicitHint: "هذا المحرك مثبّت في الإعدادات ضمن plugins.slots.memory.",
       offHint: "الذاكرة معطّلة في الإعدادات: plugins.slots.memory مضبوط على none.",
@@ -2431,8 +2465,11 @@ export const ar: TranslationMap = {
       rowTitle: "خلفية الاسترداد",
       builtin: "مدمجة",
       qmd: "QMD",
+      invalid: "قيمة مُهيأة غير صالحة",
       builtinHint: "تتم فهرسة ملفات الذاكرة والبحث فيها بواسطة OpenClaw نفسه.",
       qmdHint: "يتم تفويض الاسترداد إلى QMD. تظهر إعداداته أدناه.",
+      invalidHint:
+        "قيمة memory.backend المُهيأة غير صالحة. اختر واجهة خلفية أو أعد تعيينها لاستخدام القيمة الافتراضية.",
     },
     addons: {
       title: "الإضافات",
@@ -2474,11 +2511,13 @@ export const ar: TranslationMap = {
         label: "المنطقة الزمنية",
         help: "منطقة زمنية IANA المستخدمة لتفسير إيقاع cron.",
         placeholder: "Europe/Vienna",
+        default: "المنطقة الزمنية المحلية لـ Gateway",
       },
       model: {
         label: "نموذج Dreaming",
         help: "تجاوز المزوّد/النموذج لسرد يوميات الأحلام. يتطلب السماح بتجاوزات نموذج الوكيل الفرعي.",
         placeholder: "anthropic/claude-sonnet-4-6",
+        default: "نموذج الوكيل",
       },
       verboseLogging: {
         label: "تسجيل مفصّل",
@@ -2708,6 +2747,11 @@ export const ar: TranslationMap = {
       title: "بحث الأدوات",
       description:
         "أبقِ دليل أدوات محدوداً مرئياً وأجّل البقية خلف البحث، حتى تتوقف كتالوجات MCP والمكوّنات الإضافية الكبيرة عن ازدحام الطلب.",
+    },
+    loopDetection: {
+      title: "كشف حلقات الأدوات",
+      description:
+        "فعّل حراس السجل المتجدد الذين يحذرون أو يمنعون استدعاءات الأدوات المتكررة عندما يتوقف الوكيل عن إحراز تقدم.",
     },
     localModelLean: {
       title: "أدوات مبسّطة للنماذج المحلية",
@@ -3614,6 +3658,7 @@ export const ar: TranslationMap = {
       refreshing: "جارٍ التحديث…",
       on: "الحلم مفعّل",
       off: "الحلم متوقف",
+      engineOff: "محرك الذاكرة معطّل. اختر محركاً في الإعدادات لتفعيل الحلم.",
     },
     toggleConfirmation: {
       subtitle: "الحلم إعداد عام؛ لا يقتصر على هذا الوكيل.",
@@ -3732,12 +3777,12 @@ export const ar: TranslationMap = {
       loadingPage: "جارٍ تحميل صفحة الويكي…",
       dreamsTab: "الأحلام",
       insightsTab: "الرؤى المستوردة",
-      palaceTab: "قصر الذاكرة",
+      wikiTab: "ويكي الذاكرة",
       dreamsExplainer:
         "هذه هي يوميات الأحلام الأولية التي يكتبها النظام أثناء إعادة تشغيل الذاكرة ودمجها؛ استخدمها لفحص ما يلاحظه نظام الذاكرة والمواضع التي لا تزال تبدو مشوشة أو شحيحة.",
       insightsExplainer:
         "هذه رؤى مستوردة جُمعت في مجموعات من السجل الخارجي؛ استخدمها لمراجعة ما أظهرته عمليات الاستيراد قبل أن ينتقل أي منها إلى الذاكرة الدائمة.",
-      palaceExplainer:
+      wikiExplainer:
         "هذه هي واجهة ويكي الذاكرة المجمّعة التي يمكن للنظام البحث فيها والاستدلال بناءً عليها؛ استخدمها لفحص صفحات الذاكرة الفعلية والادعاءات والأسئلة المفتوحة والتناقضات بدلًا من محادثات المصدر الأولية المستوردة.",
       copyArchivePath: "نسخ مسار الأرشيف",
       loadingInsights: "جارٍ تحميل الرؤى المستوردة…",
@@ -3752,9 +3797,9 @@ export const ar: TranslationMap = {
       riskReasons: "أسباب المخاطر:",
       labels: "التسميات:",
       openSourcePage: "فتح صفحة المصدر",
-      loadingPalace: "جارٍ تحميل قصر الذاكرة…",
-      emptyPalace: "لم تتم تعبئة قصر الذاكرة بعد",
-      emptyPalaceHint:
+      loadingWiki: "جارٍ تحميل ويكي الذاكرة…",
+      emptyWiki: "لم تتم تعبئة ويكي الذاكرة بعد",
+      emptyWikiHint:
         "تحتوي الويكي حاليًا في الغالب على عمليات استيراد المصادر الخام والتقارير التشغيلية. ستصبح علامة التبويب هذه مفيدة بمجرد البدء في كتابة التوليفات أو الكيانات أو المفاهيم.",
       claims: "الادعاءات",
       openQuestions: "الأسئلة المفتوحة",
@@ -3830,7 +3875,7 @@ export const ar: TranslationMap = {
       tidyingKnowledgeGraph: "جارٍ ترتيب الرسم البياني للمعرفة…",
       replayingConversations: "جارٍ إعادة تشغيل محادثات اليوم…",
       weavingShortTerm: "جارٍ نسج قصير الأجل في طويل الأجل…",
-      defragmentingMindPalace: "جارٍ إلغاء تجزئة قصر العقل…",
+      defragmentingMemoryLane: "جارٍ إلغاء تجزئة مسار الذاكرة…",
       filingLooseThoughts: "جارٍ أرشفة الأفكار المتناثرة…",
       connectingDots: "جارٍ وصل النقاط البعيدة…",
       compostingContext: "جارٍ تدوير نوافذ السياق القديمة…",
@@ -3855,6 +3900,7 @@ export const ar: TranslationMap = {
     emptySubtitle: "Sign in to a provider or add an API key, then refresh.",
     status: {
       ok: "متصل",
+      ready: "جاهز",
       expiring: "Expiring",
       expired: "منتهي الصلاحية",
       missing: "Not signed in",
@@ -3907,6 +3953,16 @@ export const ar: TranslationMap = {
         unknown: "فشل الاتصال",
         no_model: "لا يتوفر أي نموذج",
       },
+    },
+    readiness: {
+      title: "إعداد الذكاء الاصطناعي",
+      heading: "ربط نموذج ذكاء اصطناعي موثّق",
+      signedInNoModels:
+        "لقد سجّلت الدخول، لكن هذا الحساب لا يوفّر أي نماذج قابلة للاستخدام. اختر مزوّدًا أو حسابًا آخر للمتابعة.",
+      notConfigured: "اختر مزوّدًا وتحقّق من النموذج الذي سيستخدمه OpenClaw.",
+      noModels: "لا توجد نماذج متاحة",
+      modelRequired: "النموذج مطلوب",
+      chooseProvider: "اختر مزوّدًا آخر",
     },
     logout: {
       action: "تسجيل الخروج",
@@ -4696,6 +4752,11 @@ export const ar: TranslationMap = {
         tools: "الأدوات",
       },
     },
+    skills: {
+      menu: "مراجع Skills",
+      label: "Skills",
+      loading: "جارٍ تحميل المهارات…",
+    },
     splitView: {
       open: "فتح العرض المقسّم",
       splitRight: "تقسيم إلى اليمين",
@@ -4845,6 +4906,7 @@ export const ar: TranslationMap = {
       pause: "إيقاف مؤقت",
       seek: "البحث في الوسائط",
       download: "تنزيل {filename}",
+      preparing: "جارٍ تجهيز التشغيل…",
       videoUnavailable: "لا يمكن تشغيل هذا التنسيق — قم بالتنزيل بدلاً من ذلك.",
     },
     modelControls: {
@@ -4861,6 +4923,9 @@ export const ar: TranslationMap = {
       fastHelp: "الاستجابات السريعة تنتهي أبكر وقد تستهلك المزيد من حدود استخدامك.",
       speedUnsupported: "التحكم في السرعة غير مدعوم لهذا النموذج.",
       contextWindow: "{count} سياق",
+      chatOnly: "الدردشة فقط",
+      chatOnlyHelp:
+        "يمكن لهذا النموذج الدردشة، لكنه لا يستطيع استخدام الأدوات. اختر نموذجًا آخر لمهام الملفات أو الأوامر أو الويب أو الوسائط.",
       providerModels: "نماذج {provider}",
       resetReasoning: "إعادة التعيين إلى الافتراضي ({level})",
       useDefaultReasoning: "استخدام الاستدلال الافتراضي ({level})",
@@ -5014,7 +5079,21 @@ export const ar: TranslationMap = {
         manageSkills: "إدارة المهارات",
         browseConnectors: "استعراض الموصلات",
         addMcpServer: "إضافة خادم MCP…",
-        toolAccess: "الوصول إلى الأدوات",
+        addMcpServerTitle: "إضافة خادم MCP",
+        addMcpServerDescription: "قم بإعداد الخادم واختر مكان تفعيله.",
+        scopeLabel: "التوفّر",
+        scopeSession: "هذه الجلسة",
+        scopeEverywhere: "في كل مكان",
+        scopeSessionHint: "يُحفظ الخادم معطّلًا عالميًا ويُفعّل لهذه الجلسة فقط.",
+        scopeEverywhereHint: "يُحفظ الخادم ويُفعّل لكل جلسة.",
+        toolAccess: {
+          label: "الوصول إلى الأدوات",
+          loading: "جارٍ تحميل الأدوات…",
+          loadFailed: "تعذّر تحميل الأدوات.",
+          noTools: "لا توجد أدوات متاحة لهذا الموصّل.",
+          summary: "{enabled} من {total} أداة مفعّلة",
+          summaryOne: "{enabled} من {total} أداة مفعّلة",
+        },
         enabledCount: "{count} مُفعَّل",
         loadingSkills: "جارٍ تحميل المهارات…",
         skillsLoadFailed: "تعذّر تحميل المهارات.",

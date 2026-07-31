@@ -386,6 +386,8 @@ export const vi: TranslationMap = {
       "Đã cài đặt bản cập nhật nhưng phiên bản đang chạy không thay đổi — việc khởi động lại có thể đã bị chặn. Mong đợi v{expectedVersion}, đang chạy v{actualVersion}.",
     handoffTimeout:
       "Đã bắt đầu bàn giao cập nhật, nhưng không có báo cáo hoàn tất sau khi kết nối lại. Chạy `openclaw update status` để xem kết quả cuối cùng.",
+    outcomeUnknown:
+      "Yêu cầu cập nhật có thể đã được chấp nhận, nhưng Gateway không báo cáo kết quả cuối cùng sau khi kết nối lại. Chạy `openclaw update status` trước khi thử lại.",
     failureReasons: {
       dirty: "Commit hoặc stash các thay đổi, rồi thử lại.",
       noUpstream: "Đặt nhánh upstream, rồi thử lại.",
@@ -692,6 +694,8 @@ export const vi: TranslationMap = {
     loadError: "Không thể tải bảng điều khiển: {error}",
   },
   sessionsView: {
+    subagentPrefix: "Subagent:",
+    automationPrefix: "Automation:",
     deletePreservedWorktrees:
       "{count} worktree phiên có công việc chưa commit hoặc chưa push đã được giữ lại ({branches}). Quản lý chúng trong Settings -> Worktrees.",
     deletePreservedWorktreeConfirm:
@@ -770,6 +774,7 @@ export const vi: TranslationMap = {
     noArchivedSessions: "Không có phiên đã lưu trữ.",
     noSessionsMatchFilters: "Không có phiên nào khớp với bộ lọc của bạn.",
     pagination: "{start}-{end} trong {total} hàng",
+    pageSize: "Số hàng mỗi trang",
     rowsPerPage: "{count} mỗi trang",
     showAll: "Hiển thị tất cả",
     inherit: "kế thừa",
@@ -1124,9 +1129,15 @@ export const vi: TranslationMap = {
     structuredSecretRaw: "Giá trị có cấu trúc (SecretRef) - sử dụng chế độ Raw để chỉnh sửa",
     structuredSecretFile: "Giá trị có cấu trúc (SecretRef) - chỉnh sửa trực tiếp tệp cấu hình",
     defaultValue: "Mặc định: {value}",
+    usingDefault: "Sử dụng mặc định: {value}",
     resetToDefault: "Đặt lại về mặc định",
     select: "Chọn...",
+    nullValue: "null",
     jsonValue: "Giá trị JSON",
+    invalidJson: "Nhập JSON hợp lệ trước khi rời khỏi trường này.",
+    invalidString: "Nhập giá trị phù hợp với ràng buộc của cài đặt này.",
+    invalidNumber: "Nhập giá trị trong phạm vi và bước cho phép.",
+    draftRejected: "Không thể lưu cài đặt này. Bản nháp của bạn vẫn còn ở đây.",
     unsupportedArray: "Lược đồ mảng không được hỗ trợ. Dùng chế độ Raw.",
     itemCountOne: "{count} mục",
     itemCount: "{count} mục",
@@ -1273,6 +1284,8 @@ export const vi: TranslationMap = {
       model: "Mô hình",
       thinking: "Tư duy",
       fastMode: "Chế độ nhanh",
+      default: "Mặc định",
+      modelPolicy: "Chính sách mô hình",
       thinkingLevels: {
         off: "Tắt",
         low: "Thấp",
@@ -1441,6 +1454,7 @@ export const vi: TranslationMap = {
       xxl: "XXL",
     },
     syncedHint: "Được đồng bộ trên các thiết bị của bạn thông qua gateway.",
+    syncPendingHint: "Đang chờ đồng bộ qua gateway.",
     notifications: {
       title: "Thông báo đẩy",
       nativeTitle: "Thông báo",
@@ -2061,25 +2075,36 @@ export const vi: TranslationMap = {
     prepare: {
       title: "Thiết lập mô hình cục bộ",
       intro: "Tải xuống hoặc chuẩn bị mô hình cục bộ trên Gateway này.",
-      button: "Thiết lập / Tải xuống mô hình",
+      ollamaButton: "Kiểm tra & thiết lập",
       ollamaLabel: "Ollama",
       ollamaHint: "Tải xuống một mô hình có khả năng dùng công cụ từ máy chủ Ollama của bạn",
       llamaCppLabel: "Mô hình cục bộ (llama.cpp)",
-      llamaCppHint: "Tải xuống một mô hình cục bộ khoảng 5.0 GB; yêu cầu 16 GB RAM",
+      providerNotReady:
+        "{provider} không cung cấp mô hình cục bộ khả dụng. Xem lại kết quả thiết lập, sau đó thử lại.",
     },
     manual: {
       title: "Kết nối bằng khóa API hoặc token",
       provider: "Nhà cung cấp",
       selectProvider: "Chọn nhà cung cấp",
+      selectProviderHint: "Chọn nguồn của thông tin xác thực này",
       accessValue: "Khóa API hoặc token",
+      accessValueFor: "Khóa API hoặc token của {provider}",
       accessValuePlaceholder: "Dán khóa API hoặc token",
       connect: "Kết nối",
+      connectAndVerify: "Kết nối & xác minh",
+      verifyHint:
+        "OpenClaw xác minh phản hồi thực từ mô hình trước khi đánh dấu kết nối là sẵn sàng.",
       required: "Chọn nhà cung cấp và nhập khóa API hoặc token.",
     },
     success: {
       title: "AI của bạn đã sẵn sàng",
+      body: "OpenClaw đã nhận được phản hồi thực từ {modelRef}. Bạn có thể bắt đầu trò chuyện ngay bây giờ.",
+      activeModel: "Mô hình đang hoạt động",
+      latency: "Đã xác minh trong {latencyMs} ms",
       detail: "{modelRef} · {latencyMs} ms",
       openChat: "Mở cuộc trò chuyện",
+      continueSetup: "Tiếp tục thiết lập",
+      stayHere: "Ở lại phần cài đặt",
       configuredModel: "Mô hình đã cấu hình",
     },
     failure: {
@@ -2269,6 +2294,11 @@ export const vi: TranslationMap = {
       channelDegraded: "{channel} đang bị suy giảm — hãy hỏi tôi chuyện gì đã xảy ra",
       channelFallback: "Một kênh",
       dismiss: "Bỏ qua cập nhật này",
+      channelSetupTitle: "Kết nối OpenClaw bên ngoài ứng dụng này",
+      channelSetupBody:
+        "Ứng dụng web đã hoạt động. Chỉ thêm kênh nếu bạn muốn nhắn tin cho OpenClaw từ một dịch vụ khác.",
+      channelSetupAction: "Thiết lập một kênh",
+      channelSetupDismiss: "Tiếp tục dùng ứng dụng web",
     },
   },
   mcpServers: {
@@ -2282,6 +2312,10 @@ export const vi: TranslationMap = {
     targetLabel: "URL hoặc lệnh",
     nameInvalid: "Tên máy chủ chỉ dùng chữ cái, số, dấu chấm, dấu gạch ngang hoặc dấu gạch dưới.",
     targetInvalid: "Nhập URL cho các giao thức HTTP hoặc một dòng lệnh hợp lệ cho stdio.",
+    sessionEnableFailed:
+      "Máy chủ đã được lưu ở trạng thái tắt trên toàn cục, nhưng việc bật cho phiên này đã thất bại: {error}",
+    sessionChanged: "Phiên đang hoạt động đã thay đổi trước khi có thể được bật.",
+    sessionUnavailable: "Phiên đang hoạt động không khả dụng; hãy làm mới và thử lại.",
     nameTaken: "Đã tồn tại một máy chủ MCP có tên “{name}”.",
     missing: "Không tìm thấy máy chủ MCP “{name}” trong cấu hình.",
     missingTransport: "thiếu transport",
@@ -2450,7 +2484,9 @@ export const vi: TranslationMap = {
       description:
         "Đúng một plugin bộ nhớ sở hữu slot bộ nhớ. Việc chọn một engine sẽ bật nó và tắt các engine khác.",
       rowTitle: "Engine bộ nhớ",
+      openClawMemory: "OpenClaw Memory",
       off: "Tắt",
+      unavailable: "Không khả dụng",
       autoHint:
         "Không có engine nào được ghim trong cấu hình, nên slot quay về chủ sở hữu mặc định của nó.",
       explicitHint: "Engine này được ghim trong cấu hình dưới plugins.slots.memory.",
@@ -2468,8 +2504,11 @@ export const vi: TranslationMap = {
       rowTitle: "Backend truy xuất",
       builtin: "Tích hợp sẵn",
       qmd: "QMD",
+      invalid: "Giá trị đã cấu hình không hợp lệ",
       builtinHint: "Các tệp bộ nhớ được lập chỉ mục và tìm kiếm bởi chính OpenClaw.",
       qmdHint: "Việc truy xuất được ủy quyền cho QMD. Các thiết lập của nó xuất hiện bên dưới.",
+      invalidHint:
+        "Giá trị memory.backend đã cấu hình không hợp lệ. Hãy chọn một backend hoặc đặt lại để dùng mặc định.",
     },
     addons: {
       title: "Tiện ích bổ sung",
@@ -2512,11 +2551,13 @@ export const vi: TranslationMap = {
         label: "Múi giờ",
         help: "Múi giờ IANA dùng để diễn giải nhịp cron.",
         placeholder: "Europe/Vienna",
+        default: "Múi giờ cục bộ của Gateway",
       },
       model: {
         label: "Model dreaming",
         help: "Ghi đè provider/model cho phần tường thuật nhật ký giấc mơ. Yêu cầu cho phép ghi đè model của subagent.",
         placeholder: "anthropic/claude-sonnet-4-6",
+        default: "Mô hình agent",
       },
       verboseLogging: {
         label: "Ghi log chi tiết",
@@ -2753,6 +2794,11 @@ export const vi: TranslationMap = {
       title: "Tìm kiếm công cụ",
       description:
         "Giữ một danh mục công cụ giới hạn hiển thị và trì hoãn phần còn lại sau tìm kiếm, để các danh mục MCP và plugin lớn không còn chiếm chỗ trong prompt.",
+    },
+    loopDetection: {
+      title: "Phát hiện vòng lặp công cụ",
+      description:
+        "Bật các biện pháp bảo vệ dựa trên lịch sử cuộn để cảnh báo hoặc chặn các lệnh gọi công cụ lặp lại khi agent ngừng tiến triển.",
     },
     localModelLean: {
       title: "Công cụ tinh gọn cho mô hình cục bộ",
@@ -3664,6 +3710,8 @@ export const vi: TranslationMap = {
       refreshing: "Đang làm mới…",
       on: "Đang bật Dreaming",
       off: "Đang tắt Dreaming",
+      engineOff:
+        "Công cụ bộ nhớ đang Tắt. Chọn một công cụ trong phần Cài đặt để bật chức năng dreaming.",
     },
     toggleConfirmation: {
       subtitle: "Dreaming là cài đặt toàn cục; nó không giới hạn ở agent này.",
@@ -3784,12 +3832,12 @@ export const vi: TranslationMap = {
       loadingPage: "Đang tải trang wiki…",
       dreamsTab: "Giấc mơ",
       insightsTab: "Thông tin đã nhập",
-      palaceTab: "Cung điện ký ức",
+      wikiTab: "Memory Wiki",
       dreamsExplainer:
         "Đây là nhật ký giấc mơ thô mà hệ thống ghi lại trong khi phát lại và củng cố ký ức; dùng nó để kiểm tra những gì hệ thống ký ức đang nhận thấy, và nơi nó vẫn còn nhiễu hoặc thưa thớt.",
       insightsExplainer:
         "Đây là những thông tin đã nhập được gom cụm từ lịch sử bên ngoài; dùng chúng để xem xét những gì các lần nhập đã đưa ra trước khi bất kỳ điều gì trở thành ký ức bền vững.",
-      palaceExplainer:
+      wikiExplainer:
         "Đây là bề mặt wiki ký ức đã biên dịch mà hệ thống có thể tìm kiếm và suy luận; dùng nó để kiểm tra các trang ký ức thực tế, các khẳng định, câu hỏi mở và mâu thuẫn thay vì các cuộc trò chuyện nguồn thô đã nhập.",
       copyArchivePath: "Sao chép đường dẫn lưu trữ",
       loadingInsights: "Đang tải thông tin đã nhập…",
@@ -3805,9 +3853,9 @@ export const vi: TranslationMap = {
       riskReasons: "Lý do rủi ro:",
       labels: "Nhãn:",
       openSourcePage: "Mở trang nguồn",
-      loadingPalace: "Đang tải cung điện ký ức…",
-      emptyPalace: "Cung điện ký ức chưa được điền dữ liệu",
-      emptyPalaceHint:
+      loadingWiki: "Đang tải memory wiki…",
+      emptyWiki: "Wiki bộ nhớ chưa có dữ liệu",
+      emptyWikiHint:
         "Hiện tại wiki chủ yếu chứa các bản nhập nguồn thô và báo cáo vận hành. Tab này sẽ trở nên hữu ích khi các bản tổng hợp, thực thể hoặc khái niệm bắt đầu được ghi lại.",
       claims: "Tuyên bố",
       openQuestions: "Câu hỏi mở",
@@ -3884,7 +3932,7 @@ export const vi: TranslationMap = {
       tidyingKnowledgeGraph: "đang sắp xếp đồ thị tri thức…",
       replayingConversations: "đang phát lại các cuộc trò chuyện hôm nay…",
       weavingShortTerm: "đang đan ngắn hạn vào dài hạn…",
-      defragmentingMindPalace: "đang chống phân mảnh cung điện tâm trí…",
+      defragmentingMemoryLane: "đang chống phân mảnh ký ức…",
       filingLooseThoughts: "đang lưu trữ những suy nghĩ rời rạc…",
       connectingDots: "đang kết nối các điểm xa nhau…",
       compostingContext: "đang ủ các cửa sổ ngữ cảnh cũ…",
@@ -3909,6 +3957,7 @@ export const vi: TranslationMap = {
     emptySubtitle: "Sign in to a provider or add an API key, then refresh.",
     status: {
       ok: "Đã kết nối",
+      ready: "Sẵn sàng",
       expiring: "Expiring",
       expired: "Đã hết hạn",
       missing: "Not signed in",
@@ -3961,6 +4010,16 @@ export const vi: TranslationMap = {
         unknown: "Kết nối không thành công",
         no_model: "Không có mô hình nào khả dụng",
       },
+    },
+    readiness: {
+      title: "Thiết lập AI",
+      heading: "Kết nối mô hình AI đã xác minh",
+      signedInNoModels:
+        "Bạn đã đăng nhập, nhưng tài khoản này không cung cấp mô hình nào có thể dùng. Hãy chọn nhà cung cấp hoặc tài khoản khác để tiếp tục.",
+      notConfigured: "Chọn nhà cung cấp và xác minh mô hình mà OpenClaw sẽ dùng.",
+      noModels: "Không có mô hình khả dụng",
+      modelRequired: "Cần có mô hình",
+      chooseProvider: "Chọn nhà cung cấp khác",
     },
     logout: {
       action: "Đăng xuất",
@@ -4758,6 +4817,11 @@ export const vi: TranslationMap = {
         tools: "Công cụ",
       },
     },
+    skills: {
+      menu: "Tham chiếu Skills",
+      label: "Skills",
+      loading: "Đang tải Skills…",
+    },
     splitView: {
       open: "Mở chế độ xem chia đôi",
       splitRight: "Chia sang phải",
@@ -4907,6 +4971,7 @@ export const vi: TranslationMap = {
       pause: "Tạm dừng",
       seek: "Tua phương tiện",
       download: "Tải xuống {filename}",
+      preparing: "Đang chuẩn bị phát…",
       videoUnavailable: "Không thể phát định dạng này — hãy tải xuống.",
     },
     modelControls: {
@@ -4923,6 +4988,9 @@ export const vi: TranslationMap = {
       fastHelp: "Phản hồi nhanh hoàn tất sớm hơn và có thể dùng nhiều hạn mức sử dụng hơn.",
       speedUnsupported: "Điều khiển tốc độ không được hỗ trợ cho mô hình này.",
       contextWindow: "{count} ngữ cảnh",
+      chatOnly: "Chỉ trò chuyện",
+      chatOnlyHelp:
+        "Mô hình này có thể trò chuyện, nhưng không thể dùng công cụ. Hãy chọn mô hình khác cho các tác vụ về tệp, lệnh, web hoặc phương tiện.",
       providerModels: "Mô hình {provider}",
       resetReasoning: "Đặt lại về mặc định ({level})",
       useDefaultReasoning: "Dùng lập luận mặc định ({level})",
@@ -5077,7 +5145,21 @@ export const vi: TranslationMap = {
         manageSkills: "Quản lý Skills",
         browseConnectors: "Duyệt trình kết nối",
         addMcpServer: "Thêm máy chủ MCP…",
-        toolAccess: "Quyền truy cập công cụ",
+        addMcpServerTitle: "Thêm máy chủ MCP",
+        addMcpServerDescription: "Cấu hình máy chủ và chọn nơi bật nó.",
+        scopeLabel: "Khả dụng",
+        scopeSession: "Phiên này",
+        scopeEverywhere: "Mọi nơi",
+        scopeSessionHint: "Máy chủ được lưu ở trạng thái tắt toàn cục và chỉ bật cho phiên này.",
+        scopeEverywhereHint: "Máy chủ được lưu và bật cho mọi phiên.",
+        toolAccess: {
+          label: "Quyền truy cập công cụ",
+          loading: "Đang tải công cụ…",
+          loadFailed: "Không thể tải công cụ.",
+          noTools: "Không có công cụ nào cho trình kết nối này.",
+          summary: "{enabled} trên {total} công cụ đang bật",
+          summaryOne: "{enabled} trên {total} công cụ đang bật",
+        },
         enabledCount: "{count} bật",
         loadingSkills: "Đang tải Skills…",
         skillsLoadFailed: "Không thể tải Skills.",

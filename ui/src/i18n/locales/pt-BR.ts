@@ -387,6 +387,8 @@ export const pt_BR: TranslationMap = {
       "Atualização instalada, mas a versão em execução não mudou — a reinicialização pode ter sido bloqueada. Esperada v{expectedVersion}, em execução v{actualVersion}.",
     handoffTimeout:
       "A transferência da atualização começou, mas a conclusão não foi reportada após a reconexão. Execute `openclaw update status` para ver o resultado final.",
+    outcomeUnknown:
+      "A solicitação de atualização pode ter sido aceita, mas o Gateway não relatou um resultado final após a reconexão. Execute `openclaw update status` antes de tentar novamente.",
     failureReasons: {
       dirty: "Faça commit ou stash das alterações e tente novamente.",
       noUpstream: "Defina uma branch upstream e tente novamente.",
@@ -697,6 +699,8 @@ export const pt_BR: TranslationMap = {
     loadError: "Não foi possível carregar os dashboards: {error}",
   },
   sessionsView: {
+    subagentPrefix: "Subagente:",
+    automationPrefix: "Automação:",
     deletePreservedWorktrees:
       "{count} worktree(s) de sessão com trabalho não commitado ou não enviado foram mantidas ({branches}). Gerencie-as em Configurações -> Worktrees.",
     deletePreservedWorktreeConfirm:
@@ -775,6 +779,7 @@ export const pt_BR: TranslationMap = {
     noArchivedSessions: "Nenhuma sessão arquivada.",
     noSessionsMatchFilters: "Nenhuma sessão corresponde aos seus filtros.",
     pagination: "{start}-{end} de {total} linhas",
+    pageSize: "Linhas por página",
     rowsPerPage: "{count} por página",
     showAll: "Mostrar tudo",
     inherit: "herdar",
@@ -1130,9 +1135,15 @@ export const pt_BR: TranslationMap = {
     structuredSecretFile:
       "Valor estruturado (SecretRef) - edite o arquivo de configuração diretamente",
     defaultValue: "Padrão: {value}",
+    usingDefault: "Usando padrão: {value}",
     resetToDefault: "Redefinir para o padrão",
     select: "Selecionar...",
+    nullValue: "null",
     jsonValue: "Valor JSON",
+    invalidJson: "Insira um JSON válido antes de sair deste campo.",
+    invalidString: "Insira um valor que corresponda às restrições desta configuração.",
+    invalidNumber: "Insira um valor dentro do intervalo e da etapa permitidos.",
+    draftRejected: "Não foi possível salvar esta configuração. Seu rascunho ainda está aqui.",
     unsupportedArray: "Esquema de array não suportado. Use o modo Raw.",
     itemCountOne: "{count} item",
     itemCount: "{count} itens",
@@ -1279,6 +1290,8 @@ export const pt_BR: TranslationMap = {
       model: "Modelo",
       thinking: "Raciocínio",
       fastMode: "Modo rápido",
+      default: "Padrão",
+      modelPolicy: "Política de modelo",
       thinkingLevels: {
         off: "Desativada",
         low: "Baixa",
@@ -1449,6 +1462,7 @@ export const pt_BR: TranslationMap = {
       xxl: "XXL",
     },
     syncedHint: "Sincronizado entre seus dispositivos por meio do gateway.",
+    syncPendingHint: "Aguardando sincronização pelo gateway.",
     notifications: {
       title: "Notificações push",
       nativeTitle: "Notificações",
@@ -2068,25 +2082,36 @@ export const pt_BR: TranslationMap = {
     prepare: {
       title: "Configurar um modelo local",
       intro: "Baixe ou prepare um modelo local neste Gateway.",
-      button: "Configurar / Baixar modelo",
+      ollamaButton: "Verificar e configurar",
       ollamaLabel: "Ollama",
       ollamaHint: "Baixe um modelo compatível com ferramentas do seu servidor Ollama",
       llamaCppLabel: "Modelo local (llama.cpp)",
-      llamaCppHint: "Baixe um modelo local de aproximadamente 5,0 GB; requer 16 GB de RAM",
+      providerNotReady:
+        "{provider} não expôs um modelo local utilizável. Revise o resultado da configuração e tente novamente.",
     },
     manual: {
       title: "Conectar com uma chave de API ou token",
       provider: "Provedor",
       selectProvider: "Selecione um provedor",
+      selectProviderHint: "Escolha de onde vem esta credencial",
       accessValue: "Chave de API ou token",
+      accessValueFor: "Chave de API ou token do {provider}",
       accessValuePlaceholder: "Cole uma chave de API ou token",
       connect: "Conectar",
+      connectAndVerify: "Conectar e verificar",
+      verifyHint:
+        "O OpenClaw verifica uma resposta real do modelo antes de marcar a conexão como pronta.",
       required: "Escolha um provedor e insira uma chave de API ou token.",
     },
     success: {
       title: "Sua IA está pronta",
+      body: "O OpenClaw recebeu uma resposta real de {modelRef}. Você já pode começar a conversar.",
+      activeModel: "Modelo ativo",
+      latency: "Verificado em {latencyMs} ms",
       detail: "{modelRef} · {latencyMs} ms",
       openChat: "Abrir chat",
+      continueSetup: "Continuar configuração",
+      stayHere: "Permanecer nas configurações",
       configuredModel: "Modelo configurado",
     },
     failure: {
@@ -2278,6 +2303,11 @@ export const pt_BR: TranslationMap = {
       channelDegraded: "O {channel} está degradado — pergunte-me o que aconteceu",
       channelFallback: "Um canal",
       dismiss: "Dispensar esta atualização",
+      channelSetupTitle: "Acesse o OpenClaw fora deste app",
+      channelSetupBody:
+        "O app web já funciona. Adicione um canal apenas se quiser enviar mensagens ao OpenClaw a partir de outro serviço.",
+      channelSetupAction: "Configurar um canal",
+      channelSetupDismiss: "Continuar usando o app web",
     },
   },
   mcpServers: {
@@ -2292,6 +2322,10 @@ export const pt_BR: TranslationMap = {
     nameInvalid: "Nomes de servidores usam letras, números, pontos, traços ou sublinhados.",
     targetInvalid:
       "Insira uma URL para transportes HTTP ou uma linha de comando válida para stdio.",
+    sessionEnableFailed:
+      "O servidor foi salvo desativado globalmente, mas a ativação para esta sessão falhou: {error}",
+    sessionChanged: "A sessão ativa mudou antes que pudesse ser ativada.",
+    sessionUnavailable: "A sessão ativa está indisponível; atualize e tente novamente.",
     nameTaken: "Já existe um servidor MCP chamado “{name}”.",
     missing: "O servidor MCP “{name}” não foi encontrado na configuração.",
     missingTransport: "transporte ausente",
@@ -2461,7 +2495,9 @@ export const pt_BR: TranslationMap = {
       description:
         "Exatamente um plugin de memória ocupa o slot de memória. Selecionar um motor o ativa e desativa os outros.",
       rowTitle: "Motor de memória",
+      openClawMemory: "OpenClaw Memory",
       off: "Desativado",
+      unavailable: "Indisponível",
       autoHint:
         "Nenhum motor está fixado na configuração, então o slot recai sobre seu proprietário padrão.",
       explicitHint: "Este motor está fixado na configuração em plugins.slots.memory.",
@@ -2480,8 +2516,11 @@ export const pt_BR: TranslationMap = {
       rowTitle: "Backend de recuperação",
       builtin: "Integrado",
       qmd: "QMD",
+      invalid: "Valor configurado inválido",
       builtinHint: "Os arquivos de memória são indexados e pesquisados pelo próprio OpenClaw.",
       qmdHint: "A recuperação é delegada ao QMD. Suas configurações aparecem abaixo.",
+      invalidHint:
+        "O valor configurado de memory.backend é inválido. Escolha um backend ou redefina-o para usar o padrão.",
     },
     addons: {
       title: "Complementos",
@@ -2525,11 +2564,13 @@ export const pt_BR: TranslationMap = {
         label: "Fuso horário",
         help: "Fuso horário IANA usado para interpretar a cadência cron.",
         placeholder: "Europe/Vienna",
+        default: "Fuso horário local do Gateway",
       },
       model: {
         label: "Modelo do dreaming",
         help: "Substituição de provedor/modelo para a narração do diário de sonhos. Requer que substituições de modelo de subagente sejam permitidas.",
         placeholder: "anthropic/claude-sonnet-4-6",
+        default: "Modelo do agente",
       },
       verboseLogging: {
         label: "Log detalhado",
@@ -2775,6 +2816,11 @@ export const pt_BR: TranslationMap = {
       title: "Busca de ferramentas",
       description:
         "Mantenha um diretório de ferramentas limitado visível e adie o restante atrás da busca, para que grandes catálogos de MCP e plugins parem de sobrecarregar o prompt.",
+    },
+    loopDetection: {
+      title: "Detecção de loop de ferramentas",
+      description:
+        "Ative proteções de histórico contínuo que avisam ou bloqueiam chamadas repetidas de ferramentas quando um agente para de progredir.",
     },
     localModelLean: {
       title: "Ferramentas enxutas para modelos locais",
@@ -3687,6 +3733,8 @@ export const pt_BR: TranslationMap = {
       refreshing: "Atualizando…",
       on: "Dreaming ativado",
       off: "Dreaming desativado",
+      engineOff:
+        "O mecanismo de memória está Desligado. Escolha um mecanismo nas Configurações para ativar o sonho.",
     },
     toggleConfirmation: {
       subtitle: "O sonho é uma configuração global; não se restringe a este agente.",
@@ -3810,12 +3858,12 @@ export const pt_BR: TranslationMap = {
       loadingPage: "Carregando página wiki…",
       dreamsTab: "Sonhos",
       insightsTab: "Insights Importados",
-      palaceTab: "Palácio da Memória",
+      wikiTab: "Wiki de Memória",
       dreamsExplainer:
         "Este é o diário de sonhos bruto que o sistema escreve enquanto reproduz e consolida a memória; use-o para inspecionar o que o sistema de memória está percebendo e onde ainda parece ruidoso ou insuficiente.",
       insightsExplainer:
         "Estes são insights importados agrupados a partir do histórico externo; use-os para revisar o que as importações revelaram antes que qualquer parte se transforme em memória duradoura.",
-      palaceExplainer:
+      wikiExplainer:
         "Esta é a superfície da wiki de memória compilada que o sistema pode pesquisar e sobre a qual pode raciocinar; use-a para inspecionar páginas de memória reais, afirmações, questões em aberto e contradições, em vez de conversas de origem importadas brutas.",
       copyArchivePath: "Copiar caminho do arquivo",
       loadingInsights: "Carregando insights importados…",
@@ -3831,9 +3879,9 @@ export const pt_BR: TranslationMap = {
       riskReasons: "Motivos de risco:",
       labels: "Rótulos:",
       openSourcePage: "Abrir página de origem",
-      loadingPalace: "Carregando palácio da memória…",
-      emptyPalace: "O palácio da memória ainda não foi preenchido",
-      emptyPalaceHint:
+      loadingWiki: "Carregando wiki de memória…",
+      emptyWiki: "A wiki de memória ainda não foi preenchida",
+      emptyWikiHint:
         "No momento, a wiki tem principalmente importações de fontes brutas e relatórios operacionais. Esta aba se torna útil quando sínteses, entidades ou conceitos começam a ser escritos.",
       claims: "Afirmações",
       openQuestions: "Perguntas em aberto",
@@ -3911,7 +3959,7 @@ export const pt_BR: TranslationMap = {
       tidyingKnowledgeGraph: "organizando o grafo de conhecimento…",
       replayingConversations: "repassando as conversas de hoje…",
       weavingShortTerm: "entrelaçando o curto prazo com o longo prazo…",
-      defragmentingMindPalace: "desfragmentando o palácio mental…",
+      defragmentingMemoryLane: "desfragmentando os caminhos da memória…",
       filingLooseThoughts: "arquivando pensamentos soltos…",
       connectingDots: "conectando pontos distantes…",
       compostingContext: "compostando janelas de contexto antigas…",
@@ -3936,6 +3984,7 @@ export const pt_BR: TranslationMap = {
     emptySubtitle: "Sign in to a provider or add an API key, then refresh.",
     status: {
       ok: "Conectado",
+      ready: "Pronto",
       expiring: "Expiring",
       expired: "Expirado",
       missing: "Not signed in",
@@ -3989,6 +4038,16 @@ export const pt_BR: TranslationMap = {
         unknown: "Falha na conexão",
         no_model: "Nenhum modelo disponível",
       },
+    },
+    readiness: {
+      title: "Configuração de IA",
+      heading: "Conecte um modelo de IA verificado",
+      signedInNoModels:
+        "Você está conectado, mas esta conta não expõe modelos utilizáveis. Escolha outro provedor ou conta para continuar.",
+      notConfigured: "Escolha um provedor e verifique o modelo que o OpenClaw usará.",
+      noModels: "Nenhum modelo disponível",
+      modelRequired: "Modelo obrigatório",
+      chooseProvider: "Escolher outro provedor",
     },
     logout: {
       action: "Sair",
@@ -4795,6 +4854,11 @@ export const pt_BR: TranslationMap = {
         tools: "Ferramentas",
       },
     },
+    skills: {
+      menu: "Referências de Skills",
+      label: "Skills",
+      loading: "Carregando Skills…",
+    },
     splitView: {
       open: "Abrir visualização dividida",
       splitRight: "Dividir à direita",
@@ -4944,6 +5008,7 @@ export const pt_BR: TranslationMap = {
       pause: "Pausar",
       seek: "Buscar mídia",
       download: "Baixar {filename}",
+      preparing: "Preparando reprodução…",
       videoUnavailable: "Não é possível reproduzir este formato — baixe em vez disso.",
     },
     modelControls: {
@@ -4960,6 +5025,9 @@ export const pt_BR: TranslationMap = {
       fastHelp: "Respostas rápidas terminam mais cedo e podem usar mais dos seus limites de uso.",
       speedUnsupported: "O controle de velocidade não é compatível com este modelo.",
       contextWindow: "{count} de contexto",
+      chatOnly: "Somente chat",
+      chatOnlyHelp:
+        "Este modelo pode conversar, mas não pode usar ferramentas. Escolha outro modelo para tarefas com arquivos, comandos, web ou mídia.",
       providerModels: "Modelos de {provider}",
       resetReasoning: "Redefinir para o padrão ({level})",
       useDefaultReasoning: "Usar raciocínio padrão ({level})",
@@ -5117,7 +5185,22 @@ export const pt_BR: TranslationMap = {
         manageSkills: "Gerenciar Skills",
         browseConnectors: "Explorar conectores",
         addMcpServer: "Adicionar servidor MCP…",
-        toolAccess: "Acesso a ferramentas",
+        addMcpServerTitle: "Adicionar servidor MCP",
+        addMcpServerDescription: "Configure o servidor e escolha onde ele fica ativado.",
+        scopeLabel: "Disponibilidade",
+        scopeSession: "Esta sessão",
+        scopeEverywhere: "Em todos os lugares",
+        scopeSessionHint:
+          "O servidor é salvo globalmente desativado e ativado apenas para esta sessão.",
+        scopeEverywhereHint: "O servidor é salvo e ativado para todas as sessões.",
+        toolAccess: {
+          label: "Acesso a ferramentas",
+          loading: "Carregando ferramentas…",
+          loadFailed: "Não foi possível carregar as ferramentas.",
+          noTools: "Nenhuma ferramenta disponível para este conector.",
+          summary: "{enabled} de {total} ferramentas ativas",
+          summaryOne: "{enabled} de {total} ferramenta ativa",
+        },
         enabledCount: "{count} ativos",
         loadingSkills: "Carregando Skills…",
         skillsLoadFailed: "Não foi possível carregar as Skills.",

@@ -388,6 +388,8 @@ export const uk: TranslationMap = {
       "Оновлення встановлено, але запущена версія не змінилася — можливо, перезапуск було заблоковано. Очікувалося v{expectedVersion}, запущено v{actualVersion}.",
     handoffTimeout:
       "Передавання оновлення розпочато, але про завершення не повідомлено після повторного підключення. Виконайте `openclaw update status`, щоб дізнатися остаточний результат.",
+    outcomeUnknown:
+      "Запит на оновлення, можливо, було прийнято, але Gateway не повідомив остаточний результат після повторного підключення. Виконайте `openclaw update status` перед повторною спробою.",
     failureReasons: {
       dirty: "Зафіксуйте або сховайте зміни, потім повторіть.",
       noUpstream: "Встановіть upstream-гілку, потім повторіть.",
@@ -697,6 +699,8 @@ export const uk: TranslationMap = {
     loadError: "Не вдалося завантажити дашборди: {error}",
   },
   sessionsView: {
+    subagentPrefix: "Субагент:",
+    automationPrefix: "Автоматизація:",
     deletePreservedWorktrees:
       "{count} робочих дерев сеансу з незакоміченими або невідправленими змінами було збережено ({branches}). Керуйте ними в Settings -> Worktrees.",
     deletePreservedWorktreeConfirm:
@@ -775,6 +779,7 @@ export const uk: TranslationMap = {
     noArchivedSessions: "Немає заархівованих сесій.",
     noSessionsMatchFilters: "Немає сеансів, що відповідають вашим фільтрам.",
     pagination: "{start}-{end} з {total} рядків",
+    pageSize: "Рядків на сторінці",
     rowsPerPage: "{count} на сторінку",
     showAll: "Показати все",
     inherit: "успадковувати",
@@ -1132,9 +1137,15 @@ export const uk: TranslationMap = {
     structuredSecretFile:
       "Структуроване значення (SecretRef) — редагуйте файл конфігурації безпосередньо",
     defaultValue: "За замовчуванням: {value}",
+    usingDefault: "Використовується типове значення: {value}",
     resetToDefault: "Скинути до значення за замовчуванням",
     select: "Вибрати...",
+    nullValue: "null",
     jsonValue: "Значення JSON",
+    invalidJson: "Введіть коректний JSON, перш ніж покинути це поле.",
+    invalidString: "Введіть значення, що відповідає обмеженням цього налаштування.",
+    invalidNumber: "Введіть значення в межах дозволеного діапазону та кроку.",
+    draftRejected: "Це налаштування не вдалося зберегти. Ваш чернетковий запис збережено.",
     unsupportedArray: "Непідтримувана схема масиву. Використовуйте режим Raw.",
     itemCountOne: "{count} елемент",
     itemCount: "{count} елементів",
@@ -1282,6 +1293,8 @@ export const uk: TranslationMap = {
       model: "Модель",
       thinking: "Мислення",
       fastMode: "Швидкий режим",
+      default: "За замовчуванням",
+      modelPolicy: "Політика моделі",
       thinkingLevels: {
         off: "Вимкнено",
         low: "Низька",
@@ -1452,6 +1465,7 @@ export const uk: TranslationMap = {
       xxl: "XXL",
     },
     syncedHint: "Синхронізовано між вашими пристроями через Gateway.",
+    syncPendingHint: "Очікування синхронізації через gateway.",
     notifications: {
       title: "Push-сповіщення",
       nativeTitle: "Сповіщення",
@@ -2074,26 +2088,36 @@ export const uk: TranslationMap = {
     prepare: {
       title: "Налаштувати локальну модель",
       intro: "Завантажте або підготуйте локальну модель на цьому Gateway.",
-      button: "Налаштувати / Завантажити модель",
+      ollamaButton: "Перевірити та налаштувати",
       ollamaLabel: "Ollama",
       ollamaHint: "Завантажте модель із підтримкою інструментів із вашого сервера Ollama",
       llamaCppLabel: "Локальна модель (llama.cpp)",
-      llamaCppHint:
-        "Завантажте локальну модель обсягом приблизно 5,0 ГБ; потрібно 16 ГБ оперативної пам’яті",
+      providerNotReady:
+        "{provider} не надав придатної локальної моделі. Перегляньте результат налаштування, потім повторіть спробу.",
     },
     manual: {
       title: "Підключення за допомогою ключа API або токена",
       provider: "Постачальник",
       selectProvider: "Виберіть постачальника",
+      selectProviderHint: "Виберіть, звідки надходить ця облікова інформація",
       accessValue: "Ключ API або токен",
+      accessValueFor: "API-ключ або токен {provider}",
       accessValuePlaceholder: "Вставте ключ API або токен",
       connect: "Підключити",
+      connectAndVerify: "Підключити та перевірити",
+      verifyHint:
+        "OpenClaw перевіряє справжню відповідь моделі, перш ніж позначити з'єднання готовим.",
       required: "Виберіть постачальника та введіть ключ API або токен.",
     },
     success: {
       title: "Ваш ШІ готовий",
+      body: "OpenClaw отримав справжню відповідь від {modelRef}. Тепер ви можете почати спілкування.",
+      activeModel: "Активна модель",
+      latency: "Перевірено за {latencyMs} мс",
       detail: "{modelRef} · {latencyMs} мс",
       openChat: "Відкрити чат",
+      continueSetup: "Продовжити налаштування",
+      stayHere: "Залишитися в налаштуваннях",
       configuredModel: "Налаштована модель",
     },
     failure: {
@@ -2283,6 +2307,11 @@ export const uk: TranslationMap = {
       channelDegraded: "{channel} у погіршеному стані — запитайте мене, що сталося",
       channelFallback: "Канал",
       dismiss: "Відхилити це оновлення",
+      channelSetupTitle: "Зв'язуйтеся з OpenClaw поза цим застосунком",
+      channelSetupBody:
+        "Веб-застосунок уже працює. Додавайте канал лише тоді, коли хочете писати OpenClaw з іншого сервісу.",
+      channelSetupAction: "Налаштувати канал",
+      channelSetupDismiss: "Продовжити користуватися веб-застосунком",
     },
   },
   mcpServers: {
@@ -2296,6 +2325,10 @@ export const uk: TranslationMap = {
     targetLabel: "URL або команда",
     nameInvalid: "Назви серверів можуть містити літери, цифри, крапки, дефіси або підкреслення.",
     targetInvalid: "Введіть URL для транспортів HTTP або дійсний командний рядок для stdio.",
+    sessionEnableFailed:
+      "Сервер збережено як глобально вимкнений, але увімкнути його для цієї сесії не вдалося: {error}",
+    sessionChanged: "Активна сесія змінилася, перш ніж її вдалося увімкнути.",
+    sessionUnavailable: "Активна сесія недоступна; оновіть і спробуйте ще раз.",
     nameTaken: "MCP-сервер з назвою «{name}» вже існує.",
     missing: "MCP-сервер «{name}» не знайдено в конфігурації.",
     missingTransport: "відсутній транспорт",
@@ -2465,7 +2498,9 @@ export const uk: TranslationMap = {
       description:
         "Рівно один плагін пам'яті володіє слотом пам'яті. Вибір рушія вмикає його та вимикає інші.",
       rowTitle: "Рушій пам'яті",
+      openClawMemory: "OpenClaw Memory",
       off: "Вимкнено",
+      unavailable: "Недоступно",
       autoHint:
         "У конфігурації не закріплено жодного рушія, тож слот повертається до типового власника.",
       explicitHint: "Цей рушій закріплено в конфігурації під plugins.slots.memory.",
@@ -2483,8 +2518,11 @@ export const uk: TranslationMap = {
       rowTitle: "Бекенд отримання",
       builtin: "Вбудований",
       qmd: "QMD",
+      invalid: "Недійсне налаштоване значення",
       builtinHint: "Файли пам'яті індексуються та шукаються самим OpenClaw.",
       qmdHint: "Отримання делегується QMD. Його налаштування наведено нижче.",
+      invalidHint:
+        "Налаштоване значення memory.backend недійсне. Виберіть бекенд або скиньте його, щоб використовувати типове.",
     },
     addons: {
       title: "Додатки",
@@ -2527,11 +2565,13 @@ export const uk: TranslationMap = {
         label: "Часовий пояс",
         help: "Часовий пояс IANA, що використовується для інтерпретації частоти cron.",
         placeholder: "Europe/Vienna",
+        default: "Локальний часовий пояс Gateway",
       },
       model: {
         label: "Модель Dreaming",
         help: "Перевизначення постачальника/моделі для озвучення щоденника снів. Потребує дозволу на перевизначення моделей субагентів.",
         placeholder: "anthropic/claude-sonnet-4-6",
+        default: "Модель агента",
       },
       verboseLogging: {
         label: "Докладне журналювання",
@@ -2773,6 +2813,11 @@ export const uk: TranslationMap = {
       title: "Пошук інструментів",
       description:
         "Тримайте обмежений каталог інструментів видимим і відкладайте решту за пошуком, щоб великі каталоги MCP та плагінів не переповнювали підказку.",
+    },
+    loopDetection: {
+      title: "Виявлення циклів інструментів",
+      description:
+        "Увімкніть захист на основі рухомої історії, який попереджає або блокує повторні виклики інструментів, коли агент перестає прогресувати.",
     },
     localModelLean: {
       title: "Спрощені інструменти для локальних моделей",
@@ -3681,6 +3726,8 @@ export const uk: TranslationMap = {
       refreshing: "Оновлення…",
       on: "Сновидіння увімкнено",
       off: "Сновидіння вимкнено",
+      engineOff:
+        "Рушій пам'яті вимкнено. Виберіть рушій у Налаштуваннях, щоб увімкнути сновидіння.",
     },
     toggleConfirmation: {
       subtitle: "Dreaming — це глобальне налаштування; воно не обмежене цим агентом.",
@@ -3801,12 +3848,12 @@ export const uk: TranslationMap = {
       loadingPage: "Завантаження wiki-сторінки…",
       dreamsTab: "Сни",
       insightsTab: "Імпортовані інсайти",
-      palaceTab: "Палац пам'яті",
+      wikiTab: "Вікі пам'яті",
       dreamsExplainer:
         "Це необроблений щоденник снів, який система записує під час відтворення й консолідації пам'яті; використовуйте його, щоб оглянути, що помічає система пам'яті та де вона ще виглядає зашумленою чи неповною.",
       insightsExplainer:
         "Це імпортовані інсайти, згруповані із зовнішньої історії; використовуйте їх, щоб переглянути, що виявили імпорти, перш ніж щось із цього перейде в тривалу пам'ять.",
-      palaceExplainer:
+      wikiExplainer:
         "Це скомпільована wiki-поверхня пам'яті, яку система може шукати та осмислювати; використовуйте її для перегляду фактичних сторінок пам'яті, тверджень, відкритих запитань і суперечностей, а не необроблених імпортованих вихідних чатів.",
       copyArchivePath: "Скопіювати шлях архіву",
       loadingInsights: "Завантаження імпортованих інсайтів…",
@@ -3822,9 +3869,9 @@ export const uk: TranslationMap = {
       riskReasons: "Причини ризику:",
       labels: "Мітки:",
       openSourcePage: "Відкрити сторінку джерела",
-      loadingPalace: "Завантаження палацу пам'яті…",
-      emptyPalace: "Палац пам'яті ще не заповнено",
-      emptyPalaceHint:
+      loadingWiki: "Завантаження вікі пам'яті…",
+      emptyWiki: "Вікі пам'яті ще не заповнено",
+      emptyWikiHint:
         "Наразі вікі містить переважно необроблені імпорти джерел і операційні звіти. Ця вкладка стане корисною, щойно почнуть записуватися синтези, сутності чи концепції.",
       claims: "Твердження",
       openQuestions: "Відкриті питання",
@@ -3900,7 +3947,7 @@ export const uk: TranslationMap = {
       tidyingKnowledgeGraph: "упорядкування графа знань…",
       replayingConversations: "відтворення сьогоднішніх розмов…",
       weavingShortTerm: "переплетення короткострокового з довгостроковим…",
-      defragmentingMindPalace: "дефрагментація палацу розуму…",
+      defragmentingMemoryLane: "дефрагментація спогадів…",
       filingLooseThoughts: "упорядкування розрізнених думок…",
       connectingDots: "поєднання далеких точок…",
       compostingContext: "переробка старих контекстних вікон…",
@@ -3925,6 +3972,7 @@ export const uk: TranslationMap = {
     emptySubtitle: "Sign in to a provider or add an API key, then refresh.",
     status: {
       ok: "Підключено",
+      ready: "Готово",
       expiring: "Expiring",
       expired: "Застарів",
       missing: "Not signed in",
@@ -3977,6 +4025,16 @@ export const uk: TranslationMap = {
         unknown: "Не вдалося встановити з’єднання",
         no_model: "Немає доступних моделей",
       },
+    },
+    readiness: {
+      title: "Налаштування AI",
+      heading: "Підключіть перевірену модель AI",
+      signedInNoModels:
+        "Ви ввійшли, але цей обліковий запис не надає доступних моделей. Оберіть іншого постачальника або обліковий запис, щоб продовжити.",
+      notConfigured: "Оберіть постачальника та перевірте модель, яку використовуватиме OpenClaw.",
+      noModels: "Немає доступних моделей",
+      modelRequired: "Потрібна модель",
+      chooseProvider: "Оберіть іншого постачальника",
     },
     logout: {
       action: "Вийти",
@@ -4777,6 +4835,11 @@ export const uk: TranslationMap = {
         tools: "Інструменти",
       },
     },
+    skills: {
+      menu: "Посилання на Skills",
+      label: "Skills",
+      loading: "Завантаження Skills…",
+    },
     splitView: {
       open: "Відкрити розділений перегляд",
       splitRight: "Розділити праворуч",
@@ -4926,6 +4989,7 @@ export const uk: TranslationMap = {
       pause: "Призупинити",
       seek: "Перемотати медіа",
       download: "Завантажити {filename}",
+      preparing: "Підготовка відтворення…",
       videoUnavailable: "Не вдається відтворити цей формат — завантажте замість цього.",
     },
     modelControls: {
@@ -4943,6 +5007,9 @@ export const uk: TranslationMap = {
         "Швидкі відповіді завершуються раніше та можуть використовувати більшу частину ваших лімітів.",
       speedUnsupported: "Керування швидкістю не підтримується для цієї моделі.",
       contextWindow: "Контекст: {count}",
+      chatOnly: "Лише чат",
+      chatOnlyHelp:
+        "Ця модель може спілкуватися, але не може використовувати інструменти. Оберіть іншу модель для роботи з файлами, командами, вебом або медіа.",
       providerModels: "Моделі {provider}",
       resetReasoning: "Скинути до значення за замовчуванням ({level})",
       useDefaultReasoning: "Використовувати міркування за замовчуванням ({level})",
@@ -5100,7 +5167,22 @@ export const uk: TranslationMap = {
         manageSkills: "Керувати Skills",
         browseConnectors: "Огляд конекторів",
         addMcpServer: "Додати сервер MCP…",
-        toolAccess: "Доступ до інструментів",
+        addMcpServerTitle: "Додати сервер MCP",
+        addMcpServerDescription: "Налаштуйте сервер і виберіть, де його ввімкнено.",
+        scopeLabel: "Доступність",
+        scopeSession: "Ця сесія",
+        scopeEverywhere: "Всюди",
+        scopeSessionHint:
+          "Сервер зберігається глобально вимкненим і ввімкненим лише для цієї сесії.",
+        scopeEverywhereHint: "Сервер зберігається та ввімкнено для кожної сесії.",
+        toolAccess: {
+          label: "Доступ до інструментів",
+          loading: "Завантаження інструментів…",
+          loadFailed: "Не вдалося завантажити інструменти.",
+          noTools: "Немає доступних інструментів для цього конектора.",
+          summary: "Увімкнено {enabled} із {total} інструментів",
+          summaryOne: "Увімкнено {enabled} із {total} інструмента",
+        },
         enabledCount: "{count} увімкнено",
         loadingSkills: "Завантаження Skills…",
         skillsLoadFailed: "Не вдалося завантажити Skills.",

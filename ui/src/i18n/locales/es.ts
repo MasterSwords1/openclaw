@@ -389,6 +389,8 @@ export const es: TranslationMap = {
       "Actualización instalada, pero la versión en ejecución no cambió — es posible que el reinicio se haya bloqueado. Se esperaba v{expectedVersion}, en ejecución v{actualVersion}.",
     handoffTimeout:
       "El traspaso de la actualización comenzó, pero no se informó su finalización tras la reconexión. Ejecuta `openclaw update status` para ver el resultado final.",
+    outcomeUnknown:
+      "Es posible que la solicitud de actualización se haya aceptado, pero el Gateway no informó un resultado final tras la reconexión. Ejecuta `openclaw update status` antes de reintentar.",
     failureReasons: {
       dirty: "Confirma o guarda los cambios en stash y luego reintenta.",
       noUpstream: "Configura una rama upstream y luego reintenta.",
@@ -698,6 +700,8 @@ export const es: TranslationMap = {
     loadError: "No se pudieron cargar los paneles: {error}",
   },
   sessionsView: {
+    subagentPrefix: "Subagente:",
+    automationPrefix: "Automatización:",
     deletePreservedWorktrees:
       "Se conservaron {count} worktree(s) de sesión con trabajo sin confirmar o sin enviar ({branches}). Gestiónalos en Settings -> Worktrees.",
     deletePreservedWorktreeConfirm:
@@ -777,6 +781,7 @@ export const es: TranslationMap = {
     noArchivedSessions: "No hay sesiones archivadas.",
     noSessionsMatchFilters: "Ninguna sesión coincide con tus filtros.",
     pagination: "{start}-{end} de {total} filas",
+    pageSize: "Filas por página",
     rowsPerPage: "{count} por página",
     showAll: "Mostrar todo",
     inherit: "heredar",
@@ -1136,9 +1141,15 @@ export const es: TranslationMap = {
     structuredSecretFile:
       "Valor estructurado (SecretRef): edita el archivo de configuración directamente",
     defaultValue: "Predeterminado: {value}",
+    usingDefault: "Usando valor predeterminado: {value}",
     resetToDefault: "Restablecer al valor predeterminado",
     select: "Seleccionar...",
+    nullValue: "null",
     jsonValue: "Valor JSON",
+    invalidJson: "Introduce un JSON válido antes de salir de este campo.",
+    invalidString: "Introduce un valor que cumpla las restricciones de este ajuste.",
+    invalidNumber: "Introduce un valor dentro del rango y el incremento permitidos.",
+    draftRejected: "No se pudo guardar este ajuste. Tu borrador sigue aquí.",
     unsupportedArray: "Esquema de array no compatible. Usa el modo Raw.",
     itemCountOne: "{count} elemento",
     itemCount: "{count} elementos",
@@ -1286,6 +1297,8 @@ export const es: TranslationMap = {
       model: "Modelo",
       thinking: "Pensamiento",
       fastMode: "Modo rápido",
+      default: "Predeterminado",
+      modelPolicy: "Política de modelo",
       thinkingLevels: {
         off: "Desactivada",
         low: "Baja",
@@ -1457,6 +1470,7 @@ export const es: TranslationMap = {
       xxl: "XXL",
     },
     syncedHint: "Sincronizado entre tus dispositivos a través del gateway.",
+    syncPendingHint: "Esperando la sincronización a través del gateway.",
     notifications: {
       title: "Notificaciones push",
       nativeTitle: "Notificaciones",
@@ -2082,25 +2096,36 @@ export const es: TranslationMap = {
     prepare: {
       title: "Configurar un modelo local",
       intro: "Descarga o prepara un modelo local en este Gateway.",
-      button: "Configurar / Descargar modelo",
+      ollamaButton: "Comprobar y configurar",
       ollamaLabel: "Ollama",
       ollamaHint: "Descarga un modelo compatible con herramientas desde tu servidor Ollama",
       llamaCppLabel: "Modelo local (llama.cpp)",
-      llamaCppHint: "Descarga un modelo local de aproximadamente 5,0 GB; requiere 16 GB de RAM",
+      providerNotReady:
+        "{provider} no expuso un modelo local utilizable. Revisa el resultado de la configuración y vuelve a intentarlo.",
     },
     manual: {
       title: "Conectar con una clave de API o un token",
       provider: "Proveedor",
       selectProvider: "Selecciona un proveedor",
+      selectProviderHint: "Elige de dónde proviene esta credencial",
       accessValue: "Clave de API o token",
+      accessValueFor: "Clave de API o token de {provider}",
       accessValuePlaceholder: "Pega una clave de API o un token",
       connect: "Conectar",
+      connectAndVerify: "Conectar y verificar",
+      verifyHint:
+        "OpenClaw verifica una respuesta real del modelo antes de marcar la conexión como lista.",
       required: "Elige un proveedor e introduce una clave de API o un token.",
     },
     success: {
       title: "Tu IA está lista",
+      body: "OpenClaw recibió una respuesta real de {modelRef}. Ya puedes empezar a chatear.",
+      activeModel: "Modelo activo",
+      latency: "Verificado en {latencyMs} ms",
       detail: "{modelRef} · {latencyMs} ms",
       openChat: "Abrir chat",
+      continueSetup: "Continuar configuración",
+      stayHere: "Permanecer en ajustes",
       configuredModel: "Modelo configurado",
     },
     failure: {
@@ -2293,6 +2318,11 @@ export const es: TranslationMap = {
       channelDegraded: "{channel} está degradado — pregúntame qué pasó",
       channelFallback: "Un canal",
       dismiss: "Descartar esta actualización",
+      channelSetupTitle: "Comunícate con OpenClaw fuera de esta app",
+      channelSetupBody:
+        "La app web ya funciona. Añade un canal solo si quieres enviar mensajes a OpenClaw desde otro servicio.",
+      channelSetupAction: "Configurar un canal",
+      channelSetupDismiss: "Seguir usando la app web",
     },
   },
   mcpServers: {
@@ -2307,6 +2337,10 @@ export const es: TranslationMap = {
     nameInvalid: "Los nombres de servidor usan letras, números, puntos, guiones o guiones bajos.",
     targetInvalid:
       "Introduce una URL para transportes HTTP o una línea de comandos válida para stdio.",
+    sessionEnableFailed:
+      "El servidor se guardó deshabilitado globalmente, pero no se pudo habilitar para esta sesión: {error}",
+    sessionChanged: "La sesión activa cambió antes de que se pudiera habilitar.",
+    sessionUnavailable: "La sesión activa no está disponible; actualiza e inténtalo de nuevo.",
     nameTaken: "Ya existe un servidor MCP llamado “{name}”.",
     missing: "No se encontró el servidor MCP “{name}” en la configuración.",
     missingTransport: "falta el transporte",
@@ -2478,7 +2512,9 @@ export const es: TranslationMap = {
       description:
         "Exactamente un plugin de memoria posee el espacio de memoria. Seleccionar un motor lo activa y desactiva los demás.",
       rowTitle: "Motor de memoria",
+      openClawMemory: "OpenClaw Memory",
       off: "Desactivada",
+      unavailable: "No disponible",
       autoHint:
         "No hay ningún motor fijado en la configuración, por lo que el espacio recurre a su propietario predeterminado.",
       explicitHint: "Este motor está fijado en la configuración en plugins.slots.memory.",
@@ -2497,8 +2533,11 @@ export const es: TranslationMap = {
       rowTitle: "Backend de recuperación",
       builtin: "Integrado",
       qmd: "QMD",
+      invalid: "Valor configurado no válido",
       builtinHint: "Los archivos de memoria son indexados y consultados por el propio OpenClaw.",
       qmdHint: "La recuperación se delega en QMD. Su configuración aparece a continuación.",
+      invalidHint:
+        "El valor configurado de memory.backend no es válido. Elige un backend o restablécelo para usar el predeterminado.",
     },
     addons: {
       title: "Complementos",
@@ -2542,11 +2581,13 @@ export const es: TranslationMap = {
         label: "Zona horaria",
         help: "Zona horaria IANA utilizada para interpretar la cadencia cron.",
         placeholder: "Europe/Vienna",
+        default: "Zona horaria local del Gateway",
       },
       model: {
         label: "Modelo de dreaming",
         help: "Anulación de proveedor/modelo para la narración del diario de sueños. Requiere que se permitan las anulaciones de modelo de subagente.",
         placeholder: "anthropic/claude-sonnet-4-6",
+        default: "Modelo del agente",
       },
       verboseLogging: {
         label: "Registro detallado",
@@ -2799,6 +2840,11 @@ export const es: TranslationMap = {
       title: "Búsqueda de herramientas",
       description:
         "Mantén visible un directorio de herramientas acotado y aplaza el resto tras la búsqueda, para que los grandes catálogos de MCP y plugins dejen de saturar el prompt.",
+    },
+    loopDetection: {
+      title: "Detección de bucles de herramientas",
+      description:
+        "Habilita protecciones de historial continuo que advierten o bloquean llamadas repetidas a herramientas cuando un agente deja de avanzar.",
     },
     localModelLean: {
       title: "Herramientas ligeras para modelos locales",
@@ -3710,6 +3756,8 @@ export const es: TranslationMap = {
       refreshing: "Actualizando…",
       on: "Sueño activado",
       off: "Sueño desactivado",
+      engineOff:
+        "El motor de memoria está desactivado. Elige un motor en Ajustes para habilitar el modo de sueño.",
     },
     toggleConfirmation: {
       subtitle: "Dreaming es un ajuste global; no se limita a este agente.",
@@ -3835,12 +3883,12 @@ export const es: TranslationMap = {
       loadingPage: "Cargando página del wiki…",
       dreamsTab: "Sueños",
       insightsTab: "Perspectivas importadas",
-      palaceTab: "Palacio de la memoria",
+      wikiTab: "Wiki de memoria",
       dreamsExplainer:
         "Este es el diario de sueños sin procesar que el sistema escribe mientras reproduce y consolida la memoria; úsalo para inspeccionar qué está detectando el sistema de memoria y dónde aún parece ruidoso o insuficiente.",
       insightsExplainer:
         "Estas son perspectivas importadas agrupadas a partir del historial externo; úsalas para revisar lo que surgió de las importaciones antes de que nada se convierta en memoria duradera.",
-      palaceExplainer:
+      wikiExplainer:
         "Esta es la superficie del wiki de memoria compilada que el sistema puede buscar y razonar; úsala para inspeccionar las páginas de memoria reales, afirmaciones, preguntas abiertas y contradicciones en lugar de los chats de origen importados sin procesar.",
       copyArchivePath: "Copiar ruta del archivo",
       loadingInsights: "Cargando información importada…",
@@ -3856,9 +3904,9 @@ export const es: TranslationMap = {
       riskReasons: "Motivos de riesgo:",
       labels: "Etiquetas:",
       openSourcePage: "Abrir página de origen",
-      loadingPalace: "Cargando palacio de la memoria…",
-      emptyPalace: "El palacio de la memoria aún no está poblado",
-      emptyPalaceHint:
+      loadingWiki: "Cargando wiki de memoria…",
+      emptyWiki: "La wiki de memoria aún no está poblada",
+      emptyWikiHint:
         "Ahora mismo la wiki tiene principalmente importaciones de origen sin procesar e informes operativos. Esta pestaña resulta útil una vez que empiezan a escribirse síntesis, entidades o conceptos.",
       claims: "Afirmaciones",
       openQuestions: "Preguntas abiertas",
@@ -3936,7 +3984,7 @@ export const es: TranslationMap = {
       tidyingKnowledgeGraph: "ordenando el grafo de conocimiento…",
       replayingConversations: "reproduciendo las conversaciones de hoy…",
       weavingShortTerm: "entretejiendo el corto plazo con el largo plazo…",
-      defragmentingMindPalace: "desfragmentando el palacio mental…",
+      defragmentingMemoryLane: "desfragmentando los recuerdos…",
       filingLooseThoughts: "archivando pensamientos sueltos…",
       connectingDots: "conectando puntos distantes…",
       compostingContext: "convirtiendo en compost las ventanas de contexto antiguas…",
@@ -3961,6 +4009,7 @@ export const es: TranslationMap = {
     emptySubtitle: "Sign in to a provider or add an API key, then refresh.",
     status: {
       ok: "Conectado",
+      ready: "Listas",
       expiring: "Expiring",
       expired: "Caducado",
       missing: "Not signed in",
@@ -4014,6 +4063,16 @@ export const es: TranslationMap = {
         unknown: "Error de conexión",
         no_model: "No hay ningún modelo disponible",
       },
+    },
+    readiness: {
+      title: "Configuración de IA",
+      heading: "Conecta un modelo de IA verificado",
+      signedInNoModels:
+        "Has iniciado sesión, pero esta cuenta no expone modelos utilizables. Elige otro proveedor o cuenta para continuar.",
+      notConfigured: "Elige un proveedor y verifica el modelo que usará OpenClaw.",
+      noModels: "No hay modelos disponibles",
+      modelRequired: "Modelo obligatorio",
+      chooseProvider: "Elige otro proveedor",
     },
     logout: {
       action: "Cerrar sesión",
@@ -4824,6 +4883,11 @@ export const es: TranslationMap = {
         tools: "Herramientas",
       },
     },
+    skills: {
+      menu: "Referencias de Skills",
+      label: "Skills",
+      loading: "Cargando Skills…",
+    },
     splitView: {
       open: "Abrir vista dividida",
       splitRight: "Dividir a la derecha",
@@ -4973,6 +5037,7 @@ export const es: TranslationMap = {
       pause: "Pausar",
       seek: "Buscar en el contenido",
       download: "Descargar {filename}",
+      preparing: "Preparando la reproducción…",
       videoUnavailable: "No se puede reproducir este formato: descárgalo en su lugar.",
     },
     modelControls: {
@@ -4990,6 +5055,9 @@ export const es: TranslationMap = {
         "Las respuestas rápidas terminan antes y pueden consumir más de tus límites de uso.",
       speedUnsupported: "El control de velocidad no es compatible con este modelo.",
       contextWindow: "{count} de contexto",
+      chatOnly: "Solo chat",
+      chatOnlyHelp:
+        "Este modelo puede chatear, pero no puede usar herramientas. Elige otro modelo para tareas de archivos, comandos, web o multimedia.",
       providerModels: "Modelos de {provider}",
       resetReasoning: "Restablecer al valor predeterminado ({level})",
       useDefaultReasoning: "Usar el razonamiento predeterminado ({level})",
@@ -5147,7 +5215,22 @@ export const es: TranslationMap = {
         manageSkills: "Gestionar Skills",
         browseConnectors: "Explorar conectores",
         addMcpServer: "Añadir servidor MCP…",
-        toolAccess: "Acceso a herramientas",
+        addMcpServerTitle: "Añadir servidor MCP",
+        addMcpServerDescription: "Configura el servidor y elige dónde estará habilitado.",
+        scopeLabel: "Disponibilidad",
+        scopeSession: "Esta sesión",
+        scopeEverywhere: "En todas partes",
+        scopeSessionHint:
+          "El servidor se guarda deshabilitado globalmente y se habilita solo para esta sesión.",
+        scopeEverywhereHint: "El servidor se guarda y se habilita para todas las sesiones.",
+        toolAccess: {
+          label: "Acceso a herramientas",
+          loading: "Cargando herramientas…",
+          loadFailed: "No se pudieron cargar las herramientas.",
+          noTools: "No hay herramientas disponibles para este conector.",
+          summary: "{enabled} de {total} herramientas activadas",
+          summaryOne: "{enabled} de {total} herramienta activada",
+        },
         enabledCount: "{count} activadas",
         loadingSkills: "Cargando Skills…",
         skillsLoadFailed: "No se pudieron cargar las Skills.",
