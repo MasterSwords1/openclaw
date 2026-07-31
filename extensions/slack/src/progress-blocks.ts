@@ -210,14 +210,18 @@ export function reconcileSlackNativeTaskChunks(params: {
   const taskChunks = (params.chunks ?? []).filter(
     (chunk): chunk is TaskChunk => chunk.type === "task_update",
   );
-  const previousActive = [...params.previousTasks].filter(([, task]) => task.active);
+  const previousTasks = [...params.previousTasks];
+  const previousActive = previousTasks.filter(([, task]) => task.active);
+  const previousInactive = previousTasks.filter(([, task]) => !task.active);
+  const previousByMatchPriority = [...previousActive, ...previousInactive];
   const assignedIds = new Map<TaskChunk, string>();
   const usedPreviousIds = new Set<string>();
 
-  // Exact semantic titles survive inserts, removals, and reorderings. Match
-  // duplicate titles in their existing order so each row remains addressable.
+  // Exact semantic titles survive inserts, removals, reorderings, and later
+  // reappearance. Prefer active rows; inactive rows are exact-match only so a
+  // different task cannot inherit a retired id through positional fallback.
   for (const chunk of taskChunks) {
-    const match = previousActive.find(
+    const match = previousByMatchPriority.find(
       ([id, task]) => !usedPreviousIds.has(id) && task.title === chunk.title,
     );
     if (match) {

@@ -196,6 +196,38 @@ describe("native Slack semantic task chunks", () => {
     expect(shrunk.chunks).toContainEqual(taskUpdate(patchId, "Patch code", "complete"));
   });
 
+  it("reuses a retired task identity when the same semantic step reappears", () => {
+    const first = reconcileSlackNativeTaskChunks({
+      previousTasks: new Map(),
+      chunks: buildSlackProgressStreamStartChunks({
+        plan: [
+          { step: "Inspect code", status: "completed" },
+          { step: "Patch code", status: "in_progress" },
+        ],
+      }),
+    });
+    const shrunk = reconcileSlackNativeTaskChunks({
+      previousTasks: first.tasks,
+      chunks: buildSlackProgressStreamUpdateChunks({
+        plan: [{ step: "Inspect code", status: "completed" }],
+      }),
+    });
+    const restored = reconcileSlackNativeTaskChunks({
+      previousTasks: shrunk.tasks,
+      chunks: buildSlackProgressStreamUpdateChunks({
+        plan: [
+          { step: "Inspect code", status: "completed" },
+          { step: "Patch code", status: "in_progress" },
+        ],
+      }),
+    });
+
+    expect(restored.chunks?.filter((chunk) => chunk.type === "task_update")).toEqual([
+      taskUpdate("plan_step_1", "Inspect code", "complete"),
+      taskUpdate("plan_step_2", "Patch code", "in_progress"),
+    ]);
+  });
+
   it("preserves semantic task identities when a plan inserts a new first step", () => {
     const first = reconcileSlackNativeTaskChunks({
       previousTasks: new Map(),
