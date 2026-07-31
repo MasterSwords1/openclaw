@@ -184,6 +184,7 @@ describe("Slack live QA runtime helpers", () => {
 
     expect(scenario?.configOverrides).toBeUndefined();
     expect(run).toMatchObject({ expectReply: true, settleObservedMs: 3_000 });
+    expect(run && "beforeRun" in run ? run.beforeRun : undefined).toBeTypeOf("function");
     expect(run && "input" in run ? run.input : "").toContain("update_plan");
   });
 

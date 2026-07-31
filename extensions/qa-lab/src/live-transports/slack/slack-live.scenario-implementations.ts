@@ -9,7 +9,12 @@ import {
   SLACK_QA_LOG_TAIL_TIMEOUT_MS,
   type SlackQaScenarioImplementation,
   type SlackQaScenarioContext,
+  type SlackObservedMessage,
 } from "./slack-live.contracts.js";
+import {
+  observeSlackScenarioMessages,
+  waitForSlackScenarioReply,
+} from "./slack-live.message-observations.js";
 import {
   isExpectedSlackNativeChartMessage,
   isExpectedSlackNativeTableMessage,
@@ -52,6 +57,7 @@ export const slackQaCanaryScenario: SlackQaScenarioImplementation = {
 export const slackQaSemanticProgressDefaultScenario: SlackQaScenarioImplementation = {
   buildRun: (sutUserId) => {
     const suffix = randomUUID().slice(0, 8).toUpperCase();
+    const greetingMarker = `SLACK-QA-GREETING-${suffix}`;
     const rawToolMarker = `SLACK-QA-RAW-TOOL-${suffix}`;
     const finalMarker = `SLACK-QA-SEMANTIC-DONE-${suffix}`;
     const planTitle = "Verify semantic Slack progress";
@@ -73,6 +79,51 @@ export const slackQaSemanticProgressDefaultScenario: SlackQaScenarioImplementati
       ].join(" "),
       matchText: finalMarker,
       settleObservedMs: 3_000,
+      beforeRun: async (context) => {
+        const sent = await context.postSlackMessage({
+          text: `<@${sutUserId}> hello! Reply with only this exact marker: ${greetingMarker}`,
+        });
+        const observedMessages: SlackObservedMessage[] = [];
+        const reply = await waitForSlackScenarioReply({
+          channelId: context.channelId,
+          client: context.sutReadClient,
+          matchText: greetingMarker,
+          observedMessages,
+          observationScenarioId: "slack-semantic-progress-default-greeting",
+          observationScenarioTitle: "Slack semantic progress greeting preflight",
+          sentTs: sent.ts,
+          sutIdentity: context.sutIdentity,
+          threadTs: sent.ts,
+          timeoutMs: 45_000,
+        });
+        await observeSlackScenarioMessages({
+          channelId: context.channelId,
+          client: context.sutReadClient,
+          matchText: greetingMarker,
+          observedMessages,
+          observationScenarioId: "slack-semantic-progress-default-greeting",
+          observationScenarioTitle: "Slack semantic progress greeting preflight",
+          sentTs: sent.ts,
+          settleMs: 3_000,
+          sutIdentity: context.sutIdentity,
+          threadTs: sent.ts,
+        });
+        const uniqueMessages = new Map(
+          observedMessages.map((message) => [message.ts, message] as const),
+        );
+        const hasProgressCard = [...uniqueMessages.values()].some((message) =>
+          (message.blocks ?? []).some((block) => isRecord(block) && block.type === "plan"),
+        );
+        if (
+          (reply.message.text ?? "").trim() !== greetingMarker ||
+          uniqueMessages.size !== 1 ||
+          !uniqueMessages.has(reply.message.ts ?? "") ||
+          hasProgressCard
+        ) {
+          throw new Error("expected greeting preflight to produce only one final answer");
+        }
+        return "verified greeting preflight was final-only with no progress task card";
+      },
       verifyObserved: ({ finalMessage, messages }) => {
         if ((finalMessage.text ?? "").trim() !== finalMarker) {
           throw new Error("expected the Slack semantic progress final answer to be exact");
