@@ -300,9 +300,9 @@ describe("buildXaiRealtimeVoiceProvider", () => {
     bridge.sendAudio(Buffer.from("queued-before-close"));
     bridge.close();
     bridge.close();
+    const replacementConnect = bridge.connect();
     await firstConnect;
 
-    const replacementConnect = bridge.connect();
     await waitForRealtimeState(() => expect(FakeWebSocket.instances).toHaveLength(2));
     const replacementSocket = requireSocket(1);
     replacementSocket.readyState = FakeWebSocket.OPEN;
@@ -1599,6 +1599,84 @@ describe("buildXaiRealtimeVoiceProvider", () => {
     expect(bridge.isConnected()).toBe(true);
     expect(FakeWebSocket.instances).toHaveLength(2);
     expect(onError).not.toHaveBeenCalled();
+    bridge.close();
+  });
+
+  it("lets an explicit connect replace an automatic reconnect wait", async () => {
+    vi.useFakeTimers();
+    vi.stubEnv("XAI_API_KEY", "xai-env"); // pragma: allowlist secret
+    const onError = vi.fn();
+    const bridge = buildXaiRealtimeVoiceProvider().createBridge({
+      providerConfig: { apiKey: "xai-test", sessionResumption: true }, // pragma: allowlist secret
+      onAudio: vi.fn(),
+      onClearAudio: vi.fn(),
+      onError,
+    });
+
+    const { connecting, socket: firstSocket } = await openRealtimeBridge(
+      bridge,
+      0,
+      "conv_replace_retry",
+    );
+    await connecting;
+
+    firstSocket.close(1006, "connection lost");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(vi.getTimerCount()).toBe(1);
+
+    const replacementConnect = bridge.connect();
+    await waitForRealtimeState(() => expect(FakeWebSocket.instances).toHaveLength(2));
+    const replacementSocket = requireSocket(1);
+    expect(String(replacementSocket.args[0])).toContain("conversation_id=conv_replace_retry");
+    replacementSocket.readyState = FakeWebSocket.OPEN;
+    replacementSocket.emit("open");
+    replacementSocket.emit("message", Buffer.from(JSON.stringify({ type: "session.updated" })));
+    await replacementConnect;
+    await vi.advanceTimersByTimeAsync(1000);
+
+    expect(FakeWebSocket.instances).toHaveLength(2);
+    expect(bridge.isConnected()).toBe(true);
+    expect(onError).not.toHaveBeenCalled();
+    bridge.close();
+  });
+
+  it("preserves a replacement connect started by a reconnect callback", async () => {
+    vi.stubEnv("XAI_API_KEY", "xai-env"); // pragma: allowlist secret
+    const onClose = vi.fn();
+    let replacementConnect: Promise<void> | undefined;
+    let bridge: ReturnType<ReturnType<typeof buildXaiRealtimeVoiceProvider>["createBridge"]>;
+    const onEvent = vi.fn((event: { type: string }) => {
+      if (event.type === "session.reconnect.blocked") {
+        replacementConnect = bridge.connect();
+      }
+    });
+    bridge = buildXaiRealtimeVoiceProvider().createBridge({
+      providerConfig: { apiKey: "xai-test" }, // pragma: allowlist secret
+      onAudio: vi.fn(),
+      onClearAudio: vi.fn(),
+      onClose,
+      onEvent,
+    });
+
+    const { connecting, socket: firstSocket } = await openRealtimeBridge(
+      bridge,
+      0,
+      "conv_callback_replace",
+    );
+    await connecting;
+    firstSocket.close(1006, "connection lost");
+
+    await waitForRealtimeState(() => expect(FakeWebSocket.instances).toHaveLength(2));
+    const replacementSocket = requireSocket(1);
+    replacementSocket.readyState = FakeWebSocket.OPEN;
+    replacementSocket.emit("open");
+    replacementSocket.emit("message", Buffer.from(JSON.stringify({ type: "session.updated" })));
+    await replacementConnect;
+
+    expect(bridge.isConnected()).toBe(true);
+    expect(onClose).not.toHaveBeenCalled();
+    await bridge.connect();
+    expect(FakeWebSocket.instances).toHaveLength(2);
     bridge.close();
   });
 

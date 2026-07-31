@@ -49,6 +49,7 @@ export class XaiRealtimeVoiceBridge extends XaiRealtimeVoiceEvents implements Re
   private terminalError: Error | null = null;
   private connectionOwner: XaiRealtimeConnectionOwner | undefined;
   private connectPromise: Promise<void> | undefined;
+  private connectPromiseOwner: XaiRealtimeConnectionOwner | undefined;
   private pendingAudio: Buffer[] = [];
   private pendingAudioBytes = 0;
   private pendingToolResults: Array<{
@@ -81,7 +82,7 @@ export class XaiRealtimeVoiceBridge extends XaiRealtimeVoiceEvents implements Re
       terminalNotified: false,
     };
     this.connectionOwner = owner;
-    return this.trackConnect(this.connectOwned(owner));
+    return this.trackConnect(owner, this.connectOwned(owner));
   }
 
   sendAudio(audio: Buffer): void {
@@ -186,14 +187,27 @@ export class XaiRealtimeVoiceBridge extends XaiRealtimeVoiceEvents implements Re
     }
   }
 
-  private trackConnect(connection: Promise<void>): Promise<void> {
+  private trackConnect(
+    owner: XaiRealtimeConnectionOwner,
+    connection: Promise<void>,
+  ): Promise<void> {
     const tracked = connection.finally(() => {
-      if (this.connectPromise === tracked) {
-        this.connectPromise = undefined;
-      }
+      this.clearConnectPromise(owner, tracked);
     });
     this.connectPromise = tracked;
+    this.connectPromiseOwner = owner;
     return tracked;
+  }
+
+  private clearConnectPromise(
+    owner: XaiRealtimeConnectionOwner,
+    promise = this.connectPromise,
+  ): void {
+    if (this.connectPromiseOwner !== owner || this.connectPromise !== promise) {
+      return;
+    }
+    this.connectPromise = undefined;
+    this.connectPromiseOwner = undefined;
   }
 
   private cancelConnectionOwner(
@@ -203,6 +217,7 @@ export class XaiRealtimeVoiceBridge extends XaiRealtimeVoiceEvents implements Re
     if (!owner) {
       return;
     }
+    this.clearConnectPromise(owner);
     owner.controller.abort(new Error(`xAI realtime voice ${reason}`));
     if (this.connectionOwner === owner) {
       this.connectionOwner = undefined;
@@ -482,8 +497,8 @@ export class XaiRealtimeVoiceBridge extends XaiRealtimeVoiceEvents implements Re
           settleReject(new Error("xAI realtime voice connection closed before ready"));
           return;
         }
-        const reconnecting = this.trackConnect(this.attemptReconnect("websocket-close", owner));
-        void reconnecting.catch((error: unknown) => {
+        this.clearConnectPromise(owner);
+        void this.attemptReconnect("websocket-close", owner).catch((error: unknown) => {
           if (!this.isCurrentOwner(owner) || owner.terminalOutcome) {
             return;
           }
