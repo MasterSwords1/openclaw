@@ -532,7 +532,7 @@ jobs:
             exit 1
           fi
           encoded_key="$(printf '%s' "$public_key" | base64 -w0)"
-          crabbox run --provider "$CRABBOX_PROVIDER" --id "$lease_id" --reclaim --shell -- \
+          crabbox run --provider "$CRABBOX_PROVIDER" --id "$lease_id" --reclaim --no-sync --shell -- \
             "key=\$(printf '%s' '$encoded_key' | base64 -d); install -d -m 700 ~/.ssh; touch ~/.ssh/authorized_keys; grep -qxF \"\$key\" ~/.ssh/authorized_keys || printf '%s\\n' \"\$key\" >> ~/.ssh/authorized_keys; chmod 600 ~/.ssh/authorized_keys"
 
           crabbox status --provider "$CRABBOX_PROVIDER" --id "$lease_id" --json | \
