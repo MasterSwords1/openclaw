@@ -46,6 +46,7 @@ function recordSlackScenarioMessages(
     const matchedScenario = text.includes(params.matchText);
     params.observedMessages.push({
       actionValues: collectSlackActionValues(message.blocks),
+      blocks: message.blocks,
       blockText: collectSlackBlockText(message.blocks),
       botId: message.bot_id,
       channelId: params.channelId,
@@ -197,6 +198,7 @@ export async function waitForSlackNoReply(params: {
         observedKeys.add(observedKey);
         params.observedMessages.push({
           actionValues: collectSlackActionValues(message.blocks),
+          blocks: message.blocks,
           blockText: collectSlackBlockText(message.blocks),
           botId: message.bot_id,
           channelId: params.channelId,

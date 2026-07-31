@@ -697,6 +697,9 @@ Slack YAML module scenarios (`qa/scenarios/channels/slack-*.yaml`):
   `slack-progress-commentary-verbose-dedupe` - opt-in real-Slack probes for
   independent commentary/tool-progress controls, the omitted-key legacy
   default, and single-delivery behavior when durable verbose progress is on.
+- `slack-semantic-progress-default` - drives unset streaming through structured
+  `update_plan` snapshots and verifies one native task-card identity, stable
+  semantic task ids and states, one final answer, and no raw tool activity.
 - `slack-reaction-glyph-native` - opt-in live message-tool reaction scenario.
   Instructs the agent to pass the exact `✅` glyph and confirms Slack stored
   `white_check_mark` for the SUT bot on the target message.

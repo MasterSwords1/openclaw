@@ -227,6 +227,7 @@ export type SlackAuthIdentity = {
 };
 
 export type SlackObservedMessage = {
+  blocks?: unknown[];
   botId?: string;
   channelId: string;
   matchedScenario?: boolean;

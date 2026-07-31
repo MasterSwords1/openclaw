@@ -160,6 +160,102 @@ describe("Slack live QA runtime helpers", () => {
     ]);
   });
 
+  it("requires the Slack canary greeting to stay final-only", () => {
+    const scenario = testing.findScenario(["slack-canary"])[0];
+    const run = scenario?.buildRun("U999999999");
+    const input = run && "input" in run ? run.input : "";
+    const finalMarker = input.match(/SLACK_QA_ECHO_[0-9A-F]{8}/u)?.[0];
+    const verifyObserved = run && "verifyObserved" in run ? run.verifyObserved : undefined;
+    if (!finalMarker || !verifyObserved) {
+      throw new Error("missing Slack canary final-only verifier");
+    }
+
+    expect(
+      verifyObserved({
+        finalMessage: { text: finalMarker, ts: "2.000000" },
+        messages: [{ channelId: "C123456789", text: finalMarker, ts: "2.000000" }],
+      }),
+    ).toContain("final-only");
+  });
+
+  it("drives unset Slack streaming through structured semantic progress", () => {
+    const scenario = testing.findScenario(["slack-semantic-progress-default"])[0];
+    const run = scenario?.buildRun("U999999999");
+
+    expect(scenario?.configOverrides).toBeUndefined();
+    expect(run).toMatchObject({ expectReply: true, settleObservedMs: 3_000 });
+    expect(run && "input" in run ? run.input : "").toContain("update_plan");
+  });
+
+  it("accepts stable in-place Slack task-card state transitions", () => {
+    const scenario = testing.findScenario(["slack-semantic-progress-default"])[0];
+    const run = scenario?.buildRun("U999999999");
+    const input = run && "input" in run ? run.input : "";
+    const finalMarker = input.match(/SLACK-QA-SEMANTIC-DONE-[0-9A-F]{8}/u)?.[0];
+    const verifyObserved = run && "verifyObserved" in run ? run.verifyObserved : undefined;
+    if (!finalMarker || !verifyObserved) {
+      throw new Error("missing Slack semantic progress verifier");
+    }
+    const taskTitles = [
+      "Prepare progress fixture",
+      "Run delayed verification",
+      "Confirm visible result",
+    ];
+    const taskIds = ["plan_step_1", "plan_step_2", "plan_step_3"];
+    const snapshot = (statuses: string[]) => ({
+      channelId: "C123456789",
+      blocks: [
+        {
+          type: "plan",
+          title: "Verify semantic Slack progress",
+          tasks: taskTitles.map((title, index) => ({
+            type: "task_card",
+            task_id: taskIds[index],
+            title,
+            status: statuses[index],
+          })),
+        },
+      ],
+      text: "",
+      ts: "2.000000",
+    });
+
+    expect(
+      verifyObserved({
+        finalMessage: { text: finalMarker, ts: "3.000000" },
+        messages: [
+          snapshot(["in_progress", "pending", "pending"]),
+          snapshot(["complete", "in_progress", "pending"]),
+          snapshot(["complete", "complete", "in_progress"]),
+          snapshot(["complete", "complete", "complete"]),
+          { channelId: "C123456789", text: finalMarker, ts: "3.000000" },
+        ],
+      }),
+    ).toContain("stable in-place task identities");
+  });
+
+  it("rejects raw tool activity from Slack semantic progress", () => {
+    const scenario = testing.findScenario(["slack-semantic-progress-default"])[0];
+    const run = scenario?.buildRun("U999999999");
+    const input = run && "input" in run ? run.input : "";
+    const finalMarker = input.match(/SLACK-QA-SEMANTIC-DONE-[0-9A-F]{8}/u)?.[0];
+    const rawToolMarker = input.match(/SLACK-QA-RAW-TOOL-[0-9A-F]{8}/u)?.[0];
+    const verifyObserved = run && "verifyObserved" in run ? run.verifyObserved : undefined;
+    if (!finalMarker || !rawToolMarker || !verifyObserved) {
+      throw new Error("missing Slack semantic progress markers");
+    }
+
+    expect(() =>
+      verifyObserved({
+        finalMessage: { text: finalMarker, ts: "3.000000" },
+        messages: [
+          { channelId: "C123456789", text: rawToolMarker, ts: "2.000000" },
+          { channelId: "C123456789", text: finalMarker, ts: "3.000000" },
+        ],
+      }),
+    ).toThrow("raw tool");
+  });
+
   it("selects the MPIM app-mention dedupe scenario", () => {
     expect(
       testing.findScenario(["slack-mpim-app-mention-dedupe"]).map((scenario) => scenario.id),

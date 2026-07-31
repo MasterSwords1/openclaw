@@ -1,0 +1,19 @@
+title: Slack default semantic progress uses one native task card
+scenario:
+  id: slack-semantic-progress-default
+  surface: channels
+  coverage:
+    primary:
+      - agent-runtime.streaming-replies
+  execution:
+    kind: flow
+    channel: slack
+    timeoutMs: 120000
+    retryCount: 1
+    suiteIsolation: isolated
+flow:
+  module: ./live-transports/slack/scenario-runtime.js
+  call: runSlackScenario
+  args:
+    - { expr: slackScenarioContext }
+    - { moduleExport: slackQaSemanticProgressDefaultScenario }
