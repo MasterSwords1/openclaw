@@ -36,8 +36,10 @@ vi.mock("./send/targets.js", () => ({
 const identity = {
   queueId: "queue-1",
   queueStateDir: "/tmp",
-  payloadIndex: 2,
+  payloadIndex: 0,
+  payloadCount: 1,
   partIndex: 0,
+  partIndexes: [0],
 };
 const target = {
   identity,
@@ -67,6 +69,8 @@ describe("Matrix durable delivery plans", () => {
       cleanupMatrixDeliveryPlans({ queueId: "queue-1" }),
       cleanupMatrixDeliveryPlans({ queueId: "queue-long" }),
       cleanupMatrixDeliveryPlans({ queueId: "queue-gap" }),
+      cleanupMatrixDeliveryPlans({ queueId: "queue-sparse" }),
+      cleanupMatrixDeliveryPlans({ queueId: "queue-topology-change" }),
       cleanupMatrixDeliveryPlans({
         queueId: "queue-shared",
         deliveryQueueStateDir: "/tmp/matrix-queue-a",
@@ -164,14 +168,18 @@ describe("Matrix durable delivery plans", () => {
       resolveMatrixDurableDeliveryIdentity({
         queueId: "queue-canonical",
         payloadIndex: 0,
+        payloadCount: 1,
         partIndex: 0,
+        partIndexes: [0],
       }),
     ).toEqual(
       resolveMatrixDurableDeliveryIdentity({
         queueId: "queue-canonical",
         queueStateDir: "/tmp/matrix-canonical-root/.",
         payloadIndex: 0,
+        payloadCount: 1,
         partIndex: 0,
+        partIndexes: [0],
       }),
     );
   });
@@ -201,7 +209,7 @@ describe("Matrix durable delivery plans", () => {
         presentationCount: 0,
         interactiveCount: 0,
         channelDataCount: 0,
-        items: [{ index: 2, kinds: ["text" as const], mediaUrls: [] }],
+        items: [{ index: 0, kinds: ["text" as const], mediaUrls: [] }],
       },
     };
 
@@ -219,8 +227,8 @@ describe("Matrix durable delivery plans", () => {
     for (const partIndex of [0, 2]) {
       await persistMatrixDeliveryPlan({
         ...target,
-        identity: { ...gapIdentity, partIndex },
-        events: plannedEvents({ ...gapIdentity, partIndex }, [
+        identity: { ...gapIdentity, partIndex, partIndexes: [0, 1, 2] },
+        events: plannedEvents({ ...gapIdentity, partIndex, partIndexes: [0, 1, 2] }, [
           { receiptKind: "media", content: { msgtype: "m.image", body: `part-${partIndex}` } },
         ]),
       });
@@ -252,6 +260,67 @@ describe("Matrix durable delivery plans", () => {
             },
           ],
         },
+      }),
+    ).resolves.toMatchObject({ status: "unresolved", retryable: false });
+  });
+
+  it("accepts a complete sparse provider part topology", async () => {
+    installMatrixTestRuntime({ getOutboundDeliveryQueueStatus: async () => "pending" });
+    const sparseIdentity = {
+      ...identity,
+      queueId: "queue-sparse",
+      partIndexes: [0, 2],
+    };
+    for (const partIndex of sparseIdentity.partIndexes) {
+      const partIdentity = { ...sparseIdentity, partIndex };
+      await persistMatrixDeliveryPlan({
+        ...target,
+        identity: partIdentity,
+        events: plannedEvents(partIdentity, [
+          { receiptKind: "media", content: { msgtype: "m.image", body: `part-${partIndex}` } },
+        ]),
+      });
+    }
+
+    await expect(
+      reconcileMatrixUnknownSend({
+        cfg: {},
+        queueId: sparseIdentity.queueId,
+        channel: "matrix",
+        to: "room:!room:example.org",
+        accountId: "default",
+        enqueuedAt: 1,
+        retryCount: 1,
+        payloads: [{ mediaUrls: ["one", "three"] }],
+      }),
+    ).resolves.toEqual({ status: "replay_safe" });
+  });
+
+  it("fails closed when persisted parts disagree about their authoritative topology", async () => {
+    installMatrixTestRuntime({ getOutboundDeliveryQueueStatus: async () => "pending" });
+    const queueId = "queue-topology-change";
+    const firstIdentity = { ...identity, queueId, partIndex: 0, partIndexes: [0, 1] };
+    const secondIdentity = { ...identity, queueId, partIndex: 1, partIndexes: [0, 1, 2] };
+    for (const partIdentity of [firstIdentity, secondIdentity]) {
+      await persistMatrixDeliveryPlan({
+        ...target,
+        identity: partIdentity,
+        events: plannedEvents(partIdentity, [
+          { receiptKind: "text", content: { msgtype: "m.text", body: "part" } },
+        ]),
+      });
+    }
+
+    await expect(
+      reconcileMatrixUnknownSend({
+        cfg: {},
+        queueId,
+        channel: "matrix",
+        to: "room:!room:example.org",
+        accountId: "default",
+        enqueuedAt: 1,
+        retryCount: 1,
+        payloads: [{ text: "long" }],
       }),
     ).resolves.toMatchObject({ status: "unresolved", retryable: false });
   });

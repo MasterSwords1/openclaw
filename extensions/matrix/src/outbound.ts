@@ -146,7 +146,9 @@ export const matrixOutbound: ChannelOutboundAdapter = {
     deliveryQueueId,
     deliveryQueueStateDir,
     deliveryPayloadIndex,
+    deliveryPayloadCount,
     deliveryPartIndex,
+    deliveryPartIndexes,
     onPlatformSendDispatch,
     onDeliveryResult,
   }) => {
@@ -162,6 +164,7 @@ export const matrixOutbound: ChannelOutboundAdapter = {
     const urls = resolvePayloadMediaUrls(payload);
     const payloadText = resolveMatrixPayloadText(payload);
     if (urls.length > 0) {
+      const payloadPartIndexes = urls.flatMap((url, index) => (url ? [index] : []));
       const lastResult = await sendPayloadMediaSequence({
         text: payloadText,
         mediaUrls: urls,
@@ -180,6 +183,9 @@ export const matrixOutbound: ChannelOutboundAdapter = {
             deliveryQueueStateDir,
             deliveryPayloadIndex,
             deliveryPartIndex: index,
+            ...(deliveryQueueId !== undefined
+              ? { deliveryPayloadCount, deliveryPartIndexes: payloadPartIndexes }
+              : {}),
             onPlatformSendDispatch,
             extraContent: isFirst ? resolveMatrixExtraContent(payload) : undefined,
             onDeliveryResult: resolveMatrixDeliveryProgress(onDeliveryResult),
@@ -206,6 +212,12 @@ export const matrixOutbound: ChannelOutboundAdapter = {
       deliveryQueueStateDir,
       deliveryPayloadIndex,
       deliveryPartIndex: deliveryPartIndex ?? 0,
+      ...(deliveryQueueId !== undefined
+        ? {
+            deliveryPayloadCount,
+            deliveryPartIndexes: deliveryPartIndexes ?? [deliveryPartIndex ?? 0],
+          }
+        : {}),
       onPlatformSendDispatch,
       extraContent: resolveMatrixExtraContent(payload),
       onDeliveryResult: resolveMatrixDeliveryProgress(onDeliveryResult),
@@ -228,7 +240,9 @@ export const matrixOutbound: ChannelOutboundAdapter = {
     deliveryQueueId,
     deliveryQueueStateDir,
     deliveryPayloadIndex,
+    deliveryPayloadCount,
     deliveryPartIndex,
+    deliveryPartIndexes,
     onPlatformSendDispatch,
     onDeliveryResult,
   }) => {
@@ -246,6 +260,7 @@ export const matrixOutbound: ChannelOutboundAdapter = {
       deliveryQueueStateDir,
       deliveryPayloadIndex,
       deliveryPartIndex,
+      ...(deliveryQueueId !== undefined ? { deliveryPayloadCount, deliveryPartIndexes } : {}),
       onPlatformSendDispatch,
       onDeliveryResult: resolveMatrixDeliveryProgress(onDeliveryResult),
     });
@@ -270,7 +285,9 @@ export const matrixOutbound: ChannelOutboundAdapter = {
     deliveryQueueId,
     deliveryQueueStateDir,
     deliveryPayloadIndex,
+    deliveryPayloadCount,
     deliveryPartIndex,
+    deliveryPartIndexes,
     onPlatformSendDispatch,
     onDeliveryResult,
   }) => {
@@ -291,6 +308,7 @@ export const matrixOutbound: ChannelOutboundAdapter = {
       deliveryQueueStateDir,
       deliveryPayloadIndex,
       deliveryPartIndex,
+      ...(deliveryQueueId !== undefined ? { deliveryPayloadCount, deliveryPartIndexes } : {}),
       onPlatformSendDispatch,
       onDeliveryResult: resolveMatrixDeliveryProgress(onDeliveryResult),
     });

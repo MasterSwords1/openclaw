@@ -1522,7 +1522,7 @@ describe("sendMessageMatrix durable replay", () => {
   beforeEach(async () => {
     resetMatrixSendRuntimeMocks();
     await Promise.all(
-      ["queue-replay", "queue-encryption-change"].map(
+      ["queue-replay", "queue-encryption-change", "queue-topology-change"].map(
         async (queueId) => await cleanupMatrixDeliveryPlans({ queueId }),
       ),
     );
@@ -1530,7 +1530,7 @@ describe("sendMessageMatrix durable replay", () => {
 
   afterEach(async () => {
     await Promise.all(
-      ["queue-replay", "queue-encryption-change"].map(
+      ["queue-replay", "queue-encryption-change", "queue-topology-change"].map(
         async (queueId) => await cleanupMatrixDeliveryPlans({ queueId }),
       ),
     );
@@ -1564,7 +1564,9 @@ describe("sendMessageMatrix durable replay", () => {
       mediaUrl: "https://example.test/photo.png",
       deliveryQueueId: "queue-replay",
       deliveryPayloadIndex: 3,
+      deliveryPayloadCount: 4,
       deliveryPartIndex: 0,
+      deliveryPartIndexes: [0],
       onPlatformSendDispatch,
     };
 
@@ -1620,7 +1622,9 @@ describe("sendMessageMatrix durable replay", () => {
         mediaUrl: "https://example.test/photo.png",
         deliveryQueueId: "queue-encryption-change",
         deliveryPayloadIndex: 0,
+        deliveryPayloadCount: 1,
         deliveryPartIndex: 0,
+        deliveryPartIndexes: [0],
         onPlatformSendDispatch,
       }),
     ).resolves.toMatchObject({ messageId: "evt1", content: "caption" });
@@ -1634,7 +1638,9 @@ describe("sendMessageMatrix durable replay", () => {
           queueId: "queue-encryption-change",
           queueStateDir: "/tmp/matrix-send-test",
           payloadIndex: 0,
+          payloadCount: 1,
           partIndex: 0,
+          partIndexes: [0],
         },
         accountId: undefined,
         roomId: "!room:example.org",
@@ -1642,6 +1648,32 @@ describe("sendMessageMatrix durable replay", () => {
         wireEventType: "m.room.encrypted",
       }),
     ).resolves.toMatchObject({ wireEventType: "m.room.encrypted" });
+  });
+
+  it("fails before provider I/O when the authoritative part topology changes", async () => {
+    const { client, sendMessage } = makeClient();
+    const opts = {
+      client,
+      cfg: {} as never,
+      deliveryQueueId: "queue-topology-change",
+      deliveryPayloadIndex: 0,
+      deliveryPayloadCount: 1,
+      deliveryPartIndex: 0,
+      deliveryPartIndexes: [0, 1],
+    };
+
+    await expect(sendMessageMatrix("!room:example.org", "first", opts)).resolves.toMatchObject({
+      messageId: "evt1",
+    });
+    sendMessage.mockClear();
+
+    await expect(
+      sendMessageMatrix("!room:example.org", "first", {
+        ...opts,
+        deliveryPartIndexes: [0],
+      }),
+    ).rejects.toThrow("active delivery target");
+    expect(sendMessage).not.toHaveBeenCalled();
   });
 });
 /* oxlint-disable max-lines -- TODO: split this grandfathered oversized file. */

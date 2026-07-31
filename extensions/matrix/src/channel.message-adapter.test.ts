@@ -96,15 +96,42 @@ describe("matrix channel message adapter", () => {
       deliveryQueueId: "queue-1",
       deliveryQueueStateDir: "/queue-state",
       deliveryPayloadIndex: 4,
+      deliveryPayloadCount: 5,
       deliveryPartIndex: 2,
+      deliveryPartIndexes: [0, 2],
     });
 
     expect(lastMatrixSendOptions()).toMatchObject({
       deliveryQueueId: "queue-1",
       deliveryQueueStateDir: "/queue-state",
       deliveryPayloadIndex: 4,
+      deliveryPayloadCount: 5,
       deliveryPartIndex: 2,
+      deliveryPartIndexes: [0, 2],
     });
+  });
+
+  it("forwards exact sparse media topology before the first Matrix send", async () => {
+    mocks.sendMessageMatrix.mockReset();
+    mocks.sendMessageMatrix
+      .mockResolvedValueOnce({ messageId: "$first", roomId: "!room:example" })
+      .mockResolvedValueOnce({ messageId: "$third", roomId: "!room:example" });
+    await matrixPlugin.message?.send?.payload?.({
+      cfg,
+      to: "room:!room:example",
+      text: "caption",
+      payload: { text: "caption", mediaUrls: ["one", "", "three"] },
+      accountId: "default",
+      deliveryQueueId: "queue-sparse",
+      deliveryPayloadIndex: 0,
+      deliveryPayloadCount: 1,
+    });
+
+    expect(mocks.sendMessageMatrix).toHaveBeenCalledTimes(2);
+    expect(mocks.sendMessageMatrix.mock.calls.map((call) => call[2])).toEqual([
+      expect.objectContaining({ deliveryPartIndex: 0, deliveryPartIndexes: [0, 2] }),
+      expect.objectContaining({ deliveryPartIndex: 2, deliveryPartIndexes: [0, 2] }),
+    ]);
   });
 
   it("routes standard Matrix message-tool sends through core durability", async () => {

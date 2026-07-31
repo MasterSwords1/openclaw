@@ -108,7 +108,9 @@ export type MatrixSendOpts = {
   deliveryQueueId?: string;
   deliveryQueueStateDir?: string;
   deliveryPayloadIndex?: number;
+  deliveryPayloadCount?: number;
   deliveryPartIndex?: number;
+  deliveryPartIndexes?: readonly number[];
   /** Runs after the immutable event plan is committed and before timeline I/O. */
   onPlatformSendDispatch?: () => Promise<void>;
   /** Persist each concrete platform send before any later event can fail. */

@@ -67,7 +67,7 @@ async function runOutboundDeliveryWithQueue(
   allowFreshPreparation = true,
 ): Promise<OutboundDeliveryResult[]> {
   const auditStartedAt = Date.now();
-  const { channel, to, payloads } = params;
+  const { channel, to } = params;
   const emitPreQueueFailure = (): void => {
     // Recovery owns the stable queue terminal for replayed intents.
     if (params.deliveryQueueId !== undefined) {
@@ -83,12 +83,6 @@ async function runOutboundDeliveryWithQueue(
       startedAt: auditStartedAt,
     });
   };
-  if (params.requireUnknownSendReconciliation === true && payloads.length !== 1) {
-    emitPreQueueFailure();
-    throw new Error(
-      `Required durable message send is unsupported for ${channel}: unknown-send reconciliation requires exactly one payload`,
-    );
-  }
   if (params.deferredDeliveryAdmissionPassed !== true) {
     const admission = resolveDeferredDeliveryAdmission({
       cfg: params.cfg,

@@ -20,6 +20,10 @@ export type OutboundMessageSendOverrides = ReplyToOverride & {
   deliveryPartIndex?: number;
   /** Stable accepted-payload index within one durable provider plan. */
   deliveryPayloadIndex?: number;
+  /** Total accepted payloads owned by the same durable provider plan. */
+  deliveryPayloadCount?: number;
+  /** Exact ordered platform-send indexes for this durable payload. */
+  deliveryPartIndexes?: readonly number[];
 };
 
 /**
@@ -133,8 +137,19 @@ export function planOutboundTextMessageUnits(params: {
     };
   };
 
+  const withDeliveryTopology = (units: OutboundMessageUnit[]): OutboundMessageUnit[] => {
+    if (params.overrides.deliveryPayloadCount === undefined) {
+      return units;
+    }
+    const deliveryPartIndexes = units.map((unit) => unit.overrides.deliveryPartIndex ?? 0);
+    return units.map((unit) => ({
+      ...unit,
+      overrides: { ...unit.overrides, deliveryPartIndexes },
+    }));
+  };
+
   if (!params.chunker || params.textLimit === undefined) {
-    return [planTextUnit(params.text, 0)];
+    return withDeliveryTopology([planTextUnit(params.text, 0)]);
   }
 
   if (params.chunkMode === "newline") {
@@ -162,15 +177,17 @@ export function planOutboundTextMessageUnits(params: {
         units.push(planChunkedTextUnit(chunk, units.length));
       }
     }
-    return units;
+    return withDeliveryTopology(units);
   }
 
-  return chunkTextForPlan({
-    text: params.text,
-    limit: params.textLimit,
-    chunker: params.chunker,
-    formatting: params.formatting,
-  }).map(planChunkedTextUnit);
+  return withDeliveryTopology(
+    chunkTextForPlan({
+      text: params.text,
+      limit: params.textLimit,
+      chunker: params.chunker,
+      formatting: params.formatting,
+    }).map(planChunkedTextUnit),
+  );
 }
 
 /**
@@ -182,6 +199,7 @@ export function planOutboundMediaMessageUnits(params: {
   overrides: OutboundMessageSendOverrides;
   consumeReplyTo?: PlanReplyToConsumption;
 }): OutboundMessageUnit[] {
+  const deliveryPartIndexes = params.mediaUrls.map((_, index) => index);
   return params.mediaUrls.map((mediaUrl, index) => ({
     kind: "media" as const,
     mediaUrl,
@@ -189,6 +207,7 @@ export function planOutboundMediaMessageUnits(params: {
     overrides: {
       ...withPlannedReplyTo(params.overrides, params.consumeReplyTo),
       deliveryPartIndex: index,
+      ...(params.overrides.deliveryPayloadCount !== undefined ? { deliveryPartIndexes } : {}),
     },
   }));
 }

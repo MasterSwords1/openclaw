@@ -185,7 +185,9 @@ export async function sendMessageMatrix(
     queueId: opts.deliveryQueueId,
     queueStateDir: opts.deliveryQueueStateDir,
     payloadIndex: opts.deliveryPayloadIndex,
+    payloadCount: opts.deliveryPayloadCount,
     partIndex: opts.deliveryPartIndex,
+    partIndexes: opts.deliveryPartIndexes,
   });
   return await withResolvedMatrixSendClient(
     {

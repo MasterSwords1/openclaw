@@ -15,7 +15,11 @@ describe("outbound message planning", () => {
       text: "abcd",
       textLimit: 2,
       chunker: (text, limit) => [text.slice(0, limit), text.slice(limit)],
-      overrides: { replyToId: reply.replyToId, replyToIdSource: reply.source },
+      overrides: {
+        replyToId: reply.replyToId,
+        replyToIdSource: reply.source,
+        deliveryPayloadCount: 1,
+      },
       consumeReplyTo: (overrides) =>
         policy.applyReplyToConsumption(overrides, {
           consumeImplicitReply: overrides.replyToIdSource === "implicit",
@@ -29,6 +33,10 @@ describe("outbound message planning", () => {
     ).toEqual([
       ["text", "ab", "reply-1"],
       ["text", "cd", undefined],
+    ]);
+    expect(units.map((unit) => unit.overrides.deliveryPartIndexes)).toEqual([
+      [0, 1],
+      [0, 1],
     ]);
   });
 
@@ -69,7 +77,11 @@ describe("outbound message planning", () => {
     const units = planOutboundMediaMessageUnits({
       caption: "caption",
       mediaUrls: ["https://example.com/1.png", "https://example.com/2.png"],
-      overrides: { replyToId: reply.replyToId, replyToIdSource: reply.source },
+      overrides: {
+        replyToId: reply.replyToId,
+        replyToIdSource: reply.source,
+        deliveryPayloadCount: 1,
+      },
       consumeReplyTo: (overrides) =>
         policy.applyReplyToConsumption(overrides, {
           consumeImplicitReply: overrides.replyToIdSource === "implicit",
@@ -85,12 +97,13 @@ describe("outbound message planning", () => {
               unit.mediaUrl,
               unit.overrides.replyToId,
               unit.overrides.deliveryPartIndex,
+              unit.overrides.deliveryPartIndexes,
             ]
           : [unit.kind],
       ),
     ).toEqual([
-      ["media", "caption", "https://example.com/1.png", "reply-1", 0],
-      ["media", undefined, "https://example.com/2.png", undefined, 1],
+      ["media", "caption", "https://example.com/1.png", "reply-1", 0, [0, 1]],
+      ["media", undefined, "https://example.com/2.png", undefined, 1, [0, 1]],
     ]);
   });
 
@@ -107,7 +120,10 @@ describe("outbound message planning", () => {
       {
         kind: "text",
         text: "<b>bold</b>",
-        overrides: { formatting: { parseMode: "HTML" }, deliveryPartIndex: 0 },
+        overrides: {
+          formatting: { parseMode: "HTML" },
+          deliveryPartIndex: 0,
+        },
       },
     ]);
   });

@@ -40,7 +40,9 @@ type MatrixDeliveryPlan = {
   wireEventType: "m.room.message" | "m.room.encrypted";
   transactionScopeId: string;
   payloadIndex: number;
+  payloadCount: number;
   partIndex: number;
+  partIndexes: number[];
   createdAt: number;
   events: MatrixPlannedEvent[];
 };
@@ -51,7 +53,9 @@ type MatrixDeliveryIdentity = {
   queueId: string;
   queueStateDir: string;
   payloadIndex: number;
+  payloadCount: number;
   partIndex: number;
+  partIndexes: readonly number[];
 };
 
 function createDeliveryPlanStore() {
@@ -70,6 +74,32 @@ function requireIndex(value: number, label: string): number {
     throw new Error(`Matrix durable delivery ${label} must be a non-negative integer`);
   }
   return value;
+}
+
+function isOrderedPartIndexes(value: unknown): value is number[] {
+  return (
+    Array.isArray(value) &&
+    value.length > 0 &&
+    value.every(
+      (partIndex, index) =>
+        Number.isSafeInteger(partIndex) &&
+        partIndex >= 0 &&
+        (index === 0 || partIndex > value[index - 1]!),
+    )
+  );
+}
+
+function requirePartIndexes(value: readonly number[] | undefined): number[] {
+  if (!isOrderedPartIndexes(value)) {
+    throw new Error(
+      "Matrix durable delivery part indexes must be ordered unique non-negative integers",
+    );
+  }
+  return [...value];
+}
+
+function samePartIndexes(left: readonly number[], right: readonly number[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
 function resolveQueueStateDir(queueStateDir?: string): string {
@@ -121,8 +151,13 @@ function isPlan(value: unknown): value is MatrixDeliveryPlan {
     Boolean(plan.transactionScopeId.trim()) &&
     Number.isSafeInteger(plan.payloadIndex) &&
     (plan.payloadIndex ?? -1) >= 0 &&
+    Number.isSafeInteger(plan.payloadCount) &&
+    (plan.payloadCount ?? 0) > 0 &&
+    (plan.payloadIndex ?? Number.MAX_SAFE_INTEGER) < (plan.payloadCount ?? 0) &&
     Number.isSafeInteger(plan.partIndex) &&
     (plan.partIndex ?? -1) >= 0 &&
+    isOrderedPartIndexes(plan.partIndexes) &&
+    plan.partIndexes.includes(plan.partIndex ?? -1) &&
     typeof plan.createdAt === "number" &&
     Number.isFinite(plan.createdAt) &&
     Array.isArray(plan.events) &&
@@ -165,8 +200,13 @@ function isPlanMetadata(value: unknown): value is MatrixDeliveryPlanMetadata {
     Boolean(metadata.transactionScopeId.trim()) &&
     Number.isSafeInteger(metadata.payloadIndex) &&
     (metadata.payloadIndex ?? -1) >= 0 &&
+    Number.isSafeInteger(metadata.payloadCount) &&
+    (metadata.payloadCount ?? 0) > 0 &&
+    (metadata.payloadIndex ?? Number.MAX_SAFE_INTEGER) < (metadata.payloadCount ?? 0) &&
     Number.isSafeInteger(metadata.partIndex) &&
     (metadata.partIndex ?? -1) >= 0 &&
+    isOrderedPartIndexes(metadata.partIndexes) &&
+    metadata.partIndexes.includes(metadata.partIndex ?? -1) &&
     typeof metadata.createdAt === "number" &&
     Number.isFinite(metadata.createdAt)
   );
@@ -231,7 +271,9 @@ function assertPlanIdentity(
     plan.queueId !== params.identity.queueId ||
     plan.queueStateDir !== resolveQueueStateDir(params.identity.queueStateDir) ||
     plan.payloadIndex !== params.identity.payloadIndex ||
+    plan.payloadCount !== params.identity.payloadCount ||
     plan.partIndex !== params.identity.partIndex ||
+    !samePartIndexes(plan.partIndexes, params.identity.partIndexes) ||
     plan.accountId !== (params.accountId ?? "") ||
     plan.roomId !== params.roomId ||
     plan.transactionScopeId !== params.transactionScopeId ||
@@ -287,7 +329,9 @@ export async function persistMatrixDeliveryPlan(params: {
     wireEventType: params.wireEventType,
     transactionScopeId: params.transactionScopeId,
     payloadIndex: requireIndex(identity.payloadIndex, "payload index"),
+    payloadCount: requireIndex(identity.payloadCount, "payload count"),
     partIndex: requireIndex(identity.partIndex, "part index"),
+    partIndexes: requirePartIndexes(identity.partIndexes),
     createdAt: Date.now(),
     events: params.events.map((event, index) => {
       const expectedTransactionId = transactionId(identity, index);
@@ -322,19 +366,36 @@ export function resolveMatrixDurableDeliveryIdentity(params: {
   queueId?: string;
   queueStateDir?: string;
   payloadIndex?: number;
+  payloadCount?: number;
   partIndex?: number;
+  partIndexes?: readonly number[];
 }): MatrixDeliveryIdentity | null {
   if (params.queueId === undefined) {
     return null;
   }
-  if (params.payloadIndex === undefined || params.partIndex === undefined) {
-    throw new Error("Matrix durable delivery requires stable payload and part indexes");
+  if (
+    params.payloadIndex === undefined ||
+    params.payloadCount === undefined ||
+    params.partIndex === undefined ||
+    params.partIndexes === undefined
+  ) {
+    throw new Error("Matrix durable delivery requires stable payload and part topology");
+  }
+  const payloadCount = requireIndex(params.payloadCount, "payload count");
+  if (payloadCount === 0 || params.payloadIndex >= payloadCount) {
+    throw new Error("Matrix durable delivery payload index must be within the payload count");
+  }
+  const partIndexes = requirePartIndexes(params.partIndexes);
+  if (!partIndexes.includes(params.partIndex)) {
+    throw new Error("Matrix durable delivery part index must be present in the part topology");
   }
   return {
     queueId: params.queueId,
     queueStateDir: resolveQueueStateDir(params.queueStateDir),
     payloadIndex: requireIndex(params.payloadIndex, "payload index"),
+    payloadCount,
     partIndex: requireIndex(params.partIndex, "part index"),
+    partIndexes,
   };
 }
 
@@ -393,15 +454,8 @@ export async function reconcileMatrixUnknownSend(
         const transactionScopeId = await requireTransactionScope(client);
         const roomId = await resolveMatrixRoomId(client, ctx.to);
         const wireEventType = await client.getMessageWireEventType(roomId);
-        const plannedItems =
-          ctx.renderedBatchPlan?.items ??
-          ctx.payloads.map((payload, index) => ({
-            index,
-            mediaUrls: [payload.mediaUrl, ...(payload.mediaUrls ?? [])].filter(Boolean),
-          }));
-        const expectedPartCounts = new Map(
-          plannedItems.map((item) => [item.index, Math.max(1, item.mediaUrls.length)] as const),
-        );
+        const payloadCount = ctx.payloads.length;
+        const expectedPartIndexes = new Map<number, readonly number[]>();
         const storedPartsByPayload = new Map<number, Set<number>>();
         for (const plan of plans) {
           assertPlanIdentity(plan, {
@@ -411,22 +465,38 @@ export async function reconcileMatrixUnknownSend(
             transactionScopeId,
             wireEventType,
           });
-          const expectedPartCount = expectedPartCounts.get(plan.payloadIndex);
-          if (expectedPartCount === undefined || plan.partIndex >= expectedPartCount) {
+          if (plan.payloadCount !== payloadCount) {
             throw new MatrixDeliveryPlanInvariantError(
-              "Matrix durable delivery plan coordinates are not in the queued batch",
+              "Matrix durable delivery plan payload topology no longer matches the queued batch",
             );
           }
+          const existingPartIndexes = expectedPartIndexes.get(plan.payloadIndex);
+          if (existingPartIndexes && !samePartIndexes(existingPartIndexes, plan.partIndexes)) {
+            throw new MatrixDeliveryPlanInvariantError(
+              "Matrix durable delivery plan part topology is inconsistent",
+            );
+          }
+          expectedPartIndexes.set(plan.payloadIndex, plan.partIndexes);
           const storedParts = storedPartsByPayload.get(plan.payloadIndex) ?? new Set<number>();
           storedParts.add(plan.partIndex);
           storedPartsByPayload.set(plan.payloadIndex, storedParts);
         }
-        for (const storedParts of storedPartsByPayload.values()) {
-          const highestPart = Math.max(...storedParts);
-          for (let partIndex = 0; partIndex <= highestPart; partIndex += 1) {
-            if (!storedParts.has(partIndex)) {
+        const highestPayloadIndex = Math.max(...storedPartsByPayload.keys());
+        for (let payloadIndex = 0; payloadIndex <= highestPayloadIndex; payloadIndex += 1) {
+          const storedParts = storedPartsByPayload.get(payloadIndex);
+          const partIndexes = expectedPartIndexes.get(payloadIndex);
+          if (!storedParts || !partIndexes) {
+            throw new MatrixDeliveryPlanInvariantError(
+              "Matrix durable delivery plan has a missing dispatched payload coordinate",
+            );
+          }
+          const highestStoredPosition = Math.max(
+            ...[...storedParts].map((partIndex) => partIndexes.indexOf(partIndex)),
+          );
+          for (let position = 0; position <= highestStoredPosition; position += 1) {
+            if (!storedParts.has(partIndexes[position]!)) {
               // A missing tail was never dispatched: every part persists its plan
-              // first. A gap inside the persisted prefix is invalid and fails closed.
+              // first. A gap inside the authoritative persisted prefix is invalid.
               throw new MatrixDeliveryPlanInvariantError(
                 "Matrix durable delivery plan has a missing dispatched coordinate",
               );

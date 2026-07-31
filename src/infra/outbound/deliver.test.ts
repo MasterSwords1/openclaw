@@ -1299,6 +1299,80 @@ describe("deliverOutboundPayloads", () => {
     expect(messageSendText.mock.calls.map(([ctx]) => ctx.deliveryPayloadIndex)).toEqual([0, 1]);
   });
 
+  it("replays declared reconciliation batches through the real delivery entrypoint", async () => {
+    const payloads = [{ text: "first" }, { text: "second" }];
+    const messageSendText = vi.fn(async (ctx: ChannelMessageSendTextContext) => ({
+      messageId: `message-adapter-${ctx.deliveryPayloadIndex}`,
+      receipt: createMessageReceiptFromOutboundResults({
+        results: [{ channel: "matrix", messageId: `message-adapter-${ctx.deliveryPayloadIndex}` }],
+        kind: "text",
+      }),
+    }));
+    setMatrixMessageAdapter({
+      id: "matrix",
+      durableFinal: {
+        capabilities: { text: true, batch: true, reconcileUnknownSend: true },
+        reconcileUnknownSendKinds: { text: true, batch: true },
+        reconcileUnknownSend: async () => ({ status: "replay_safe" }),
+      },
+      send: { text: messageSendText },
+    });
+
+    await expect(
+      deliverMatrix({
+        payloads,
+        preparedBatch: createUnmodifiedPreparedOutboundBatch(payloads),
+        requireUnknownSendReconciliation: true,
+        deliveryQueueId: "recovery-queue",
+        deliveryQueueStateDir: "/recovery-state",
+        skipQueue: true,
+      }),
+    ).resolves.toHaveLength(2);
+
+    expect(messageSendText.mock.calls.map(([ctx]) => ctx.deliveryPayloadIndex)).toEqual([0, 1]);
+    expect(messageSendText.mock.calls.map(([ctx]) => ctx.deliveryPayloadCount)).toEqual([2, 2]);
+    expect(messageSendText.mock.calls.map(([ctx]) => ctx.deliveryPartIndexes)).toEqual([[0], [0]]);
+  });
+
+  it("carries the complete long-text part topology before the first recovery send", async () => {
+    const payloads = [{ text: "abcd" }];
+    const messageSendText = vi.fn(async (ctx: ChannelMessageSendTextContext) => ({
+      messageId: `message-adapter-${ctx.deliveryPartIndex}`,
+      receipt: createMessageReceiptFromOutboundResults({
+        results: [{ channel: "matrix", messageId: `message-adapter-${ctx.deliveryPartIndex}` }],
+        kind: "text",
+      }),
+    }));
+    setMatrixMessageAdapter(
+      {
+        id: "matrix",
+        durableFinal: {
+          capabilities: { text: true, reconcileUnknownSend: true },
+          reconcileUnknownSendKinds: { text: true },
+          reconcileUnknownSend: async () => ({ status: "replay_safe" }),
+        },
+        send: { text: messageSendText },
+      },
+      { chunker: chunkText, textChunkLimit: 2 },
+    );
+
+    await deliverMatrix({
+      cfg: { channels: { matrix: { textChunkLimit: 2 } } as OpenClawConfig["channels"] },
+      payloads,
+      preparedBatch: createUnmodifiedPreparedOutboundBatch(payloads),
+      requireUnknownSendReconciliation: true,
+      deliveryQueueId: "long-recovery-queue",
+      skipQueue: true,
+    });
+
+    expect(messageSendText).toHaveBeenCalledTimes(2);
+    expect(messageSendText.mock.calls.map(([ctx]) => ctx.deliveryPartIndex)).toEqual([0, 1]);
+    expect(messageSendText.mock.calls.map(([ctx]) => ctx.deliveryPartIndexes)).toEqual([
+      [0, 1],
+      [0, 1],
+    ]);
+  });
+
   it("compacts provider-plan coordinates after an earlier payload is suppressed", async () => {
     const messageSendText = vi.fn(async (ctx: ChannelMessageSendTextContext) => ({
       messageId: `message-adapter-${ctx.deliveryPayloadIndex}`,
@@ -1342,7 +1416,7 @@ describe("deliverOutboundPayloads", () => {
     );
   });
 
-  it("rejects explicitly reconciled multi-payload sends before enqueue or platform I/O", async () => {
+  it("rejects explicitly reconciled batches when the adapter lacks batch support", async () => {
     const messageSendText = vi.fn();
     setMatrixMessageAdapter({
       id: "matrix",
@@ -1360,7 +1434,7 @@ describe("deliverOutboundPayloads", () => {
         queuePolicy: "required",
         requireUnknownSendReconciliation: true,
       }),
-    ).rejects.toThrow(/unknown-send reconciliation requires exactly one payload/);
+    ).rejects.toThrow(/prepared payload capability mismatch \(batch\)/);
     expect(queueMocks.enqueueDelivery).not.toHaveBeenCalled();
     expect(messageSendText).not.toHaveBeenCalled();
   });
