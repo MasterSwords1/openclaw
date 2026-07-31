@@ -145,6 +145,7 @@ export async function sendMessageWhatsApp(
       remoteJid: string;
       fromMe: boolean;
       participant?: string;
+      targetJidEquivalent?: boolean;
       messageText?: string;
       media?: import("openclaw/plugin-sdk/channel-inbound").MediaPlaceholderTextFact;
     };

@@ -25,6 +25,8 @@ export type ActiveWebSendOptions = {
     remoteJid: string;
     fromMe: boolean;
     participant?: string;
+    /** Quote lookup proved this JID and the requested target are the same direct chat. */
+    targetJidEquivalent?: boolean;
     messageText?: string;
     media?: MediaPlaceholderTextFact;
   };

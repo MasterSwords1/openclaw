@@ -2,7 +2,12 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import type { AnyMessageContent, MiscMessageGenerationOptions, WAMessage } from "baileys";
+import {
+  generateWAMessageFromContent,
+  type AnyMessageContent,
+  type MiscMessageGenerationOptions,
+  type WAMessage,
+} from "baileys";
 import { listMessageReceiptPlatformIds } from "openclaw/plugin-sdk/channel-outbound";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { resolveWhatsAppOutboundMentions } from "./outbound-mentions.js";
@@ -55,6 +60,21 @@ function requireMockArg(mock: MockCallSource, callIndex: number, argIndex: numbe
     throw new Error(`missing ${label} call ${callIndex + 1}`);
   }
   return call[argIndex];
+}
+
+function requireGeneratedContextInfo(params: {
+  jid: string;
+  options: MiscMessageGenerationOptions;
+  userJid: string;
+}): Record<string, unknown> {
+  const generated = generateWAMessageFromContent(
+    params.jid,
+    { extendedTextMessage: { text: "reply" } },
+    { ...params.options, userJid: params.userJid },
+  );
+  const message = requireRecord(generated.message, "generated message");
+  const textMessage = requireRecord(message.extendedTextMessage, "generated text message");
+  return requireRecord(textMessage.contextInfo, "generated context info");
 }
 
 describe("createWebSendApi", () => {
@@ -582,13 +602,14 @@ describe("createWebSendApi", () => {
     expect(sendMessage).toHaveBeenCalledWith("123@s.whatsapp.net", { text: "hello" });
   });
 
-  it("preserves the quoted remoteJid provided by the outbound adapter", async () => {
+  it("aligns a cached self-chat LID quote to the final PN destination", async () => {
     await api.sendMessage("+1555", "hello", undefined, undefined, {
       quotedMessageKey: {
         id: "quoted-1",
         remoteJid: "277038292303944@lid",
-        fromMe: false,
-        participant: "1234@s.whatsapp.net",
+        fromMe: true,
+        participant: "1555@s.whatsapp.net",
+        targetJidEquivalent: true,
         messageText: "quoted body",
       },
     });
@@ -597,9 +618,136 @@ describe("createWebSendApi", () => {
     expect(requireMockArg(sendMessage, 0, 1, "sent message")).toEqual({ text: "hello" });
     const quoted = requireRecord(requireSendOptions().quoted, "quoted message");
     expectRecordFields(requireRecord(quoted.key, "quoted key"), {
-      remoteJid: "277038292303944@lid",
+      remoteJid: "1555@s.whatsapp.net",
       id: "quoted-1",
+      fromMe: true,
+      participant: "1555@s.whatsapp.net",
     });
+    expect(quoted.message).toEqual({ conversation: "quoted body" });
+
+    const contextInfo = requireGeneratedContextInfo({
+      jid: "1555@s.whatsapp.net",
+      options: requireSendOptions() as MiscMessageGenerationOptions,
+      userJid: "1555@s.whatsapp.net",
+    });
+    expect(contextInfo).toMatchObject({
+      participant: "1555@s.whatsapp.net",
+      stanzaId: "quoted-1",
+      quotedMessage: { conversation: "quoted body" },
+    });
+    expect(contextInfo.remoteJid).toBeUndefined();
+  });
+
+  it("aligns group quotes without changing participant metadata", async () => {
+    const groupJid = "120363000000000000@g.us";
+    await api.sendMessage(groupJid, "hello", undefined, undefined, {
+      quotedMessageKey: {
+        id: "group-quoted-1",
+        remoteJid: groupJid,
+        fromMe: false,
+        participant: "1234@s.whatsapp.net",
+        messageText: "group quoted body",
+      },
+    });
+
+    expectFirstSendJid(groupJid);
+    const quoted = requireRecord(requireSendOptions().quoted, "quoted message");
+    expectRecordFields(requireRecord(quoted.key, "quoted key"), {
+      remoteJid: groupJid,
+      id: "group-quoted-1",
+      fromMe: false,
+      participant: "1234@s.whatsapp.net",
+    });
+
+    const contextInfo = requireGeneratedContextInfo({
+      jid: groupJid,
+      options: requireSendOptions() as MiscMessageGenerationOptions,
+      userJid: "1555@s.whatsapp.net",
+    });
+    expect(contextInfo).toMatchObject({
+      participant: "1234@s.whatsapp.net",
+      stanzaId: "group-quoted-1",
+    });
+    expect(contextInfo.remoteJid).toBeUndefined();
+  });
+
+  it("preserves intentional cross-conversation quote JIDs", async () => {
+    await api.sendMessage("+1555", "status reply", undefined, undefined, {
+      quotedMessageKey: {
+        id: "status-quoted-1",
+        remoteJid: "status@broadcast",
+        fromMe: false,
+        participant: "1234@s.whatsapp.net",
+        messageText: "status quoted body",
+      },
+    });
+
+    expectFirstSendJid("1555@s.whatsapp.net");
+    const options = requireSendOptions() as MiscMessageGenerationOptions;
+    const quoted = requireRecord(options.quoted, "quoted message");
+    expect(requireRecord(quoted.key, "quoted key").remoteJid).toBe("status@broadcast");
+
+    const contextInfo = requireGeneratedContextInfo({
+      jid: "1555@s.whatsapp.net",
+      options,
+      userJid: "1555@s.whatsapp.net",
+    });
+    expect(contextInfo.remoteJid).toBe("status@broadcast");
+  });
+
+  it("preserves unrelated direct PN and LID quote JIDs", async () => {
+    await api.sendMessage("+1555", "cross-chat reply", undefined, undefined, {
+      quotedMessageKey: {
+        id: "cross-chat-quoted-1",
+        remoteJid: "277038292303944@lid",
+        fromMe: false,
+        participant: "1999@s.whatsapp.net",
+        messageText: "other contact body",
+      },
+    });
+
+    expectFirstSendJid("1555@s.whatsapp.net");
+    const options = requireSendOptions() as MiscMessageGenerationOptions;
+    const quoted = requireRecord(options.quoted, "quoted message");
+    expect(requireRecord(quoted.key, "quoted key").remoteJid).toBe("277038292303944@lid");
+
+    const contextInfo = requireGeneratedContextInfo({
+      jid: "1555@s.whatsapp.net",
+      options,
+      userJid: "1555@s.whatsapp.net",
+    });
+    expect(contextInfo.remoteJid).toBe("277038292303944@lid");
+  });
+
+  it("reuses the aligned quote for audio and its secondary text send", async () => {
+    const audio = Buffer.from("aud");
+    await api.sendMessage("+1555", "voice text", audio, "audio/ogg", {
+      quotedMessageKey: {
+        id: "audio-quoted-1",
+        remoteJid: "277038292303944@lid",
+        fromMe: true,
+        participant: "1555@s.whatsapp.net",
+        targetJidEquivalent: true,
+        messageText: "audio quoted body",
+      },
+    });
+
+    expect(sendMessage).toHaveBeenCalledTimes(2);
+    for (const callIndex of [0, 1]) {
+      expect(requireMockArg(sendMessage, callIndex, 0, "sent message")).toBe("1555@s.whatsapp.net");
+      const options = requireRecord(
+        requireMockArg(sendMessage, callIndex, 2, "sent message"),
+        "sent message options",
+      );
+      const quoted = requireRecord(options.quoted, "quoted message");
+      expectRecordFields(requireRecord(quoted.key, "quoted key"), {
+        remoteJid: "1555@s.whatsapp.net",
+        id: "audio-quoted-1",
+        fromMe: true,
+        participant: "1555@s.whatsapp.net",
+      });
+      expect(quoted.message).toEqual({ conversation: "audio quoted body" });
+    }
   });
 });
 
@@ -636,6 +784,38 @@ describe("createWebSendApi LID resolution (issue #67378)", () => {
     });
     await api.sendMessage("+15555550000", "hello");
     expect(sendMessage).toHaveBeenCalledWith("987654@lid", { text: "hello" });
+  });
+
+  it("keeps mapped contact quotes aligned to the final LID destination", async () => {
+    const api = createWebSendApi({
+      sock: { sendMessage, sendPresenceUpdate },
+      defaultAccountId: "main",
+      authDir,
+    });
+    const media = Buffer.from("image");
+    await api.sendMessage("+15555550000", "caption", media, "image/jpeg", {
+      quotedMessageKey: {
+        id: "contact-quoted-1",
+        remoteJid: "987654@lid",
+        fromMe: false,
+        participant: "15555550000@s.whatsapp.net",
+        messageText: "contact quoted body",
+      },
+    });
+
+    expect(requireMockArg(sendMessage, 0, 0, "sent message")).toBe("987654@lid");
+    const options = requireRecord(
+      requireMockArg(sendMessage, 0, 2, "sent message"),
+      "sent message options",
+    );
+    const quoted = requireRecord(options.quoted, "quoted message");
+    expect(requireRecord(quoted.key, "quoted key")).toMatchObject({
+      remoteJid: "987654@lid",
+      id: "contact-quoted-1",
+      fromMe: false,
+      participant: "15555550000@s.whatsapp.net",
+    });
+    expect(quoted.message).toEqual({ conversation: "contact quoted body" });
   });
 
   it("falls back to PN s.whatsapp.net when no LID mapping exists", async () => {

@@ -1,9 +1,13 @@
 // Whatsapp API module exposes the plugin public contract.
-import type {
-  AnyMessageContent,
-  MiscMessageGenerationOptions,
-  WAMessage,
-  WAPresence,
+import {
+  isHostedLidUser,
+  isHostedPnUser,
+  isLidUser,
+  isPnUser,
+  type AnyMessageContent,
+  type MiscMessageGenerationOptions,
+  type WAMessage,
+  type WAPresence,
 } from "baileys";
 import { recordChannelActivity } from "openclaw/plugin-sdk/channel-activity-runtime";
 import { resolveWhatsAppDocumentFileName } from "../document-filename.js";
@@ -49,6 +53,31 @@ function recordWhatsAppOutbound(accountId: string) {
 
 function supportsForcedDocumentMediaType(mediaType: string): boolean {
   return mediaType.startsWith("image/") || mediaType.startsWith("video/");
+}
+
+function resolveQuotedConversationJid(params: {
+  destinationJid: string;
+  quotedMessageKey: ActiveWebSendOptions["quotedMessageKey"];
+  to: string;
+}): string | undefined {
+  const quotedMessageKey = params.quotedMessageKey;
+  if (!quotedMessageKey) {
+    return undefined;
+  }
+  const quotedRemoteJid = quotedMessageKey.remoteJid;
+  const destinationIsPn = isPnUser(params.destinationJid) || isHostedPnUser(params.destinationJid);
+  const destinationIsLid =
+    isLidUser(params.destinationJid) || isHostedLidUser(params.destinationJid);
+  const quotedIsPn = isPnUser(quotedRemoteJid) || isHostedPnUser(quotedRemoteJid);
+  const quotedIsLid = isLidUser(quotedRemoteJid) || isHostedLidUser(quotedRemoteJid);
+  if (!((destinationIsPn && quotedIsLid) || (destinationIsLid && quotedIsPn))) {
+    return quotedRemoteJid;
+  }
+
+  const requestedJid = toWhatsappJid(params.to);
+  const identitiesMatch =
+    quotedRemoteJid === requestedJid || quotedMessageKey.targetJidEquivalent === true;
+  return identitiesMatch ? params.destinationJid : quotedRemoteJid;
 }
 
 export function createWebSendApi(params: {
@@ -157,13 +186,20 @@ export function createWebSendApi(params: {
         payload = { text: resolvedPayloadText.text };
       }
       payload = addWhatsAppOutboundMentionsToContent(payload, resolvedPayloadText.mentionedJids);
+      const quotedMessageKey = sendOptions?.quotedMessageKey;
       const quotedOpts = buildQuotedMessageOptions({
-        messageId: sendOptions?.quotedMessageKey?.id,
-        remoteJid: sendOptions?.quotedMessageKey?.remoteJid,
-        fromMe: sendOptions?.quotedMessageKey?.fromMe,
-        participant: sendOptions?.quotedMessageKey?.participant,
-        messageText: sendOptions?.quotedMessageKey?.messageText,
-        media: sendOptions?.quotedMessageKey?.media,
+        messageId: quotedMessageKey?.id,
+        // Reconcile direct PN/LID aliases only. Other differing JIDs can encode
+        // intentional cross-conversation references such as status replies.
+        remoteJid: resolveQuotedConversationJid({
+          destinationJid: jid,
+          quotedMessageKey,
+          to,
+        }),
+        fromMe: quotedMessageKey?.fromMe,
+        participant: quotedMessageKey?.participant,
+        messageText: quotedMessageKey?.messageText,
+        media: quotedMessageKey?.media,
       });
       const result = quotedOpts
         ? await params.sock.sendMessage(jid, payload, quotedOpts)

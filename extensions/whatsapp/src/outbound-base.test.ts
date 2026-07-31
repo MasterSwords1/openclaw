@@ -365,6 +365,7 @@ describe("createWhatsAppOutboundBase", () => {
       remoteJid: "277038292303944@lid",
       fromMe: true,
       participant: "5511976136970@s.whatsapp.net",
+      targetJidEquivalent: true,
       messageText: "quoted from lid chat",
     });
   });
@@ -420,6 +421,11 @@ describe("createWhatsAppOutboundBase", () => {
     cacheInboundMessageMeta("default", "120363400000000000@g.us", "reply-group", {
       participant: "5511976136970@s.whatsapp.net",
       body: "group-only body",
+    });
+    cacheInboundMessageMeta("default", "277038292303944@lid", "reply-group", {
+      participant: "441234567890@s.whatsapp.net",
+      participantE164: "+441234567890",
+      body: "different direct-chat body",
     });
     const sendMessageWhatsApp = vi.fn(async () => ({
       messageId: "msg-group-miss",

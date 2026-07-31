@@ -37,6 +37,7 @@ type WhatsAppSendTextOptions = {
     remoteJid: string;
     fromMe: boolean;
     participant?: string;
+    targetJidEquivalent?: boolean;
     messageText?: string;
   };
   preserveLeadingWhitespace?: boolean;
@@ -126,6 +127,9 @@ export function createWhatsAppOutboundBase({
       remoteJid: cachedMeta?.remoteJid ?? targetJid,
       fromMe: cachedMeta?.fromMe ?? false,
       participant: cachedMeta?.participant,
+      // The lookup returns only exact or identity-equivalent target matches.
+      // A differing cached JID therefore proves a PN/LID alias, not another chat.
+      ...(cachedMeta && cachedMeta.remoteJid !== targetJid ? { targetJidEquivalent: true } : {}),
       messageText: cachedMeta?.body,
       media: cachedMeta?.media,
     };
