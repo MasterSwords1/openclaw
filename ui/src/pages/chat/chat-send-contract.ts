@@ -7,7 +7,10 @@ import type { SessionCapability, SessionRefreshTarget } from "../../lib/sessions
 import type { ChatCommandHost } from "./chat-commands.ts";
 import type { ChatRunStartupState } from "./chat-run-startup.ts";
 import type { ChatSendTimingEntry } from "./chat-send-ack.ts";
-import type { ChatComposerRecoveryPersistence } from "./composer-persistence.ts";
+import type {
+  ChatComposerMemoryFallback,
+  ChatComposerRecoveryPersistence,
+} from "./composer-persistence.ts";
 import type { ChatInputHistoryState } from "./input-history.ts";
 import type { RenderLifecycle } from "./render-lifecycle.ts";
 
@@ -40,6 +43,7 @@ export type ChatHost = ChatInputHistoryState &
     requestUpdate?: () => void;
     refreshSessionsAfterChat: Map<string, SessionRefreshTarget>;
     chatSubmitGuards?: Map<string, Promise<void>>;
+    chatComposerFallbackByScope?: Record<string, ChatComposerMemoryFallback>;
     chatComposerRecovery?: ChatComposerRecoveryPersistence;
     chatSendTimingsByRun?: Map<string, ChatSendTimingEntry>;
     eventLogBuffer?: unknown[];

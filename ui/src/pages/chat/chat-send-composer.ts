@@ -6,7 +6,6 @@ import {
   removeVisibleOrScopedQueuedMessageWithoutReleasing,
 } from "./chat-queue.ts";
 import type { ChatHost } from "./chat-send-contract.ts";
-import type { ChatPageHost } from "./chat-state-host.ts";
 import { resolveChatComposerMemoryFallback } from "./composer-fallback.ts";
 import {
   chatComposerCommandClearResult,
@@ -16,6 +15,7 @@ import {
   resolveStoredChatOutboxScope,
   storedChatOutboxScopeKey,
   type ChatComposerCommandRecovery,
+  type ChatComposerMemoryFallback,
   type StoredChatOutboxScope,
 } from "./composer-persistence.ts";
 
@@ -54,7 +54,7 @@ function matchingChatCommandComposerFallback(
   scope: StoredChatOutboxScope,
 ) {
   const { fallback, scopeKey } = resolveChatComposerMemoryFallback(
-    host as ChatPageHost,
+    host,
     scope.sessionKey,
   );
   const attachments = snapshot.attachments ?? [];
@@ -132,15 +132,13 @@ function findChatCommandComposerFallbackBySequence(
   host: ChatHost,
   sequence: number | undefined,
 ): {
-  fallback: NonNullable<ChatPageHost["chatComposerFallbackByScope"][string]>;
+  fallback: ChatComposerMemoryFallback;
   scopeKey: string;
 } | null {
   if (sequence === undefined) {
     return null;
   }
-  for (const [scopeKey, fallback] of Object.entries(
-    (host as ChatPageHost).chatComposerFallbackByScope ?? {},
-  )) {
+  for (const [scopeKey, fallback] of Object.entries(host.chatComposerFallbackByScope ?? {})) {
     if (fallback.sequence === sequence) {
       return { fallback, scopeKey };
     }
@@ -157,10 +155,9 @@ function discardChatCommandComposerClearFallback(
   if (!owned) {
     return;
   }
-  const pageHost = host as ChatPageHost;
-  const nextFallbacks = { ...pageHost.chatComposerFallbackByScope };
+  const nextFallbacks = { ...host.chatComposerFallbackByScope };
   delete nextFallbacks[owned.scopeKey];
-  pageHost.chatComposerFallbackByScope = nextFallbacks;
+  host.chatComposerFallbackByScope = nextFallbacks;
 }
 
 export function checkpointChatCommandComposerClear(
@@ -174,8 +171,7 @@ export function checkpointChatCommandComposerClear(
   if (recovery.persistenceRecovery) {
     host.chatComposerRecovery?.checkpointCommandClear(recovery.persistenceRecovery);
   }
-  const pageHost = host as ChatPageHost;
-  const fallbacks = pageHost.chatComposerFallbackByScope ?? {};
+  const fallbacks = host.chatComposerFallbackByScope ?? {};
   const submittedFallback = findChatCommandComposerFallbackBySequence(
     host,
     recovery.submittedFallbackSequence,
@@ -190,7 +186,7 @@ export function checkpointChatCommandComposerClear(
     }
     const sequence = nextChatComposerMemoryFallbackSequence();
     recovery.clearFallbackSequence = sequence;
-    pageHost.chatComposerFallbackByScope = {
+    host.chatComposerFallbackByScope = {
       ...fallbacks,
       [scopeKey]: {
         ...submittedFallback.fallback,
@@ -223,7 +219,7 @@ export function checkpointChatCommandComposerClear(
   } else if (submittedFallback) {
     delete nextFallbacks[scopeKey];
   }
-  pageHost.chatComposerFallbackByScope = nextFallbacks;
+  host.chatComposerFallbackByScope = nextFallbacks;
 }
 
 export function completeChatCommandComposerSend(
@@ -267,8 +263,7 @@ export function restoreChatCommandComposer(
     discardChatCommandComposerClearFallback(host, recovery);
     return { attachmentsRetained: false, restored: false };
   }
-  const pageHost = host as ChatPageHost;
-  const fallbacks = pageHost.chatComposerFallbackByScope ?? {};
+  const fallbacks = host.chatComposerFallbackByScope ?? {};
   const ownedClearFallback = findChatCommandComposerFallbackBySequence(
     host,
     recovery.clearFallbackSequence,
@@ -369,7 +364,7 @@ export function restoreChatCommandComposer(
     delete nextFallbacks[scopeKey];
   }
   recovery.clearFallbackSequence = undefined;
-  pageHost.chatComposerFallbackByScope = nextFallbacks;
+  host.chatComposerFallbackByScope = nextFallbacks;
   return {
     attachmentsRetained:
       recovery.attachments.length === 0 ||

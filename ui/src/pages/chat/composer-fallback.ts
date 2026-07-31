@@ -31,13 +31,14 @@ function withoutChatComposerCommandRun(
 
 export function resolveChatComposerMemoryFallback(
   state: ChatComposerScope & {
-    chatComposerFallbackByScope: Record<string, ChatComposerMemoryFallback>;
+    chatComposerFallbackByScope?: Record<string, ChatComposerMemoryFallback>;
   },
   sessionKey: string,
 ): { fallback?: ChatComposerMemoryFallback; scopeKey: string } {
   const scope = resolveStoredChatOutboxScope(state, sessionKey);
   const scopeKey = storedChatOutboxScopeKey(scope);
-  const fallback = state.chatComposerFallbackByScope[scopeKey];
+  const fallbacks = state.chatComposerFallbackByScope ?? {};
+  const fallback = fallbacks[scopeKey];
   const selectedGlobalAgentId = resolveUiKnownSelectedGlobalAgentId(state);
   if (scope.sessionKey !== "global" || !scope.agentId) {
     return { fallback, scopeKey };
@@ -71,7 +72,7 @@ export function resolveChatComposerMemoryFallback(
   }
   const candidates = [...fallbackSourceKeys]
     .map((candidateScopeKey) => ({
-      fallback: state.chatComposerFallbackByScope[candidateScopeKey],
+      fallback: fallbacks[candidateScopeKey],
       scopeKey: candidateScopeKey,
     }))
     .filter(
@@ -94,7 +95,7 @@ export function resolveChatComposerMemoryFallback(
   if (candidates.length === 1 && sourceKey === scopeKey) {
     if (adoptedFallback !== sourceFallback) {
       state.chatComposerFallbackByScope = {
-        ...state.chatComposerFallbackByScope,
+        ...fallbacks,
         [scopeKey]: adoptedFallback,
       };
     }
@@ -119,7 +120,7 @@ export function resolveChatComposerMemoryFallback(
       };
     }
   }
-  const nextFallbacks = { ...state.chatComposerFallbackByScope };
+  const nextFallbacks = { ...fallbacks };
   for (const candidate of candidates) {
     delete nextFallbacks[candidate.scopeKey];
   }
