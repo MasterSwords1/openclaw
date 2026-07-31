@@ -140,4 +140,50 @@ describe("Discord endpoint runtime", () => {
       ).toThrow("invalid Gateway WebSocket URL");
     });
   });
+
+  it("preserves Request method, headers, body, and signal", async () => {
+    await withTempDir("discord-endpoint-runtime-", async (tempRoot) => {
+      await writeDescriptor(tempRoot);
+      process.env[QA_TEMP_ROOT_ENV] = tempRoot;
+      const release = vi.fn(async () => {});
+      let forwardedBody = "";
+      fetchWithSsrFGuardMock.mockImplementation(async ({ init }: { init?: RequestInit }) => {
+        forwardedBody = init?.body ? await new Response(init.body).text() : "";
+        return { response: new Response("{}"), release };
+      });
+      const { createDiscordEndpointFetch, resolveDiscordEndpointRuntime } =
+        await import("./endpoint-runtime.js");
+      const endpoint = resolveDiscordEndpointRuntime();
+      if (!endpoint) {
+        throw new Error("expected injected Discord endpoint");
+      }
+      const controller = new AbortController();
+      const request = new Request("http://127.0.0.1:43123/api/v10/channels/123/messages", {
+        method: "POST",
+        headers: {
+          authorization: "Bot local-token",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ content: "hello" }),
+        signal: controller.signal,
+      });
+
+      const response = await createDiscordEndpointFetch(endpoint)(request);
+      await response.text();
+
+      const guardedRequest = fetchWithSsrFGuardMock.mock.calls[0]?.[0] as
+        | { init?: RequestInit & { duplex?: string }; url?: string }
+        | undefined;
+      expect(guardedRequest?.url).toBe(request.url);
+      expect(guardedRequest?.init?.method).toBe("POST");
+      expect(new Headers(guardedRequest?.init?.headers).get("authorization")).toBe(
+        "Bot local-token",
+      );
+      controller.abort();
+      expect(guardedRequest?.init?.signal?.aborted).toBe(true);
+      expect(guardedRequest?.init?.duplex).toBe("half");
+      expect(forwardedBody).toBe('{"content":"hello"}');
+      expect(release).toHaveBeenCalledTimes(1);
+    });
+  });
 });

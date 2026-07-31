@@ -20,6 +20,8 @@ type DiscordEndpointRuntime = {
   gatewayBotUrl: string;
 };
 
+type RequestInitWithDuplex = RequestInit & { duplex?: "half" };
+
 type DiscordEndpointRuntimeState =
   | { resolved: false }
   | { resolved: true; endpoint?: DiscordEndpointRuntime };
@@ -163,12 +165,46 @@ function resolveEndpointFetchUrl(
   return url;
 }
 
+async function resolveEndpointFetchRequest(
+  endpoint: DiscordEndpointRuntime,
+  input: string | URL | Request,
+  init?: RequestInit,
+): Promise<{ url: URL; init?: RequestInitWithDuplex }> {
+  if (!(input instanceof Request)) {
+    return { url: resolveEndpointFetchUrl(endpoint, input), init };
+  }
+  const request = new Request(input, init);
+  const streamBody = request.body ?? undefined;
+  // Fetch rejects keepalive requests whose body is exposed as a stream. Buffer
+  // that uncommon form while preserving ordinary streaming Request semantics.
+  const body = request.keepalive && streamBody ? await request.arrayBuffer() : streamBody;
+  return {
+    url: resolveEndpointFetchUrl(endpoint, request),
+    init: {
+      method: request.method,
+      headers: request.headers,
+      body,
+      cache: request.cache,
+      credentials: request.credentials,
+      integrity: request.integrity,
+      keepalive: request.keepalive,
+      mode: request.mode,
+      redirect: request.redirect,
+      referrer: request.referrer,
+      referrerPolicy: request.referrerPolicy,
+      signal: request.signal,
+      ...(streamBody && !request.keepalive ? { duplex: "half" as const } : {}),
+    },
+  };
+}
+
 export function createDiscordEndpointFetch(endpoint: DiscordEndpointRuntime): typeof fetch {
   return (async (input: string | URL | Request, init?: RequestInit) => {
-    const url = resolveEndpointFetchUrl(endpoint, input);
+    const request = await resolveEndpointFetchRequest(endpoint, input, init);
+    const url = request.url;
     const guarded = await fetchWithSsrFGuard({
       url: url.toString(),
-      init,
+      init: request.init,
       maxRedirects: 0,
       policy: { allowedHostnames: [url.hostname], allowPrivateNetwork: true },
       auditContext: "discord.injected-endpoint",
