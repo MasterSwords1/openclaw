@@ -226,13 +226,10 @@ export function reconcileSlackNativeTaskChunks(params: {
     }
   }
 
-  // A same-size snapshot with at least one unchanged title is a title
-  // refinement, not a structural replacement. Preserve remaining positions;
-  // a single-step plan has the same unambiguous refinement behavior.
-  if (
-    taskChunks.length === previousActive.length &&
-    (usedPreviousIds.size > 0 || taskChunks.length === 1)
-  ) {
+  // The portable plan contract has ordered full snapshots but no durable step
+  // ids. For equal-size snapshots, position is the only identity that survives
+  // when every title is refined, so preserve all still-unmatched positions.
+  if (taskChunks.length === previousActive.length) {
     taskChunks.forEach((chunk, index) => {
       const previous = previousActive[index];
       if (!assignedIds.has(chunk) && previous && !usedPreviousIds.has(previous[0])) {

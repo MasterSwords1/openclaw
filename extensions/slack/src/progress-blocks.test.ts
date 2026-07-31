@@ -134,6 +134,32 @@ describe("native Slack semantic task chunks", () => {
     ]);
   });
 
+  it("keeps task identities stable when every title is refined", () => {
+    const first = reconcileSlackNativeTaskChunks({
+      previousTasks: new Map(),
+      chunks: buildSlackProgressStreamStartChunks({
+        plan: [
+          { step: "Inspect code", status: "in_progress" },
+          { step: "Run tests", status: "pending" },
+        ],
+      }),
+    });
+    const refined = reconcileSlackNativeTaskChunks({
+      previousTasks: first.tasks,
+      chunks: buildSlackProgressStreamUpdateChunks({
+        plan: [
+          { step: "Inspect the Slack lifecycle", status: "completed" },
+          { step: "Run focused Slack tests", status: "in_progress" },
+        ],
+      }),
+    });
+
+    expect(refined.chunks?.filter((chunk) => chunk.type === "task_update")).toEqual([
+      taskUpdate("plan_step_1", "Inspect the Slack lifecycle", "complete"),
+      taskUpdate("plan_step_2", "Run focused Slack tests", "in_progress"),
+    ]);
+  });
+
   it("keeps duplicate semantic titles independently addressable", () => {
     const chunks = buildSlackProgressStreamStartChunks({
       plan: [
