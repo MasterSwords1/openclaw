@@ -4,6 +4,7 @@
 export const GATEWAY_AUX_METHODS = [
   "exec.approval.get",
   "exec.approval.list",
+  "exec.approval.cancel",
   "exec.approval.request",
   "exec.approval.waitDecision",
   "exec.approval.resolve",

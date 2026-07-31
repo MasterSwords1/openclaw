@@ -1,6 +1,7 @@
 // Gateway Protocol tests cover exec approvals validators behavior.
 import { describe, expect, it } from "vitest";
 import {
+  validateExecApprovalCancelParams,
   validateExecApprovalRequestParams,
   validateExecApprovalsNodeSnapshot,
   validateExecApprovalsNodeSetParams,
@@ -14,6 +15,13 @@ import {
  */
 
 describe("exec approvals protocol validators", () => {
+  it("requires one exact exec approval id for runtime cancellation", () => {
+    expect(validateExecApprovalCancelParams({ id: "approval-1" })).toBe(true);
+    expect(validateExecApprovalCancelParams({})).toBe(false);
+    expect(validateExecApprovalCancelParams({ id: "" })).toBe(false);
+    expect(validateExecApprovalCancelParams({ id: "approval-1", extra: true })).toBe(false);
+  });
+
   it("accepts runtime-owned allowlist metadata on gateway and node set payloads", () => {
     const file = {
       version: 1 as const,

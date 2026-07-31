@@ -519,6 +519,7 @@ export {
   ExecApprovalsGetParamsSchema,
   ExecApprovalsSetParamsSchema,
   ExecApprovalGetParamsSchema,
+  ExecApprovalCancelParamsSchema,
   ExecApprovalRequestParamsSchema,
   ExecApprovalResolveParamsSchema,
   QuestionAnswersSchema,

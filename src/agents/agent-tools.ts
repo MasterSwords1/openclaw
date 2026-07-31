@@ -748,6 +748,7 @@ function createOpenClawCodingToolsInternal(options?: OpenClawCodingToolsOptions)
         commandHighlighting: options?.exec?.commandHighlighting ?? execConfig.commandHighlighting,
         safeBinTrustedDirs: options?.exec?.safeBinTrustedDirs ?? execConfig.safeBinTrustedDirs,
         safeBinProfiles: options?.exec?.safeBinProfiles ?? execConfig.safeBinProfiles,
+        approvalHost: options?.approvalHost,
         agentId,
         cwd: codingRoot,
         allowBackground,

@@ -14,6 +14,11 @@ import type { ExecuteNodeHostCommandParams } from "./bash-tools.exec-host-node.t
 
 type StrictInlineEvalBoundary =
   typeof import("./bash-tools.exec-host-shared.js").enforceStrictInlineEvalApprovalBoundary;
+type RegisterExecApprovalRequest =
+  typeof import("./bash-tools.exec-approval-request.js").registerExecApprovalRequestForHostOrThrow;
+type DefaultExecApprovalRegister = Parameters<
+  typeof import("./bash-tools.exec-host-shared.js").createAndRegisterDefaultExecApprovalRequest
+>[0]["register"];
 type ExecAutoReviewer = typeof import("../infra/exec-auto-review.js").defaultExecAutoReviewer;
 type ExecAutoReviewDecision = Awaited<ReturnType<ExecAutoReviewer>>;
 type ExecAsk = import("../infra/exec-approvals.js").ExecAsk;
@@ -220,8 +225,16 @@ const enforceStrictInlineEvalApprovalBoundaryMock = vi.hoisted(() =>
   })),
 );
 const registerExecApprovalRequestForHostOrThrowMock = vi.hoisted(() =>
-  vi.fn(async () => undefined),
+  vi.fn<RegisterExecApprovalRequest>(),
 );
+const resolveAutoReviewApprovalMock = vi.hoisted(() => vi.fn());
+const createApprovalLease = (id: string) => ({
+  id,
+  expiresAtMs: Date.now() + 60_000,
+  wait: vi.fn(),
+  resolveAutoReview: resolveAutoReviewApprovalMock,
+  cancel: vi.fn(),
+});
 const detectInterpreterInlineEvalArgvMock = vi.hoisted(() =>
   vi.fn(
     (): {
@@ -349,6 +362,12 @@ function createNodeHostRequest(
     defaultTimeoutSec: 30,
     approvalRunningNoticeMs: 0,
     warnings: [],
+    approvalHost: {
+      exec: {
+        supportsDetachedExecution: true,
+        request: vi.fn(),
+      },
+    } as never,
     agentId: "requested-agent",
     sessionKey: "requested-session",
     ...overrides,
@@ -602,10 +621,11 @@ describe("executeNodeHostCommand", () => {
     createAndRegisterDefaultExecApprovalRequestMock.mockImplementation(async (args?: unknown) => {
       const register =
         args && typeof args === "object" && "register" in args
-          ? (args as { register?: (approvalId: string) => Promise<void> }).register
+          ? (args as { register?: DefaultExecApprovalRegister }).register
           : undefined;
-      await register?.("approval-1");
+      const approval = (await register?.("approval-1")) ?? createApprovalLease("approval-1");
       return {
+        approval,
         approvalId: "approval-1",
         approvalSlug: "slug-1",
         warningText: "",
@@ -640,6 +660,14 @@ describe("executeNodeHostCommand", () => {
     detectInterpreterInlineEvalArgvMock.mockReset();
     detectInterpreterInlineEvalArgvMock.mockReturnValue(null);
     registerExecApprovalRequestForHostOrThrowMock.mockReset();
+    resolveAutoReviewApprovalMock.mockReset();
+    registerExecApprovalRequestForHostOrThrowMock.mockImplementation(async (params) =>
+      createApprovalLease(
+        params && typeof params === "object" && "approvalId" in params
+          ? params.approvalId
+          : "approval-1",
+      ),
+    );
   });
 
   it("denies non-interactive approval requests without creating operator events", async () => {
@@ -1541,12 +1569,7 @@ describe("executeNodeHostCommand", () => {
         suppressDelivery: true,
       }),
     );
-    expect(callGatewayToolMock).toHaveBeenCalledWith(
-      "exec.approval.resolve",
-      { timeoutMs: 15_000 },
-      { id: expect.any(String), decision: "allow-once" },
-      { scopes: ["operator.approvals"], requireAgentRuntimeIdentity: true },
-    );
+    expect(resolveAutoReviewApprovalMock).toHaveBeenCalledOnce();
   });
 
   it("does not invoke the node after cancellation wins during auto-review", async () => {

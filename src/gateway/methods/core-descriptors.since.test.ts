@@ -54,6 +54,7 @@ const CURRENT_TRAIN_METHODS = [
   "approval.get",
   "approval.resolve",
   "approval.history",
+  "exec.approval.cancel",
   "plugin.approval.cancel",
   "migrations.memory.plan",
   "openclaw.chat.history",

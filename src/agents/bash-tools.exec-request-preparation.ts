@@ -16,6 +16,7 @@ import {
 import { getGlobalHookRunner } from "../plugins/hook-runner-global.js";
 import type { PluginHookChannelContext } from "../plugins/hook-types.js";
 import { safeJsonStringify } from "../utils/safe-json.js";
+import type { AgentRunApprovalHost } from "./agent-run-approval.js";
 import type { HookContext } from "./agent-tools.before-tool-call.js";
 import { stripMalformedXmlArgValueSuffixFromKeys } from "./agent-tools.params.js";
 import { DEFAULT_PATH, applyPathPrepend, applyShellPath } from "./bash-tools.exec-runtime.js";
@@ -51,6 +52,9 @@ type ResolvedExecWorkdirPreparedState = {
   inputWorkdir?: string;
   resolution: ExecWorkdirResolution;
 };
+type ExecApprovalHostPreparedState = {
+  approvalHost?: AgentRunApprovalHost;
+};
 
 const CHANNEL_CONTEXT_ENV_KEY = "OPENCLAW_CHANNEL_CONTEXT";
 const resolvedExecEnvPreparedStates = new WeakMap<ExecToolArgs, ResolvedExecEnvPreparedState>();
@@ -62,6 +66,7 @@ const resolvedExecWorkdirPreparedStates = new WeakMap<
   ExecToolArgs,
   ResolvedExecWorkdirPreparedState
 >();
+const execApprovalHostPreparedStates = new WeakMap<ExecToolArgs, ExecApprovalHostPreparedState>();
 const XML_ARG_VALUE_EXEC_PARAM_KEYS = [
   "command",
   "workdir",
@@ -163,6 +168,20 @@ function getResolvedExecWorkdirPreparedState(
   params: ExecToolArgs,
 ): ResolvedExecWorkdirPreparedState | undefined {
   return resolvedExecWorkdirPreparedStates.get(params);
+}
+
+function markExecApprovalHostPrepared<T extends ExecToolArgs>(
+  params: T,
+  state: ExecApprovalHostPreparedState,
+): T {
+  execApprovalHostPreparedStates.set(params, state);
+  return params;
+}
+
+function getExecApprovalHostPreparedState(
+  params: ExecToolArgs,
+): ExecApprovalHostPreparedState | undefined {
+  return execApprovalHostPreparedStates.get(params);
 }
 
 export function resolveNotifyOnExitEmptySuccess(defaults?: ExecToolDefaults): boolean {
@@ -274,28 +293,45 @@ export function createExecRequestPreparation(params: {
     context: { hookContext?: unknown },
   ): Promise<ExecToolArgs> => {
     const execParams = await prepareParamsWithResolvedExecWorkdir(args);
+    const hookContext =
+      context.hookContext !== null && typeof context.hookContext === "object"
+        ? (context.hookContext as HookContext)
+        : undefined;
+    const hasPreparedApprovalHost =
+      hookContext !== undefined && Object.hasOwn(hookContext, "approvalHost");
+    const finalizePreparedParams = (preparedParams: ExecToolArgs) =>
+      hasPreparedApprovalHost
+        ? markExecApprovalHostPrepared(preparedParams, {
+            approvalHost: hookContext.approvalHost,
+          })
+        : preparedParams;
     const workdirState = getResolvedExecWorkdirPreparedState(execParams);
     if (workdirState?.resolution.kind === "unavailable") {
-      return execParams;
+      return finalizePreparedParams(execParams);
     }
     if (!isExecToolArgsObject(execParams)) {
       return execParams;
     }
     if (shouldDeferResolveExecEnvUntilWorkdirValidated(execParams)) {
-      return markDeferredResolveExecEnvPrepared(execParams, {
-        hookContext: context.hookContext as HookContext | undefined,
-      });
+      return finalizePreparedParams(
+        markDeferredResolveExecEnvPrepared(execParams, {
+          hookContext,
+        }),
+      );
     }
-    return prepareParamsWithResolvedExecEnv(execParams, {
-      hookContext: context.hookContext as HookContext | undefined,
-    });
+    return finalizePreparedParams(
+      await prepareParamsWithResolvedExecEnv(execParams, {
+        hookContext,
+      }),
+    );
   };
 
   const finalizeBeforeToolCallParams = (rawParams: unknown, preparedParams: unknown) => {
     const envState = getResolvedExecEnvPreparedState(preparedParams as ExecToolArgs);
     const deferredEnvState = getDeferredResolveExecEnvPreparedState(preparedParams as ExecToolArgs);
     const workdirState = getResolvedExecWorkdirPreparedState(preparedParams as ExecToolArgs);
-    if (!envState && !deferredEnvState && !workdirState) {
+    const approvalHostState = getExecApprovalHostPreparedState(preparedParams as ExecToolArgs);
+    if (!envState && !deferredEnvState && !workdirState && !approvalHostState) {
       return rawParams;
     }
     if (!isExecToolArgsObject(rawParams)) {
@@ -330,6 +366,9 @@ export function createExecRequestPreparation(params: {
     if (workdirState) {
       markResolvedExecWorkdirPrepared(execParams, workdirState);
     }
+    if (approvalHostState) {
+      markExecApprovalHostPrepared(execParams, approvalHostState);
+    }
     return execParams;
   };
 
@@ -342,6 +381,7 @@ export function createExecRequestPreparation(params: {
     getDeferredResolveExecEnvPreparedState,
     getResolvedExecWorkdirPreparedState,
     getResolvedExecEnvPreparedState,
+    getExecApprovalHostPreparedState,
   };
 }
 

@@ -14,6 +14,7 @@ import {
   createAndRegisterDefaultExecApprovalRequest,
   createExecApprovalDecisionState,
   enforceStrictInlineEvalApprovalBoundary,
+  resolveApprovalDecisionOrUndefined,
   resolveExecHostApprovalContext,
   sendExecApprovalFollowupResult,
   shouldResolveExecApprovalUnavailableInline,
@@ -45,6 +46,32 @@ vi.mock("../infra/exec-approvals.js", async (importOriginal) => {
     ...mod,
     resolveExecApprovalsLocked: mocks.resolveExecApprovals,
   };
+});
+
+describe("resolveApprovalDecisionOrUndefined", () => {
+  it("preserves the run abort reason instead of reporting an approval failure", async () => {
+    const controller = new AbortController();
+    const abortReason = new Error("run aborted");
+    const onFailure = vi.fn();
+    const wait = vi.fn().mockRejectedValue(abortReason);
+    controller.abort(abortReason);
+
+    await expect(
+      resolveApprovalDecisionOrUndefined({
+        approval: {
+          id: "approval-1",
+          expiresAtMs: Date.now() + 60_000,
+          wait,
+          resolveAutoReview: vi.fn(),
+          cancel: vi.fn(),
+        },
+        preResolvedDecision: undefined,
+        signal: controller.signal,
+        onFailure,
+      }),
+    ).rejects.toBe(abortReason);
+    expect(onFailure).not.toHaveBeenCalled();
+  });
 });
 
 describe("sendExecApprovalFollowupResult", () => {
@@ -526,6 +553,9 @@ describe("buildExecApprovalPendingToolResult", () => {
         id: approvalId,
         expiresAtMs: Date.now() + 60_000,
         finalDecision: null,
+        wait: vi.fn(),
+        resolveAutoReview: vi.fn(),
+        cancel: vi.fn(),
       }),
     });
     expect(state.sentApproverDms).toBe(false);

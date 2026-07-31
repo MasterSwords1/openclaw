@@ -47,6 +47,7 @@ import {
   runWithGatewayIndependentRootWorkAdmission,
 } from "../process/gateway-work-admission.js";
 import { isNativeApprovalChannel, normalizeMessageChannel } from "../utils/message-channel.js";
+import type { AgentRunApprovalHost } from "./agent-run-approval.js";
 import { markBackgrounded, tail } from "./bash-process-registry.js";
 import {
   buildExecApprovalRequesterContext,
@@ -97,6 +98,7 @@ type ProcessGatewayAllowlistParams = {
   ask: ExecAsk;
   autoReview?: boolean;
   autoReviewer?: ExecAutoReviewer;
+  approvalHost?: AgentRunApprovalHost;
   signal?: AbortSignal;
   safeBins: Set<string>;
   safeBinProfiles: Readonly<Record<string, SafeBinProfile>>;
@@ -415,9 +417,13 @@ function buildGatewayExecApprovalFollowupSummary(params: {
 }
 
 function shouldAwaitGatewayApprovalInline(params: {
+  approvalHost?: AgentRunApprovalHost;
   turnSourceChannel?: string;
   approvalFollowupMode?: "agent" | "direct";
 }): boolean {
+  if (params.approvalHost?.exec?.supportsDetachedExecution !== true) {
+    return true;
+  }
   if (params.approvalFollowupMode !== undefined) {
     return false;
   }
@@ -878,6 +884,7 @@ export async function processGatewayAllowlist(
     });
     const registerGatewayApproval = async (approvalId: string) =>
       await registerExecApprovalRequestForHostOrThrow({
+        approvalHost: params.approvalHost,
         approvalId,
         command: params.command,
         env: params.requestedEnv,
@@ -895,16 +902,15 @@ export async function processGatewayAllowlist(
         sessionId: params.sessionId,
         runId: params.runId,
         toolCallId: params.toolCallId,
-        approvalReviewerDeviceIds: params.approvalReviewerDeviceId
-          ? [params.approvalReviewerDeviceId]
-          : undefined,
         resolvedPath: resolveApprovalAuditTrustPath(
           allowlistEval.segments[0]?.resolution ?? null,
           params.workdir,
         ),
         ...buildExecApprovalTurnSourceContext(params),
+        signal: params.signal,
       });
     const {
+      approval,
       approvalId,
       approvalSlug,
       warningText,
@@ -1014,8 +1020,9 @@ export async function processGatewayAllowlist(
     );
     const resolveApprovalForExecution = async (onFailure: () => void) => {
       const decision = await resolveApprovalDecisionOrUndefined({
-        approvalId,
+        approval,
         preResolvedDecision,
+        signal: params.signal,
         onFailure,
       }).catch((error: unknown) => {
         if (isExecApprovalRunAbortedError(error)) {

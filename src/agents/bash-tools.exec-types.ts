@@ -17,6 +17,7 @@ import type { ExecAutoReviewer } from "../infra/exec-auto-review.js";
 import type { SafeBinProfileFixture } from "../infra/exec-safe-bin-policy.js";
 import type { PluginHookChannelContext } from "../plugins/hook-types.js";
 import type { TerminationReason } from "../process/supervisor/types.js";
+import type { AgentRunApprovalHost } from "./agent-run-approval.js";
 import type { BashSandboxConfig } from "./bash-tools.shared.js";
 import type { EmbeddedFullAccessBlockedReason } from "./embedded-agent-runner/types.js";
 import type { ExecReviewerConfig } from "./exec-auto-reviewer.js";
@@ -41,6 +42,8 @@ export type ExecToolDefaults = {
   reviewer?: ExecReviewerConfig;
   config?: OpenClawConfig;
   autoReviewer?: ExecAutoReviewer;
+  /** Exact process-local approval owner for this agent run. */
+  approvalHost?: AgentRunApprovalHost;
   agentId?: string;
   backgroundMs?: number;
   timeoutSec?: number;

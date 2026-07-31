@@ -86,6 +86,7 @@ type ExecApprovalUnavailableReason =
 
 /** Context returned after a default approval request is registered. */
 type RegisteredExecApprovalRequestContext = {
+  approval: ExecApprovalRegistration;
   approvalId: string;
   approvalSlug: string;
   warningText: string;
@@ -246,17 +247,19 @@ export async function resolveExecHostApprovalContext(params: {
 
 /** Waits for approval while converting wait failures to an undefined sentinel. */
 export async function resolveApprovalDecisionOrUndefined(params: {
-  approvalId: string;
+  approval: ExecApprovalRegistration;
   preResolvedDecision: string | null | undefined;
+  signal?: AbortSignal;
   onFailure: () => void;
 }): Promise<string | null | undefined> {
   try {
     return await resolveRegisteredExecApprovalDecision({
-      approvalId: params.approvalId,
+      approval: params.approval,
       preResolvedDecision: params.preResolvedDecision,
+      signal: params.signal,
     });
   } catch (error) {
-    if (isExecApprovalRunAbortedError(error)) {
+    if (params.signal?.aborted || isExecApprovalRunAbortedError(error)) {
       throw error;
     }
     params.onFailure();
@@ -326,6 +329,7 @@ export async function createAndRegisterDefaultExecApprovalRequest(params: {
     });
 
   return {
+    approval: registration,
     approvalId,
     approvalSlug,
     warningText,

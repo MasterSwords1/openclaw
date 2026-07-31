@@ -267,6 +267,7 @@ import {
   ExecApprovalsGetParamsSchema,
   ExecApprovalsSetParamsSchema,
   ExecApprovalGetParamsSchema,
+  ExecApprovalCancelParamsSchema,
   ExecApprovalRequestParamsSchema,
   ExecApprovalResolveParamsSchema,
   QuestionRequestParamsSchema,
@@ -659,6 +660,7 @@ export const validateApprovalResolveParams = lazyCompile(ApprovalResolveParamsSc
 export const validateExecApprovalsGetParams = lazyCompile(ExecApprovalsGetParamsSchema);
 export const validateExecApprovalsSetParams = lazyCompile(ExecApprovalsSetParamsSchema);
 export const validateExecApprovalGetParams = lazyCompile(ExecApprovalGetParamsSchema);
+export const validateExecApprovalCancelParams = lazyCompile(ExecApprovalCancelParamsSchema);
 export const validateExecApprovalRequestParams = lazyCompile(ExecApprovalRequestParamsSchema);
 export const validateExecApprovalResolveParams = lazyCompile(ExecApprovalResolveParamsSchema);
 export const validateQuestionRequestParams = lazyCompile(QuestionRequestParamsSchema);

@@ -56,6 +56,7 @@ Docs: https://docs.openclaw.ai
 
 ### Fixes
 
+- **Run-scoped exec approvals:** route exec registration, waiting, auto-review, and exact-request cancellation through the initiating agent host, preventing process-local runtimes from falling back to ambient Gateway approval state.
 - **Run-scoped plugin approvals:** keep approval registration, nested turns, channel ingress, and exact-request cancellation bound to the initiating process-local agent host, preventing local runtimes from falling back to Gateway-wide approval state or cancelling concurrent requests.
 - **Control UI dynamic deep links:** reuse the initial route loader result when publishing real agent, session, dashboard, Workboard, Memory, and Plugins paths, avoiding redundant route-loader work during startup. Thanks @shakkernerd.
 - **Linux gateway service ownership:** refuse user-scope systemd publication and activation when the same gateway unit name is already owned or cannot be verified in the system scope, including `--force`, with actionable recovery guidance instead of creating restart-looping dual managers. Fixes #116129.

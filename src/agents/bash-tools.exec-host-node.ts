@@ -208,6 +208,7 @@ export async function executeNodeHostCommand(
     options: { requireDeliveryRoute?: boolean; suppressDelivery?: boolean } = {},
   ) =>
     await registerExecApprovalRequestForHostOrThrow({
+      approvalHost: params.approvalHost,
       approvalId,
       systemRunPlan: prepared.plan,
       env: target.env,
@@ -223,9 +224,7 @@ export async function executeNodeHostCommand(
         agentId: prepared.agentId,
         sessionKey: prepared.sessionKey,
       }),
-      approvalReviewerDeviceIds: params.approvalReviewerDeviceId
-        ? [params.approvalReviewerDeviceId]
-        : undefined,
+      signal: params.signal,
       ...(options.requireDeliveryRoute !== undefined
         ? { requireDeliveryRoute: options.requireDeliveryRoute }
         : {}),
@@ -367,16 +366,11 @@ export async function executeNodeHostCommand(
       const autoReviewAllowed = decision.decision === "allow-once" && decision.risk === "low";
       if (autoReviewAllowed) {
         const approvalId = randomUUID();
-        await registerNodeApproval(approvalId, {
+        const approval = await registerNodeApproval(approvalId, {
           requireDeliveryRoute: false,
           suppressDelivery: true,
         });
-        await callGatewayTool(
-          "exec.approval.resolve",
-          { timeoutMs: 15_000 },
-          { id: approvalId, decision: "allow-once" },
-          { scopes: [APPROVALS_SCOPE], requireAgentRuntimeIdentity: true },
-        );
+        await approval.resolveAutoReview();
         inlineApprovedByAsk = true;
         inlineApprovalDecision = "allow-once";
         inlineApprovalId = approvalId;
@@ -400,6 +394,7 @@ export async function executeNodeHostCommand(
         turnSourceAccountId: params.turnSourceAccountId,
       });
       const {
+        approval,
         approvalId,
         approvalSlug,
         warningText,
@@ -412,18 +407,31 @@ export async function executeNodeHostCommand(
         ...requestArgs,
         register: registerNodeApproval,
       });
+      const awaitApprovalInline = params.approvalHost?.exec?.supportsDetachedExecution !== true;
       if (
+        awaitApprovalInline ||
         execHostShared.shouldResolveExecApprovalUnavailableInline({
           unavailableReason,
           preResolvedDecision,
         })
       ) {
+        const decision = awaitApprovalInline
+          ? await execHostShared.resolveApprovalDecisionOrUndefined({
+              approval,
+              preResolvedDecision,
+              signal: params.signal,
+              onFailure: () => undefined,
+            })
+          : preResolvedDecision;
+        if (decision === undefined) {
+          throw new Error("Exec approval request failed.");
+        }
         const {
           baseDecision,
           approvedByAsk: initialApprovedByAsk,
           deniedReason: initialDeniedReason,
         } = execHostShared.createExecApprovalDecisionState({
-          decision: preResolvedDecision,
+          decision,
           askFallback,
         });
         let approvedByAsk = initialApprovedByAsk;
@@ -455,7 +463,7 @@ export async function executeNodeHostCommand(
           );
         }
         inlineApprovedByAsk = strictInlineEvalDecision.approvedByAsk;
-        inlineApprovalSource = preResolvedDecision === null ? "ask-fallback" : undefined;
+        inlineApprovalSource = decision === null ? "ask-fallback" : undefined;
         if (inlineApprovalSource) {
           inlineDispatchAuthority = "ask-fallback";
           inlineFallbackPolicy = currentFallback ?? undefined;
@@ -495,8 +503,9 @@ export async function executeNodeHostCommand(
           let decision: string | null | undefined;
           try {
             decision = await execHostShared.resolveApprovalDecisionOrUndefined({
-              approvalId,
+              approval,
               preResolvedDecision,
+              signal: params.signal,
               onFailure: () => void sendApprovalRequestFailedFollowup(),
             });
           } catch (error) {

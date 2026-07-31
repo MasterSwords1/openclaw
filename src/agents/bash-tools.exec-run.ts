@@ -163,6 +163,10 @@ export function createExecTool(
           signal,
         });
       let params = requestPreparation.normalizeParams(args);
+      const preparedApprovalHostState = requestPreparation.getExecApprovalHostPreparedState(params);
+      const approvalHost = preparedApprovalHostState
+        ? preparedApprovalHostState.approvalHost
+        : defaults?.approvalHost;
       const resolveExecEnvPrepared = requestPreparation.isResolveExecEnvPrepared(
         args as ExecToolArgs,
       );
@@ -417,6 +421,7 @@ export function createExecTool(
             ask,
             autoReview,
             autoReviewer,
+            approvalHost,
             signal,
             strictInlineEval: defaults?.strictInlineEval,
             commandHighlighting: defaults?.commandHighlighting,
@@ -450,6 +455,7 @@ export function createExecTool(
             ask,
             autoReview,
             autoReviewer,
+            approvalHost,
             signal,
             safeBins,
             safeBinProfiles,

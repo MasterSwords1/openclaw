@@ -548,6 +548,7 @@ export function createGatewayAuxHandlers(params: {
     extraHandlers: {
       "exec.approval.get": createLazyHandler("exec.approval.get", loadExecApprovalHandlers),
       "exec.approval.list": createLazyHandler("exec.approval.list", loadExecApprovalHandlers),
+      "exec.approval.cancel": createLazyHandler("exec.approval.cancel", loadExecApprovalHandlers),
       "exec.approval.request": createLazyHandler("exec.approval.request", loadExecApprovalHandlers),
       "exec.approval.waitDecision": createLazyHandler(
         "exec.approval.waitDecision",

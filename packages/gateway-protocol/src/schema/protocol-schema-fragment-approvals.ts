@@ -40,6 +40,7 @@ export const ApprovalProtocolSchemas = {
   ExecApprovalsNodeSetParams: execApprovals.ExecApprovalsNodeSetParamsSchema,
   ExecApprovalsSnapshot: execApprovals.ExecApprovalsSnapshotSchema,
   ExecApprovalGetParams: execApprovals.ExecApprovalGetParamsSchema,
+  ExecApprovalCancelParams: execApprovals.ExecApprovalCancelParamsSchema,
   ExecApprovalRequestParams: execApprovals.ExecApprovalRequestParamsSchema,
   ExecApprovalResolveParams: execApprovals.ExecApprovalResolveParamsSchema,
   QuestionOption: questions.QuestionOptionSchema,

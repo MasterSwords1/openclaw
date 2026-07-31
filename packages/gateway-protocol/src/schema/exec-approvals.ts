@@ -313,6 +313,11 @@ export const ExecApprovalResolveParamsSchema = closedObject({
   decision: NonEmptyString,
 });
 
+/** Internal runtime cancellation for one exact exec approval request. */
+export const ExecApprovalCancelParamsSchema = closedObject({
+  id: NonEmptyString,
+});
+
 // Owner-local wire types derived directly from local schema consts so the
 // public plugin-sdk declaration graph never pulls in the ProtocolSchemas registry.
 export type ExecApprovalsGetParams = Static<typeof ExecApprovalsGetParamsSchema>;
@@ -322,5 +327,6 @@ export type ExecApprovalsNodeSnapshot = Static<typeof ExecApprovalsNodeSnapshotS
 export type ExecApprovalsNodeSetParams = Static<typeof ExecApprovalsNodeSetParamsSchema>;
 export type ExecApprovalsSnapshot = Static<typeof ExecApprovalsSnapshotSchema>;
 export type ExecApprovalGetParams = Static<typeof ExecApprovalGetParamsSchema>;
+export type ExecApprovalCancelParams = Static<typeof ExecApprovalCancelParamsSchema>;
 export type ExecApprovalRequestParams = Static<typeof ExecApprovalRequestParamsSchema>;
 export type ExecApprovalResolveParams = Static<typeof ExecApprovalResolveParamsSchema>;

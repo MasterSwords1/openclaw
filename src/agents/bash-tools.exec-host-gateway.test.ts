@@ -163,6 +163,13 @@ const resolveApprovalDecisionOrUndefinedMock = vi.hoisted(() =>
   vi.fn(async (): Promise<string | null | undefined> => undefined),
 );
 const runAbortedApprovalError = vi.hoisted(() => new Error("run aborted"));
+const createApprovalLease = (id: string) => ({
+  id,
+  expiresAtMs: Date.now() + 60_000,
+  wait: vi.fn(),
+  resolveAutoReview: vi.fn(),
+  cancel: vi.fn(),
+});
 const resolveExecHostApprovalContextMock = vi.hoisted(() =>
   vi.fn(
     (): MockExecHostApprovalContext => ({
@@ -383,6 +390,7 @@ describe("processGatewayAllowlist", () => {
     });
     createAndRegisterDefaultExecApprovalRequestMock.mockReset();
     createAndRegisterDefaultExecApprovalRequestMock.mockResolvedValue({
+      approval: createApprovalLease("req-1"),
       approvalId: "req-1",
       approvalSlug: "slug-1",
       warningText: "",
@@ -416,6 +424,12 @@ describe("processGatewayAllowlist", () => {
       approvalRunningNoticeMs: 0,
       maxOutput: 1000,
       pendingMaxOutput: 1000,
+      approvalHost: {
+        exec: {
+          supportsDetachedExecution: true,
+          request: vi.fn(),
+        },
+      } as never,
       ...rest,
     });
   }
@@ -700,6 +714,7 @@ describe("processGatewayAllowlist", () => {
   it("resolves a triggerless CLI no-route approval through the real gate", async () => {
     await useRealUnavailableApprovalGate();
     createAndRegisterDefaultExecApprovalRequestMock.mockResolvedValue({
+      approval: createApprovalLease("approval-cli-no-route"),
       approvalId: "approval-cli-no-route",
       approvalSlug: "slug",
       warningText: "",
@@ -747,6 +762,7 @@ describe("processGatewayAllowlist", () => {
   it("preserves a routed approval through the real gate", async () => {
     await useRealUnavailableApprovalGate();
     createAndRegisterDefaultExecApprovalRequestMock.mockResolvedValue({
+      approval: createApprovalLease("approval-routed"),
       approvalId: "approval-routed",
       approvalSlug: "slug",
       warningText: "",
@@ -771,7 +787,9 @@ describe("processGatewayAllowlist", () => {
     });
     expect(shouldResolveExecApprovalUnavailableInlineMock).toHaveReturnedWith(false);
     expect(resolveApprovalDecisionOrUndefinedMock).toHaveBeenCalledWith(
-      expect.objectContaining({ approvalId: "approval-routed" }),
+      expect.objectContaining({
+        approval: expect.objectContaining({ id: "approval-routed" }),
+      }),
     );
   });
 

@@ -206,6 +206,7 @@ export function resolveGatewayOptions(opts?: GatewayCallOptions) {
 }
 
 const APPROVAL_RUNTIME_METHODS = new Set<string>([
+  "exec.approval.cancel",
   "exec.approval.request",
   "exec.approval.resolve",
   "exec.approval.waitDecision",

@@ -5,6 +5,7 @@
  */
 import type { ExecAsk, ExecSecurity } from "../infra/exec-approvals.js";
 import type { ExecAutoReviewer } from "../infra/exec-auto-review.js";
+import type { AgentRunApprovalHost } from "./agent-run-approval.js";
 import type { ExecElevatedDefaults } from "./bash-tools.exec-types.js";
 
 /** Full parameter bundle for Node-hosted exec command execution. */
@@ -34,6 +35,7 @@ export type ExecuteNodeHostCommandParams = {
   ask: ExecAsk;
   autoReview?: boolean;
   autoReviewer?: ExecAutoReviewer;
+  approvalHost?: AgentRunApprovalHost;
   signal?: AbortSignal;
   strictInlineEval?: boolean;
   commandHighlighting?: boolean;

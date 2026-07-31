@@ -257,6 +257,7 @@ export async function executeNodeClaudeRun(params: {
       const approvalId = crypto.randomUUID();
       const registration = await waitForNodeOperation({
         operation: params.deps.registerExecApprovalRequestForHostOrThrow({
+          approvalHost: contextParams.approvalHost,
           approvalId,
           command: approval.systemRunPlan.commandText,
           commandArgv: approval.systemRunPlan.argv,
@@ -269,16 +270,15 @@ export async function executeNodeClaudeRun(params: {
           unavailableDecisions: ["allow-always"],
           agentId: contextParams.agentId,
           sessionKey: contextParams.sessionKey,
-          ...(contextParams.approvalReviewerDeviceId
-            ? { approvalReviewerDeviceIds: [contextParams.approvalReviewerDeviceId] }
-            : {}),
+          signal: nodeAbortController.signal,
         }),
         signal: nodeAbortController.signal,
       });
       const decision = await waitForNodeOperation({
         operation: params.deps.resolveRegisteredExecApprovalDecision({
-          approvalId: registration.id,
+          approval: registration,
           preResolvedDecision: registration.finalDecision,
+          signal: nodeAbortController.signal,
         }),
         signal: nodeAbortController.signal,
       });

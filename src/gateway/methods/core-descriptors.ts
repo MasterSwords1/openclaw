@@ -60,6 +60,12 @@ const CORE_GATEWAY_METHOD_SPECS: readonly CoreGatewayMethodSpec[] = [
   { name: "exec.approvals.node.set", scope: "operator.admin", since: "<=2026.7" },
   { name: "exec.approval.get", scope: "operator.approvals", since: "<=2026.7" },
   { name: "exec.approval.list", scope: "operator.approvals", since: "<=2026.7" },
+  {
+    name: "exec.approval.cancel",
+    scope: "operator.approvals",
+    since: "2026.7",
+    advertise: false,
+  },
   { name: "exec.approval.request", scope: "operator.approvals", since: "<=2026.7" },
   { name: "exec.approval.waitDecision", scope: "operator.approvals", since: "<=2026.7" },
   { name: "exec.approval.resolve", scope: "operator.approvals", since: "<=2026.7" },
