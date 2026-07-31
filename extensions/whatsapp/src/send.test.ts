@@ -807,6 +807,32 @@ describe("web outbound", () => {
     });
   });
 
+  it("returns the actual outbound poll key remote JID when Baileys resolves a LID target", async () => {
+    sendPoll.mockResolvedValueOnce({
+      kind: "poll",
+      messageId: "poll-lid",
+      keys: [
+        {
+          id: "poll-lid",
+          remoteJid: "123456789@lid",
+          fromMe: true,
+        },
+      ],
+      providerAccepted: true,
+    });
+
+    const result = await sendPollWhatsApp(
+      "+1555",
+      { question: "Lunch?", options: ["Pizza", "Sushi"] },
+      { verbose: false, cfg: WHATSAPP_TEST_CFG },
+    );
+
+    expect(result).toEqual({
+      messageId: "poll-lid",
+      toJid: "123456789@lid",
+    });
+  });
+
   it("checks send readiness before sending direct polls", async () => {
     const assertSendReady = vi.fn(async () => {
       throw new Error("WhatsApp reachout timelock is active");

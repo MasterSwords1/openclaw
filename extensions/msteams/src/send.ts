@@ -6,6 +6,7 @@ import {
   type MessageReceiptPartKind,
 } from "openclaw/plugin-sdk/channel-outbound";
 import { resolveMarkdownTableMode } from "openclaw/plugin-sdk/markdown-table-runtime";
+import type { OutboundMediaAccess } from "openclaw/plugin-sdk/media-runtime";
 import { loadOutboundMediaFromUrl, type OpenClawConfig } from "../runtime-api.js";
 import {
   classifyMSTeamsSendError,
@@ -43,6 +44,7 @@ type SendMSTeamsMessageParams = {
   mediaUrl?: string;
   /** Optional filename override for uploaded media/files */
   filename?: string;
+  mediaAccess?: OutboundMediaAccess;
   mediaLocalRoots?: readonly string[];
   mediaReadFile?: (filePath: string) => Promise<Buffer>;
 };
@@ -175,7 +177,7 @@ type SendMSTeamsCardResult = {
 export async function sendMessageMSTeams(
   params: SendMSTeamsMessageParams,
 ): Promise<SendMSTeamsMessageResult> {
-  const { cfg, to, text, mediaUrl, filename, mediaLocalRoots, mediaReadFile } = params;
+  const { cfg, to, text, mediaUrl, filename, mediaAccess, mediaLocalRoots, mediaReadFile } = params;
   const tableMode = resolveMarkdownTableMode({
     cfg,
     channel: "msteams",
@@ -206,6 +208,7 @@ export async function sendMessageMSTeams(
     const mediaMaxBytes = ctx.mediaMaxBytes ?? MSTEAMS_MAX_MEDIA_BYTES;
     const media = await loadOutboundMediaFromUrl(mediaUrl, {
       maxBytes: mediaMaxBytes,
+      mediaAccess,
       mediaLocalRoots,
       mediaReadFile,
     });

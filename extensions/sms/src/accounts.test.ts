@@ -205,6 +205,15 @@ describe("SMS account config", () => {
     });
   });
 
+  it.each(["0", "00", " 0 "])(
+    "falls back to the default SMS chunk limit for a zero-valued env setting (%j)",
+    (value) => {
+      process.env.SMS_TEXT_CHUNK_LIMIT = value;
+
+      expect(resolveSmsAccount({}).textChunkLimit).toBe(1500);
+    },
+  );
+
   it("coerces numeric allowFrom entries accepted by the config schema", () => {
     const parsed = parseSmsConfig({
       accountSid: "AC123",

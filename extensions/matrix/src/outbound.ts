@@ -235,6 +235,7 @@ export const matrixOutbound: ChannelOutboundAdapter = {
     to,
     text,
     mediaUrl,
+    mediaAccess,
     mediaLocalRoots,
     mediaReadFile,
     deps,
@@ -251,6 +252,7 @@ export const matrixOutbound: ChannelOutboundAdapter = {
     const result = await send(to, text, {
       cfg,
       mediaUrl,
+      mediaAccess,
       mediaLocalRoots,
       mediaReadFile,
       replyToId: replyToId ?? undefined,

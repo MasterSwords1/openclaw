@@ -177,12 +177,18 @@ describe("msteamsOutbound cfg threading", () => {
         },
       },
     } as OpenClawConfig;
+    const mediaAccess = {
+      localRoots: ["/tmp"],
+      readFile: vi.fn(async () => Buffer.from("photo")),
+      workspaceDir: "/tmp",
+    };
 
     await requireSendMedia()({
       cfg: cfgValue,
       to: "conversation:abc",
       text: "photo",
       mediaUrl: "file:///tmp/photo.png",
+      mediaAccess,
       mediaLocalRoots: ["/tmp"],
     });
 
@@ -191,6 +197,7 @@ describe("msteamsOutbound cfg threading", () => {
       to: "conversation:abc",
       text: "photo",
       mediaUrl: "file:///tmp/photo.png",
+      mediaAccess,
       mediaLocalRoots: ["/tmp"],
     });
   });
@@ -416,6 +423,11 @@ describe("msteamsOutbound cfg threading", () => {
     mocks.sendMessageMSTeams
       .mockResolvedValueOnce({ messageId: "msg-media-1", conversationId: "conv-media" })
       .mockResolvedValueOnce({ messageId: "msg-media-2", conversationId: "conv-media" });
+    const mediaAccess = {
+      localRoots: ["/tmp"],
+      readFile: vi.fn(async () => Buffer.from("photo")),
+      workspaceDir: "/tmp",
+    };
 
     const result = await requireSendPayload()({
       cfg,
@@ -426,6 +438,7 @@ describe("msteamsOutbound cfg threading", () => {
         mediaUrls: ["file:///tmp/one.png", "file:///tmp/two.png"],
         channelData: { msteams: { traceId: "trace-1" } },
       },
+      mediaAccess,
       mediaLocalRoots: ["/tmp"],
     });
 
@@ -434,6 +447,7 @@ describe("msteamsOutbound cfg threading", () => {
       to: "conversation:abc",
       text: "album",
       mediaUrl: "file:///tmp/one.png",
+      mediaAccess,
       mediaLocalRoots: ["/tmp"],
       mediaReadFile: undefined,
     });
@@ -442,6 +456,7 @@ describe("msteamsOutbound cfg threading", () => {
       to: "conversation:abc",
       text: "",
       mediaUrl: "file:///tmp/two.png",
+      mediaAccess,
       mediaLocalRoots: ["/tmp"],
       mediaReadFile: undefined,
     });

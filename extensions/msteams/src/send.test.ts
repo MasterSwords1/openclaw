@@ -260,6 +260,11 @@ describe("sendMessageMSTeams", () => {
 
   it("loads media through shared helper and forwards mediaLocalRoots", async () => {
     const mediaBuffer = Buffer.from("tiny-image");
+    const mediaAccess = {
+      localRoots: ["/tmp/agent-workspace"],
+      readFile: vi.fn(async () => mediaBuffer),
+      workspaceDir: "/tmp/agent-workspace",
+    };
     mockState.sendMSTeamsMessages.mockResolvedValueOnce(["message-text", "message-media"]);
     mockState.loadOutboundMediaFromUrl.mockResolvedValueOnce({
       buffer: mediaBuffer,
@@ -273,6 +278,7 @@ describe("sendMessageMSTeams", () => {
       to: "conversation:19:conversation@thread.tacv2",
       text: "hello",
       mediaUrl: "file:///tmp/agent-workspace/inline.png",
+      mediaAccess,
       mediaLocalRoots: ["/tmp/agent-workspace"],
     });
 
@@ -280,6 +286,7 @@ describe("sendMessageMSTeams", () => {
       "file:///tmp/agent-workspace/inline.png",
       {
         maxBytes: 8 * 1024,
+        mediaAccess,
         mediaLocalRoots: ["/tmp/agent-workspace"],
       },
     );

@@ -19,6 +19,7 @@ import {
 } from "./internal/rest-errors.js";
 import { rewriteDiscordKnownMentions } from "./mentions.js";
 import { DISCORD_REST_TIMEOUT_MS } from "./proxy-request-client.js";
+import { resolveDiscordMessageFlags } from "./send.message-request.js";
 import { createDiscordSendResult } from "./send.receipt.js";
 import type { DiscordSendResult } from "./send.types.js";
 
@@ -120,6 +121,9 @@ export async function sendWebhookMessageDiscord(
     accountId: account.accountId,
     mentionAliases: account.config.mentionAliases,
   });
+  const flags = resolveDiscordMessageFlags({
+    suppressEmbeds: account.config.suppressEmbeds ?? true,
+  });
   const threadConversationId = opts.threadId == null ? "" : String(opts.threadId).trim();
   if (threadConversationId) {
     // Reserve the webhook source before the request so an immediate gateway echo
@@ -152,6 +156,7 @@ export async function sendWebhookMessageDiscord(
         content: rewrittenText,
         username: normalizeOptionalString(opts.username),
         avatar_url: normalizeOptionalString(opts.avatarUrl),
+        ...(flags ? { flags } : {}),
         ...(messageReference ? { message_reference: messageReference } : {}),
       }),
       signal: deadline.signal,

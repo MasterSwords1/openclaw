@@ -1,6 +1,6 @@
 // Google Meet tests cover Calendar API request behavior.
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { listGoogleMeetCalendarEvents } from "./calendar.js";
+import { findGoogleMeetCalendarEvent, listGoogleMeetCalendarEvents } from "./calendar.js";
 
 afterEach(() => {
   vi.useRealTimers();
@@ -69,6 +69,36 @@ describe("Google Calendar requests", () => {
 });
 
 describe("Google Meet calendar URL extraction", () => {
+  it("excludes cancelled meetings from calendar previews and lookup", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              items: [
+                {
+                  status: "cancelled",
+                  hangoutLink: "https://meet.google.com/abc-defg-hij",
+                },
+              ],
+            }),
+            {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            },
+          ),
+      ),
+    );
+
+    await expect(
+      listGoogleMeetCalendarEvents({ accessToken: "test-token" }),
+    ).resolves.toMatchObject({ events: [] });
+    await expect(findGoogleMeetCalendarEvent({ accessToken: "test-token" })).rejects.toThrow(
+      "No Google Calendar event with a Google Meet link matched the query",
+    );
+  });
+
   it("normalizes Calendar HTTP links before applying the runtime Meet URL contract", async () => {
     await expect(
       resolveCalendarMeetingUri({

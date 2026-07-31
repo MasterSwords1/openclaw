@@ -136,7 +136,25 @@ export async function resolveSlackMessageContent(params: {
     ? effectiveDirectMedia.map((item) => item.placeholder).join(" ")
     : undefined;
 
-  const fallbackFiles = ownFiles ?? [];
+  // Forwarded files live on attachments, so retain their identities when a
+  // failed download would otherwise make the entire inbound turn disappear.
+  const fallbackFileIds = new Set<string>();
+  const fallbackFiles = [
+    ...(ownFiles ?? []),
+    ...(params.message.attachments ?? []).flatMap((attachment) =>
+      attachment.is_share === true ? (attachment.files ?? []) : [],
+    ),
+  ].filter((file) => {
+    const fileId = normalizeOptionalString(file.id);
+    if (!fileId) {
+      return true;
+    }
+    if (fallbackFileIds.has(fileId)) {
+      return false;
+    }
+    fallbackFileIds.add(fileId);
+    return true;
+  });
   const fileOnlyFallback =
     !mediaPlaceholder && fallbackFiles.length > 0
       ? fallbackFiles

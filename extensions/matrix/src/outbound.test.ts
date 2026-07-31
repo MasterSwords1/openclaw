@@ -99,12 +99,18 @@ describe("matrixOutbound cfg threading", () => {
         },
       },
     } as OpenClawConfig;
+    const mediaAccess = {
+      localRoots: ["/tmp/openclaw"],
+      readFile: vi.fn(async () => Buffer.from("image")),
+      workspaceDir: "/tmp/openclaw",
+    };
 
     await matrixOutbound.sendMedia!({
       cfg,
       to: "room:!room:example",
       text: "caption",
       mediaUrl: "file:///tmp/cat.png",
+      mediaAccess,
       mediaLocalRoots: ["/tmp/openclaw"],
       accountId: "default",
       audioAsVoice: true,
@@ -116,6 +122,7 @@ describe("matrixOutbound cfg threading", () => {
     const options = mockOptions(mocks.sendMessageMatrix, "sendMessageMatrix");
     expect(options.cfg).toBe(cfg);
     expect(options.mediaUrl).toBe("file:///tmp/cat.png");
+    expect(options.mediaAccess).toBe(mediaAccess);
     expect(options.mediaLocalRoots).toEqual(["/tmp/openclaw"]);
     expect(options.audioAsVoice).toBe(true);
   });

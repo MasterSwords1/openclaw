@@ -89,7 +89,8 @@ function updateHasBotCommandEntityForBot(update: unknown, botUsername?: string):
         if (ent.type !== "bot_command") {
           continue;
         }
-        if (typeof ent.offset !== "number" || typeof ent.length !== "number") {
+        // grammY only dispatches commands at offset zero; inline mentions must not cancel a turn.
+        if (ent.offset !== 0 || typeof ent.length !== "number") {
           continue;
         }
         const commandText = body.slice(ent.offset, ent.offset + ent.length);

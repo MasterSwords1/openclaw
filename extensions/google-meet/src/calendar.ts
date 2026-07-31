@@ -181,7 +181,7 @@ function chooseBestMeetCalendarEvent(
   let selected: GoogleMeetCalendarEvent | undefined;
   let selectedRank = Number.POSITIVE_INFINITY;
   for (const event of events) {
-    if (event.status === "cancelled" || !extractGoogleMeetUriFromCalendarEvent(event)) {
+    if (!extractGoogleMeetUriFromCalendarEvent(event)) {
       continue;
     }
     const rank = rankCalendarEvent(event, nowMs);
@@ -260,10 +260,11 @@ export async function listGoogleMeetCalendarEvents(params: {
   now?: Date;
 }): Promise<GoogleMeetCalendarEventsResult> {
   const { calendarId, events, now } = await fetchGoogleCalendarEvents(params);
-  const best = chooseBestMeetCalendarEvent(events, now);
+  const activeEvents = events.filter((event) => event.status !== "cancelled");
+  const best = chooseBestMeetCalendarEvent(activeEvents, now);
   return {
     calendarId,
-    events: events
+    events: activeEvents
       .map((event) => {
         const meetingUri = extractGoogleMeetUriFromCalendarEvent(event);
         return meetingUri ? { event, meetingUri, selected: event === best } : undefined;

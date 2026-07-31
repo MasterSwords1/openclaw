@@ -397,7 +397,7 @@ export async function sendPollWhatsApp(
     const durationMs = Date.now() - startedAt;
     outboundLog.info(`Sent poll ${messageId} -> ${redactedJid} (${durationMs}ms)`);
     logger.info({ jid: redactedJid, messageId }, "sent poll");
-    return { messageId, toJid: jid };
+    return { messageId, toJid: resolveActualSentRemoteJid(result, jid) };
   } catch (err) {
     logger.error({ err: String(err), to: redactedTo }, "failed to send poll via web session");
     throw err;

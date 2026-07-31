@@ -242,6 +242,7 @@ describe("openai tts", () => {
         timeoutMs: 5_000,
       });
 
+      expect(firstFetchCall(fetchMock)[0]).toBe("https://api.openai.com/v1/audio/speech");
       const init = firstFetchInit(fetchMock);
       if (typeof init?.body !== "string") {
         throw new Error("expected JSON request body");

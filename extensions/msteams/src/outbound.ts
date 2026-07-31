@@ -32,11 +32,10 @@ function resolveMSTeamsEffectiveTextChunkLimit(configuredLimit?: number): number
 
 type MSTeamsSendConfig = Parameters<typeof sendMessageMSTeams>[0]["cfg"];
 type MSTeamsSendResult = { messageId: string; conversationId: string };
-type MSTeamsMediaSendOptions = {
-  mediaUrl?: string;
-  mediaLocalRoots?: readonly string[];
-  mediaReadFile?: (filePath: string) => Promise<Buffer>;
-};
+type MSTeamsMediaSendOptions = Pick<
+  Parameters<typeof sendMessageMSTeams>[0],
+  "mediaUrl" | "mediaAccess" | "mediaLocalRoots" | "mediaReadFile"
+>;
 type MSTeamsTextSendFn = (to: string, text: string) => Promise<MSTeamsSendResult>;
 type MSTeamsMediaSendFn = (
   to: string,
@@ -66,6 +65,7 @@ function resolveMSTeamsMediaSend(params: {
         to,
         text,
         mediaUrl: opts?.mediaUrl,
+        mediaAccess: opts?.mediaAccess,
         mediaLocalRoots: opts?.mediaLocalRoots,
         mediaReadFile: opts?.mediaReadFile,
       }))
@@ -114,6 +114,7 @@ export const msteamsOutbound: ChannelOutboundAdapter = {
     to,
     text,
     mediaUrl,
+    mediaAccess,
     mediaLocalRoots,
     mediaReadFile,
     payload,
@@ -149,7 +150,12 @@ export const msteamsOutbound: ChannelOutboundAdapter = {
           await onDeliveryResult?.(attachChannelToResult("msteams", deliveryResult));
         },
         send: async ({ text: textLocal, mediaUrl: mediaUrlLocal }) =>
-          await send(to, textLocal, { mediaUrl: mediaUrlLocal, mediaLocalRoots, mediaReadFile }),
+          await send(to, textLocal, {
+            mediaUrl: mediaUrlLocal,
+            mediaAccess,
+            mediaLocalRoots,
+            mediaReadFile,
+          }),
       });
       if (result) {
         return attachChannelToResult("msteams", result);
@@ -179,9 +185,18 @@ export const msteamsOutbound: ChannelOutboundAdapter = {
       const send = resolveMSTeamsTextSend({ cfg, deps });
       return await send(to, text);
     },
-    sendMedia: async ({ cfg, to, text, mediaUrl, mediaLocalRoots, mediaReadFile, deps }) => {
+    sendMedia: async ({
+      cfg,
+      to,
+      text,
+      mediaUrl,
+      mediaAccess,
+      mediaLocalRoots,
+      mediaReadFile,
+      deps,
+    }) => {
       const send = resolveMSTeamsMediaSend({ cfg, deps });
-      return await send(to, text, { mediaUrl, mediaLocalRoots, mediaReadFile });
+      return await send(to, text, { mediaUrl, mediaAccess, mediaLocalRoots, mediaReadFile });
     },
     sendPoll: async ({ cfg, to, poll }) => {
       const maxSelections = poll.maxSelections ?? 1;

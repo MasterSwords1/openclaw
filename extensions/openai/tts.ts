@@ -149,7 +149,7 @@ export async function openaiTTS(params: {
     ...(effectiveInstructions != null && { instructions: effectiveInstructions }),
     ...(extraBody == null ? {} : sanitizeExtraBodyRecord(extraBody)),
   });
-  const requestUrl = `${baseUrl}/audio/speech`;
+  const requestUrl = `${normalizeOpenAITtsBaseUrl(baseUrl)}/audio/speech`;
   const debugProxyFetchPatchInstalled = isDebugProxyGlobalFetchPatchInstalled();
   const { response, release } = await fetchWithSsrFGuard({
     url: requestUrl,
