@@ -110,6 +110,8 @@ OpenClaw-owned metrics. For example, `"acme."` exports `openclaw.tokens` as
 `acme.openclaw.tokens`. Standard semantic-convention metrics such as
 `gen_ai.client.token.usage` and `gen_ai.client.operation.duration` keep their
 original names. Leave the option unset to preserve every current metric name.
+Enabling or changing this option renames the affected metric series, so update
+dashboards, alerts, and recording rules that query the old names.
 
 ### Environment variables
 
