@@ -1,6 +1,5 @@
 // Telegram tests cover helpers plugin behavior.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { renderTelegramTextEntities } from "./body-helpers.js";
 import {
   buildTelegramInboundOriginTarget,
   buildTelegramRoutingTarget,
@@ -18,6 +17,7 @@ import {
   resetTelegramForumFlagCacheForTest,
   shouldUseTelegramDmThreadSession,
 } from "./helpers.js";
+import { renderTelegramTextEntities } from "./inbound-text-entities.js";
 
 type TelegramMessage = Parameters<typeof normalizeForwardedContext>[0];
 

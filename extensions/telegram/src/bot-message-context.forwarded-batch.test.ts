@@ -2,6 +2,95 @@ import { describe, expect, it } from "vitest";
 import { buildTelegramMessageContextForTest } from "./bot-message-context.test-harness.js";
 
 describe("buildTelegramMessageContext forwarded debounce batches", () => {
+  it.each(["text", "caption"] as const)(
+    "keeps quoted %s distinct from neighboring buffered messages",
+    async (carrier) => {
+      const chat = { id: 999, type: "private" as const, first_name: "Alice" };
+      const sender = { id: 42, first_name: "Alice", is_bot: false };
+      const quote = "quoted first\nquoted second";
+      const quoteEntity = { type: "blockquote" as const, offset: 0, length: quote.length };
+      const quotedContent =
+        carrier === "text"
+          ? { text: quote, entities: [quoteEntity] }
+          : { caption: quote, caption_entities: [quoteEntity] };
+      const context = await buildTelegramMessageContextForTest({
+        message: {
+          message_id: 2,
+          chat,
+          from: sender,
+          text: `${quote}\nordinary caption`,
+          entities: [{ type: "blockquote", offset: 0, length: quote.length }],
+        },
+        options: {
+          inboundDebounceMessages: [
+            {
+              message_id: 1,
+              date: 1_700_000_000,
+              chat,
+              from: sender,
+              ...quotedContent,
+            },
+            {
+              message_id: 2,
+              date: 1_700_000_001,
+              chat,
+              from: sender,
+              caption: "ordinary caption",
+            },
+          ],
+        },
+      });
+
+      const expected = "> quoted first\n> quoted second\nordinary caption";
+      expect(context?.ctxPayload.RawBody).toBe(expected);
+      expect(context?.ctxPayload.BodyForAgent).toBe(expected);
+      expect(context?.ctxPayload.CommandBody).toBe(expected);
+    },
+  );
+
+  it.each(["text", "caption"] as const)(
+    "reopens enclosing formatting around buffered quoted %s",
+    async (carrier) => {
+      const chat = { id: 999, type: "private" as const, first_name: "Alice" };
+      const sender = { id: 42, first_name: "Alice", is_bot: false };
+      const content = "😀 before\nquoted first\nquoted second\nafter";
+      const quote = "quoted first\nquoted second";
+      const entities = [
+        { type: "bold" as const, offset: 0, length: content.length },
+        { type: "blockquote" as const, offset: content.indexOf(quote), length: quote.length },
+      ];
+      const buffered =
+        carrier === "text"
+          ? { text: content, entities }
+          : { caption: content, caption_entities: entities };
+      const context = await buildTelegramMessageContextForTest({
+        message: {
+          message_id: 1,
+          chat,
+          from: sender,
+          text: content,
+          entities,
+        },
+        options: {
+          inboundDebounceMessages: [
+            {
+              message_id: 1,
+              date: 1_700_000_000,
+              chat,
+              from: sender,
+              ...buffered,
+            },
+          ],
+        },
+      });
+
+      const expected = "**😀 before**\n> **quoted first**\n> **quoted second**\n**after**";
+      expect(context?.ctxPayload.RawBody).toBe(expected);
+      expect(context?.ctxPayload.BodyForAgent).toBe(expected);
+      expect(context?.ctxPayload.CommandBody).toBe(expected);
+    },
+  );
+
   it("preserves each buffered message's formatting entities in model-visible order", async () => {
     const chat = { id: 999, type: "private" as const, first_name: "Alice" };
     const sender = { id: 42, first_name: "Alice", is_bot: false };
