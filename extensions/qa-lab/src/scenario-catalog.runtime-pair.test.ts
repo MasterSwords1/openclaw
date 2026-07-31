@@ -80,8 +80,6 @@ describe("QA runtime-pair scenario catalog", () => {
       readQaScenarioById("long-context-progress-watchdog").execution.flow,
     );
     expect(longContextFlow).toContain("agentRuntime: { id: config.harnessRuntime }, params: null");
-    expect(longContextFlow).toContain(
-      "snapshot.config.agents?.defaults?.models?.[env.primaryModel]?.params === undefined",
-    );
+    expect(longContextFlow).not.toContain("provider request params to be absent");
   });
 });
