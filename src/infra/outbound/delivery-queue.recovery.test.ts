@@ -1019,6 +1019,28 @@ describe("delivery-queue recovery", () => {
     expect(await loadPendingDeliveries(tmpDir())).toHaveLength(0);
   });
 
+  it("keeps a recovered delivery terminal when provider cleanup resolution throws", async () => {
+    const id = await enqueueRecoveryDelivery();
+    resolveOutboundChannelMessageAdapterMock
+      .mockReturnValueOnce(undefined)
+      .mockImplementationOnce(() => {
+        throw new Error("resolver unavailable");
+      });
+    const deliver = vi
+      .fn()
+      .mockResolvedValue([{ channel: "demo-channel-a", messageId: "provider-id" }]);
+
+    const { result, log } = await runRecovery({ deliver });
+
+    expect(result).toMatchObject({ recovered: 1, failed: 0 });
+    expect(deliver).toHaveBeenCalledOnce();
+    expect(await loadPendingDeliveries(tmpDir())).toHaveLength(0);
+    expectMockMessageContaining(
+      log.warn,
+      `provider cleanup failed for terminal delivery ${id}: resolver unavailable`,
+    );
+  });
+
   it("keeps an in-flight stable platform send fenced across recovery", async () => {
     const id = "cron-direct-delivery:v1:in-flight-producer-lease";
     await enqueueDeliveryOnce(

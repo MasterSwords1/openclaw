@@ -12,16 +12,16 @@ export async function runOutboundQueueTerminalHook(params: {
   accountId?: string | null;
   warn: (message: string) => void;
 }): Promise<void> {
-  const adapter = resolveOutboundChannelMessageAdapter({
-    channel: params.channel,
-    cfg: params.cfg,
-    allowBootstrap: true,
-  });
-  const hook = adapter?.durableFinal?.afterQueueTerminal;
-  if (!hook) {
-    return;
-  }
   try {
+    const adapter = resolveOutboundChannelMessageAdapter({
+      channel: params.channel,
+      cfg: params.cfg,
+      allowBootstrap: true,
+    });
+    const hook = adapter?.durableFinal?.afterQueueTerminal;
+    if (!hook) {
+      return;
+    }
     await hook({
       cfg: params.cfg,
       queueId: params.queueId,
