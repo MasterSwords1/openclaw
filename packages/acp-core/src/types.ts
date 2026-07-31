@@ -26,14 +26,10 @@ export type AcpSession = {
   cwd: string;
   createdAt: number;
   lastTouchedAt: number;
-  abortController: AbortController | null;
-  activeRunId: string | null;
+  runtimeOptions?: AcpSessionRuntimeOptions;
 };
 
 export type AcpServerOptions = {
-  gatewayUrl?: string;
-  gatewayToken?: string;
-  gatewayPassword?: string;
   defaultSessionKey?: string;
   defaultSessionLabel?: string;
   requireExistingSession?: boolean;

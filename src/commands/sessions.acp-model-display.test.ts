@@ -33,9 +33,9 @@ import {
  *
  * Decided fix shape (catalog #20, mirrors #18): SENTINEL OVERLAY at the call
  * site, gated on BOTH key shape AND persisted SQLite ACP metadata. Key shape
- * alone is not sufficient because ACP bridge sessions (translator.ts) also use
- * ACP-shaped keys without ever writing `SessionAcpMeta` — those sessions run
- * the normal configured model and must not receive the sentinel.
+ * alone is not sufficient because inbound `openclaw acp` sessions can use
+ * ACP-shaped keys without writing outbound-harness `SessionAcpMeta`; those
+ * sessions run the normal configured model and must not receive the sentinel.
  *
  * When `isAcpSessionKey(row.key)` is true AND SQLite ACP metadata exists, the
  * JSON-emit path overlays `{ provider: "acpx", model: "<agentId>-acp" }` on
@@ -117,14 +117,12 @@ function mockAgentConfigWithCopilotModel(): void {
 }
 
 /**
- * ACP bridge session entry: ACP-shaped key but no ACP metadata. The ACP bridge
- * (translator.ts) uses an in-memory-only session store and never writes
- * `SessionAcpMeta` to disk. If a bridge client passes an explicit ACP-shaped
- * key (e.g. `agent:copilot:acp:session-1`) and the Gateway persists the
- * session, it will have an ACP key without ACP metadata. The overlay must NOT
- * fire for these sessions — they ran the configured model.
+ * Inbound ACP session entry: ACP-shaped key but no outbound-harness metadata.
+ * The process-local `openclaw acp` host uses canonical session storage without
+ * writing `SessionAcpMeta`, which belongs to spawned ACP harnesses. The overlay
+ * must not fire for these sessions because they ran the configured model.
  */
-function buildAcpBridgeSessionEntry(): SessionEntry {
+function buildInboundAcpSessionEntry(): SessionEntry {
   return {
     sessionId: "acp-bridge-session-id",
     updatedAt: Date.now() - 4 * 60_000,
@@ -178,7 +176,7 @@ describe("sessionsCommand model/modelProvider display for ACP sessions (catalog 
     useTempStateDir();
     writeAcpRuntimeMeta(ACP_SESSION_KEY);
     const store = await writeStore(
-      { [ACP_SESSION_KEY]: buildAcpBridgeSessionEntry() },
+      { [ACP_SESSION_KEY]: buildInboundAcpSessionEntry() },
       "sessions-acp-model-display-red",
       { agentId: "copilot" },
     );
@@ -218,7 +216,7 @@ describe("sessionsCommand model/modelProvider display for ACP sessions (catalog 
     useTempStateDir();
     writeAcpRuntimeMeta(ACP_SESSION_KEY);
     const store = await writeStore(
-      { [ACP_SESSION_KEY]: buildAcpBridgeSessionEntry() },
+      { [ACP_SESSION_KEY]: buildInboundAcpSessionEntry() },
       "sessions-acp-model-display-fix-shape",
       { agentId: "copilot" },
     );
@@ -244,7 +242,7 @@ describe("sessionsCommand model/modelProvider display for ACP sessions (catalog 
   it("reads ACP runtime metadata from SQLite for the display overlay", async () => {
     useTempStateDir();
     const store = await writeStore(
-      { [ACP_SESSION_KEY]: buildAcpBridgeSessionEntry() },
+      { [ACP_SESSION_KEY]: buildInboundAcpSessionEntry() },
       "sessions-acp-model-display-sqlite",
       { agentId: "copilot" },
     );
@@ -263,7 +261,7 @@ describe("sessionsCommand model/modelProvider display for ACP sessions (catalog 
     const rawStoreKey = "acp:binding:discord:default:feedface";
     const canonicalAcpKey = "agent:copilot:acp:binding:discord:default:feedface";
     const store = await writeStore(
-      { [rawStoreKey]: buildAcpBridgeSessionEntry() },
+      { [rawStoreKey]: buildInboundAcpSessionEntry() },
       "sessions-acp-model-display-canonical",
       { agentId: "copilot" },
     );
@@ -277,31 +275,30 @@ describe("sessionsCommand model/modelProvider display for ACP sessions (catalog 
     expect(row?.modelProvider).toBe("acpx");
   });
 
-  it("GREEN control: ACP bridge session (ACP key, no ACP metadata) reports the configured model", async () => {
-    // ACP bridge sessions (translator.ts) use ACP-shaped keys but never
-    // persist SessionAcpMeta. They run the normal configured model
-    // and must NOT receive the acpx sentinel. This guards against a regression
-    // where key-shape-only detection would misreport bridge sessions.
-    const ACP_BRIDGE_SESSION_KEY = "agent:copilot:acp:bridge-session-1";
+  it("GREEN control: inbound ACP session without harness metadata reports the configured model", async () => {
+    // Inbound ACP sessions can use ACP-shaped keys without SessionAcpMeta.
+    // They run the normal configured model and must not receive the acpx
+    // sentinel. This guards against key-shape-only misclassification.
+    const INBOUND_ACP_SESSION_KEY = "agent:copilot:acp:inbound-session-1";
     const store = await writeStore(
-      { [ACP_BRIDGE_SESSION_KEY]: buildAcpBridgeSessionEntry() },
-      "sessions-acp-model-display-bridge-control",
+      { [INBOUND_ACP_SESSION_KEY]: buildInboundAcpSessionEntry() },
+      "sessions-acp-model-display-inbound-control",
       { agentId: "copilot" },
     );
 
     const payload = await runSessionsJson<SessionsJsonPayload>(sessionsCommand, store);
-    const row = payload.sessions?.find((entry) => entry.key === ACP_BRIDGE_SESSION_KEY);
+    const row = payload.sessions?.find((entry) => entry.key === INBOUND_ACP_SESSION_KEY);
 
     expect(row).toBeDefined();
     expect(
       row?.model,
-      `ACP bridge session ${ACP_BRIDGE_SESSION_KEY} has an ACP-shaped key but no ACP metadata — ` +
+      `Inbound ACP session ${INBOUND_ACP_SESSION_KEY} has an ACP-shaped key but no harness metadata — ` +
         `it ran the configured model. Got model="${row?.model}"; expected "${AGENT_CONFIGURED_MODEL}". ` +
         `The overlay must gate on persisted ACP metadata, not key shape alone.`,
     ).toBe(AGENT_CONFIGURED_MODEL);
     expect(
       row?.modelProvider,
-      `ACP bridge session ${ACP_BRIDGE_SESSION_KEY} should report the configured provider. ` +
+      `Inbound ACP session ${INBOUND_ACP_SESSION_KEY} should report the configured provider. ` +
         `Got "${row?.modelProvider}"; expected "${AGENT_CONFIGURED_PROVIDER}".`,
     ).toBe(AGENT_CONFIGURED_PROVIDER);
   });

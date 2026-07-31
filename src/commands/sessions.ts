@@ -57,9 +57,9 @@ type SessionRow = SessionDisplayRow & {
   runtimeLabel: string;
   /**
    * True only when the session has persisted ACP runtime metadata. Key-shape
-   * alone is not sufficient because ACP bridge sessions (translator.ts) may
-   * use ACP-shaped keys without ever writing `SessionAcpMeta` — those use the
-   * normal configured model and must not be overlaid with the acpx sentinel.
+   * alone is not sufficient because inbound `openclaw acp` sessions can use
+   * ACP-shaped keys without writing outbound-harness `SessionAcpMeta`. Those
+   * use the normal configured model and must not receive the acpx sentinel.
    */
   acpRuntime: boolean;
 };
@@ -84,8 +84,8 @@ const formatKTokens = (value: number) => `${(value / 1000).toFixed(value >= 10_0
  * model: "<agentId>-acp" }` so the listing clearly signals "ACP runtime" and
  * does not mislead operators into thinking the configured model ran.
  *
- * Key-shape alone is not sufficient: ACP bridge sessions (translator.ts) also
- * use ACP-shaped keys but never persist `SessionAcpMeta` — they run the
+ * Key-shape alone is not sufficient: inbound `openclaw acp` sessions can use
+ * ACP-shaped keys without outbound-harness `SessionAcpMeta`; they run the
  * normal configured model and must not receive the sentinel. The `acpRuntime`
  * flag is set at row-construction time from SQLite metadata.
  *

@@ -52,6 +52,7 @@ export type AcpEventLedger = {
     update: SessionUpdate;
   }) => Promise<void>;
   markIncomplete: (params: { sessionId: string; sessionKey: string }) => Promise<void>;
+  deleteSession: (params: { sessionId: string }) => Promise<void>;
   readReplay: (params: { sessionId: string; sessionKey: string }) => Promise<AcpEventLedgerReplay>;
   readReplayBySessionId: (params: { sessionId: string }) => Promise<AcpEventLedgerReplay>;
   readReplayBySessionKey: (params: { sessionKey: string }) => Promise<AcpEventLedgerReplay>;
@@ -276,10 +277,10 @@ function createLedgerApi(params: {
   read: <T>(fn: () => T) => Promise<T>;
 }): AcpEventLedger {
   const buildReplay = (session: LedgerSession): AcpEventLedgerReplay => ({
-    complete: true,
+    complete: session.complete,
     sessionId: session.sessionId,
     sessionKey: session.sessionKey,
-    events: session.events.map((event) => cloneJsonValue(event)),
+    events: session.complete ? session.events.map((event) => cloneJsonValue(event)) : [],
   });
 
   return {
@@ -320,11 +321,25 @@ function createLedgerApi(params: {
       });
     },
 
+    async deleteSession(deleteParams) {
+      await params.mutate(() => {
+        delete params.state.store.sessions[deleteParams.sessionId];
+      });
+    },
+
     async readReplay(replayParams) {
       return params.read(() => {
         const session = params.state.store.sessions[replayParams.sessionId];
-        if (!session || session.sessionKey !== replayParams.sessionKey || !session.complete) {
+        if (!session) {
           return { complete: false, events: [] };
+        }
+        if (session.sessionKey !== replayParams.sessionKey) {
+          return {
+            complete: false,
+            sessionId: session.sessionId,
+            sessionKey: session.sessionKey,
+            events: [],
+          };
         }
         return buildReplay(session);
       });
@@ -333,7 +348,7 @@ function createLedgerApi(params: {
     async readReplayBySessionId(replayParams) {
       return params.read(() => {
         const session = params.state.store.sessions[replayParams.sessionId];
-        if (!session || !session.complete) {
+        if (!session) {
           return { complete: false, events: [] };
         }
         return buildReplay(session);
@@ -734,14 +749,14 @@ function appendSqliteUpdate(
 }
 
 function buildSqliteReplay(session: LedgerSession | undefined): AcpEventLedgerReplay {
-  if (!session?.complete) {
+  if (!session) {
     return { complete: false, events: [] };
   }
   return {
-    complete: true,
+    complete: session.complete,
     sessionId: session.sessionId,
     sessionKey: session.sessionKey,
-    events: session.events.map((event) => cloneJsonValue(event)),
+    events: session.complete ? session.events.map((event) => cloneJsonValue(event)) : [],
   };
 }
 
@@ -795,11 +810,22 @@ export function createSqliteAcpEventLedger(
       });
     },
 
+    async deleteSession(deleteParams) {
+      mutate((db) => {
+        db.prepare("DELETE FROM acp_replay_sessions WHERE session_id = ?").run(
+          deleteParams.sessionId,
+        );
+      });
+    },
+
     async readReplay(replayParams) {
       return read((db) => {
         const session = readSqliteSessionById(db, replayParams.sessionId);
-        if (session?.sessionKey !== replayParams.sessionKey) {
+        if (!session) {
           return { complete: false, events: [] };
+        }
+        if (session.sessionKey !== replayParams.sessionKey) {
+          return buildSqliteReplay({ ...session, complete: false });
         }
         return buildSqliteReplay(session);
       });

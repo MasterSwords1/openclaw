@@ -1,9 +1,8 @@
-/** Resolves ACP request metadata into OpenClaw Gateway session keys and reset behavior. */
+/** Parses ACP request metadata and delegates session routing to the local runtime. */
 import { readBool, readString } from "@openclaw/acp-core/meta";
-import type { AcpServerOptions } from "@openclaw/acp-core/types";
-import type { GatewayClient } from "../gateway/client.js";
+import type { AcpLocalSessionRuntime } from "./local-session-runtime.js";
 
-type AcpSessionMeta = {
+export type AcpSessionMeta = {
   sessionKey?: string;
   sessionLabel?: string;
   resetSession?: boolean;
@@ -26,77 +25,28 @@ export function parseSessionMeta(meta: unknown): AcpSessionMeta {
   };
 }
 
-/** Resolves the Gateway session key for an ACP request using metadata, defaults, or fallback. */
+/** Resolves an ACP request to a canonical process-local session key. */
 export async function resolveSessionKey(params: {
   meta: AcpSessionMeta;
   fallbackKey: string;
-  gateway: GatewayClient;
-  opts: AcpServerOptions;
+  runtime: Pick<AcpLocalSessionRuntime, "resolveSessionKey">;
 }): Promise<string> {
-  const requestedLabel = params.meta.sessionLabel ?? params.opts.defaultSessionLabel;
-  const requestedKey = params.meta.sessionKey ?? params.opts.defaultSessionKey;
-  const requireExisting =
-    params.meta.requireExisting ?? params.opts.requireExistingSession ?? false;
-
-  if (params.meta.sessionLabel) {
-    const resolved = await params.gateway.request<{ ok: true; key: string }>("sessions.resolve", {
-      label: params.meta.sessionLabel,
-    });
-    if (!resolved?.key) {
-      throw new Error(`Unable to resolve session label: ${params.meta.sessionLabel}`);
-    }
-    return resolved.key;
-  }
-
-  if (params.meta.sessionKey) {
-    if (!requireExisting) {
-      return params.meta.sessionKey;
-    }
-    const resolved = await params.gateway.request<{ ok: true; key: string }>("sessions.resolve", {
-      key: params.meta.sessionKey,
-    });
-    if (!resolved?.key) {
-      throw new Error(`Session key not found: ${params.meta.sessionKey}`);
-    }
-    return resolved.key;
-  }
-
-  if (requestedLabel) {
-    const resolved = await params.gateway.request<{ ok: true; key: string }>("sessions.resolve", {
-      label: requestedLabel,
-    });
-    if (!resolved?.key) {
-      throw new Error(`Unable to resolve session label: ${requestedLabel}`);
-    }
-    return resolved.key;
-  }
-
-  if (requestedKey) {
-    if (!requireExisting) {
-      return requestedKey;
-    }
-    const resolved = await params.gateway.request<{ ok: true; key: string }>("sessions.resolve", {
-      key: requestedKey,
-    });
-    if (!resolved?.key) {
-      throw new Error(`Session key not found: ${requestedKey}`);
-    }
-    return resolved.key;
-  }
-
-  return params.fallbackKey;
+  return await params.runtime.resolveSessionKey({
+    meta: params.meta,
+    fallbackKey: params.fallbackKey,
+  });
 }
 
-/** Sends a Gateway session reset when ACP metadata or server defaults request it. */
+/** Applies the optional ACP session reset through the process-local runtime. */
 export async function resetSessionIfNeeded(params: {
   meta: AcpSessionMeta;
   sessionKey: string;
-  gateway: GatewayClient;
-  opts: AcpServerOptions;
+  cwd: string;
+  runtime: Pick<AcpLocalSessionRuntime, "resetSessionIfNeeded">;
 }): Promise<void> {
-  const resetSession = params.meta.resetSession ?? params.opts.resetSession ?? false;
-  if (!resetSession) {
-    return;
-  }
-  await params.gateway.request("sessions.reset", { key: params.sessionKey });
+  await params.runtime.resetSessionIfNeeded({
+    meta: params.meta,
+    sessionKey: params.sessionKey,
+    cwd: params.cwd,
+  });
 }

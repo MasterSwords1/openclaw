@@ -6,17 +6,11 @@ import { normalizeAcpProvenanceMode } from "../acp/types.js";
 import { formatErrorMessage } from "../infra/errors.js";
 import { defaultRuntime } from "../runtime.js";
 import { inheritOptionFromParent } from "./command-options.js";
-import { resolveGatewayAuthOptions } from "./gateway-secret-options.js";
 
 export function registerAcpCli(program: Command) {
-  const acp = program.command("acp").description("Run an ACP bridge backed by the Gateway");
+  const acp = program.command("acp").description("Run OpenClaw as a self-contained ACP agent");
 
   acp
-    .option("--url <url>", "Gateway WebSocket URL (defaults to gateway.remote.url when configured)")
-    .option("--token <token>", "Gateway token (if required)")
-    .option("--token-file <path>", "Read gateway token from file")
-    .option("--password <password>", "Gateway password (if required)")
-    .option("--password-file <path>", "Read gateway password from file")
     .option("--session <key>", "Default session key (e.g. agent:main:main)")
     .option("--session-label <label>", "Default session label to resolve")
     .option("--require-existing", "Fail if the session key/label does not exist", false)
@@ -30,26 +24,25 @@ export function registerAcpCli(program: Command) {
     )
     .action(async (opts) => {
       try {
-        const { gatewayToken, gatewayPassword } = resolveGatewayAuthOptions(opts);
         const provenanceMode = normalizeAcpProvenanceMode(opts.provenance as string | undefined);
         if (opts.provenance && !provenanceMode) {
           throw new Error('Invalid --provenance. Use "off", "meta", or "meta+receipt".');
         }
-        const { serveAcpGateway } = await import("../acp/server.js");
-        await serveAcpGateway({
-          gatewayUrl: opts.url as string | undefined,
-          gatewayToken,
-          gatewayPassword,
-          defaultSessionKey: opts.session as string | undefined,
-          defaultSessionLabel: opts.sessionLabel as string | undefined,
-          requireExistingSession: Boolean(opts.requireExisting),
-          resetSession: Boolean(opts.resetSession),
-          prefixCwd: opts.prefixCwd !== false,
-          provenanceMode,
-          verbose: Boolean(opts.verbose),
-        });
+        const { serveAcp } = await import("../acp/server.js");
+        await serveAcp(
+          {
+            defaultSessionKey: opts.session as string | undefined,
+            defaultSessionLabel: opts.sessionLabel as string | undefined,
+            requireExistingSession: Boolean(opts.requireExisting),
+            resetSession: Boolean(opts.resetSession),
+            prefixCwd: opts.prefixCwd !== false,
+            provenanceMode,
+            verbose: Boolean(opts.verbose),
+          },
+          { ownStateDatabase: true },
+        );
       } catch (err) {
-        defaultRuntime.error(`ACP bridge failed: ${formatErrorMessage(err)}`);
+        defaultRuntime.error(`ACP agent failed: ${formatErrorMessage(err)}`);
         defaultRuntime.exit(1);
       }
     });

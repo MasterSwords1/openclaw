@@ -9,6 +9,7 @@ function createLedger(): AcpEventLedger {
     recordUserPrompt: vi.fn(async () => {}),
     recordUpdate: vi.fn(async () => {}),
     markIncomplete: vi.fn(async () => {}),
+    deleteSession: vi.fn(async () => {}),
     readReplay: vi.fn(async () => ({ complete: true, events: [] })),
     readReplayBySessionId: vi.fn(async () => ({ complete: true, events: [] })),
     readReplayBySessionKey: vi.fn(async () => ({ complete: true, events: [] })),

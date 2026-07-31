@@ -19,48 +19,54 @@ describe("acp session manager", () => {
     store.clearAllSessionsForTest();
   });
 
-  it("tracks active runs and clears on cancel", () => {
+  it("stores per-session runtime options without run ownership", () => {
     const session = store.createSession({
       sessionKey: "acp:test",
       cwd: "/tmp",
-    });
-    const controller = new AbortController();
-    store.setActiveRun(session.sessionId, "run-1", controller);
-
-    expect(store.getSessionByRunId("run-1")?.sessionId).toBe(session.sessionId);
-
-    const cancelled = store.cancelActiveRun(session.sessionId);
-    expect(cancelled).toBe(true);
-    expect(store.getSessionByRunId("run-1")).toBeUndefined();
-  });
-
-  it("removes stale run lookup entries when rebinding an active run", () => {
-    const session = store.createSession({
-      sessionKey: "acp:rebind",
-      cwd: "/tmp",
+      runtimeOptions: { runtimeMode: "plan" },
     });
 
-    store.setActiveRun(session.sessionId, "run-old", new AbortController());
-    store.setActiveRun(session.sessionId, "run-new", new AbortController());
+    expect(session).not.toHaveProperty("activeRunId");
+    expect(session).not.toHaveProperty("abortController");
+    expect(session.runtimeOptions).toEqual({ runtimeMode: "plan" });
 
-    expect(store.getSessionByRunId("run-old")).toBeUndefined();
-    expect(store.getSessionByRunId("run-new")?.sessionId).toBe(session.sessionId);
+    session.runtimeOptions = { runtimeMode: "normal", timeoutSeconds: 30 };
+    expect(store.getSession(session.sessionId)?.runtimeOptions).toEqual({
+      runtimeMode: "normal",
+      timeoutSeconds: 30,
+    });
   });
 
-  it("deletes sessions and aborts active runs on close", () => {
+  it("deletes session bindings without owning runtime cancellation", () => {
     const session = store.createSession({
       sessionId: "close-me",
       sessionKey: "acp:close",
       cwd: "/tmp",
     });
-    const controller = new AbortController();
-    store.setActiveRun(session.sessionId, "run-close", controller);
 
     expect(store.deleteSession(session.sessionId)).toBe(true);
 
-    expect(controller.signal.aborted).toBe(true);
     expect(store.hasSession(session.sessionId)).toBe(false);
-    expect(store.getSessionByRunId("run-close")).toBeUndefined();
+  });
+
+  it("finds every public binding for a canonical session key", () => {
+    store.createSession({
+      sessionId: "first",
+      sessionKey: "agent:main:shared",
+      cwd: "/tmp",
+    });
+    store.createSession({
+      sessionId: "second",
+      sessionKey: "agent:main:shared",
+      cwd: "/tmp",
+    });
+    store.createSession({
+      sessionId: "other",
+      sessionKey: "agent:main:other",
+      cwd: "/tmp",
+    });
+
+    expect(store.getSessionIdsByKey("agent:main:shared")).toEqual(["first", "second"]);
   });
 
   it("reports false when deleting a missing session", () => {
@@ -122,22 +128,16 @@ describe("acp session manager", () => {
       now,
     });
     try {
-      for (let index = 0; index < 5_000; index += 1) {
-        const session = boundedStore.createSession({
+      for (let index = 0; index < 5_001; index += 1) {
+        boundedStore.createSession({
           sessionId: `session-${index}`,
           sessionKey: `acp:${index}`,
           cwd: "/tmp",
         });
-        boundedStore.setActiveRun(session.sessionId, `run-${index}`, new AbortController());
       }
 
-      expect(() =>
-        boundedStore.createSession({
-          sessionId: "overflow",
-          sessionKey: "acp:overflow",
-          cwd: "/tmp",
-        }),
-      ).toThrow(/session limit reached/i);
+      expect(boundedStore.hasSession("session-0")).toBe(false);
+      expect(boundedStore.hasSession("session-5000")).toBe(true);
     } finally {
       boundedStore.clearAllSessionsForTest();
     }
@@ -170,7 +170,7 @@ describe("acp session manager", () => {
     }
   });
 
-  it("uses soft-cap eviction for the oldest idle session when full", () => {
+  it("uses soft-cap eviction for the oldest session when full", () => {
     const boundedStore = createInMemorySessionStore({
       maxSessions: 2,
       idleTtlMs: 24 * 60 * 60 * 1_000,
@@ -188,8 +188,6 @@ describe("acp session manager", () => {
         sessionKey: "acp:second",
         cwd: "/tmp",
       });
-      const controller = new AbortController();
-      boundedStore.setActiveRun(second.sessionId, "run-2", controller);
       advance(100);
 
       const third = boundedStore.createSession({
@@ -207,7 +205,7 @@ describe("acp session manager", () => {
     }
   });
 
-  it("rejects when full and no session is evictable", () => {
+  it("evicts the oldest binding when the cap is full", () => {
     const boundedStore = createInMemorySessionStore({
       maxSessions: 1,
       idleTtlMs: 24 * 60 * 60 * 1_000,
@@ -219,15 +217,79 @@ describe("acp session manager", () => {
         sessionKey: "acp:only",
         cwd: "/tmp",
       });
-      boundedStore.setActiveRun(only.sessionId, "run-only", new AbortController());
+
+      const next = boundedStore.createSession({
+        sessionId: "next",
+        sessionKey: "acp:next",
+        cwd: "/tmp",
+      });
+
+      expect(boundedStore.hasSession(only.sessionId)).toBe(false);
+      expect(boundedStore.hasSession(next.sessionId)).toBe(true);
+    } finally {
+      boundedStore.clearAllSessionsForTest();
+    }
+  });
+
+  it("never reaps or evicts a protected session binding", () => {
+    const boundedStore = createInMemorySessionStore({
+      maxSessions: 2,
+      idleTtlMs: 1_000,
+      now,
+    });
+    try {
+      boundedStore.createSession({
+        sessionId: "active",
+        sessionKey: "acp:active",
+        cwd: "/tmp",
+      });
+      advance(2_000);
+      boundedStore.createSession({
+        sessionId: "idle",
+        sessionKey: "acp:idle",
+        cwd: "/tmp",
+        protectedSessionIds: new Set(["active"]),
+      });
+      advance(1);
+      boundedStore.createSession({
+        sessionId: "next",
+        sessionKey: "acp:next",
+        cwd: "/tmp",
+        protectedSessionIds: new Set(["active"]),
+      });
+
+      expect(boundedStore.hasSession("active")).toBe(true);
+      expect(boundedStore.hasSession("idle")).toBe(false);
+      expect(boundedStore.hasSession("next")).toBe(true);
+    } finally {
+      boundedStore.clearAllSessionsForTest();
+    }
+  });
+
+  it("rejects a new binding when every retained session is protected", () => {
+    const boundedStore = createInMemorySessionStore({
+      maxSessions: 1,
+      idleTtlMs: 1_000,
+      now,
+    });
+    try {
+      boundedStore.createSession({
+        sessionId: "active",
+        sessionKey: "acp:active",
+        cwd: "/tmp",
+      });
+      advance(2_000);
 
       expect(() =>
         boundedStore.createSession({
           sessionId: "next",
           sessionKey: "acp:next",
           cwd: "/tmp",
+          protectedSessionIds: new Set(["active"]),
         }),
       ).toThrow(/session limit reached/i);
+      expect(boundedStore.hasSession("active")).toBe(true);
+      expect(boundedStore.hasSession("next")).toBe(false);
     } finally {
       boundedStore.clearAllSessionsForTest();
     }

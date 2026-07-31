@@ -1,10 +1,10 @@
-/** Gateway transcript message shape accepted by ACP replay extraction. */
-export type GatewayTranscriptMessage = {
+/** Storage-neutral transcript message shape accepted by ACP replay extraction. */
+export type AcpTranscriptMessage = {
   role?: unknown;
   content?: unknown;
 };
 
-export type GatewayChatContentBlock = {
+export type AcpTranscriptContentBlock = {
   type?: string;
   text?: string;
   thinking?: string;
@@ -15,7 +15,7 @@ type ReplayChunk = {
   text: string;
 };
 
-export function extractReplayChunks(message: GatewayTranscriptMessage): ReplayChunk[] {
+export function extractReplayChunks(message: AcpTranscriptMessage): ReplayChunk[] {
   const role = typeof message.role === "string" ? message.role : "";
   if (role !== "user" && role !== "assistant") {
     return [];
@@ -39,7 +39,7 @@ export function extractReplayChunks(message: GatewayTranscriptMessage): ReplayCh
     if (!block || typeof block !== "object" || Array.isArray(block)) {
       continue;
     }
-    const typedBlock = block as GatewayChatContentBlock;
+    const typedBlock = block as AcpTranscriptContentBlock;
     if (typedBlock.type === "text" && typeof typedBlock.text === "string" && typedBlock.text) {
       replayChunks.push({
         sessionUpdate: role === "user" ? "user_message_chunk" : "agent_message_chunk",

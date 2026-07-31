@@ -1,57 +1,77 @@
-/** Tests ACP metadata session-key resolution against Gateway defaults and lookups. */
+/** Tests ACP metadata parsing and local session-runtime delegation. */
 import { describe, expect, it, vi } from "vitest";
-import type { GatewayClient } from "../gateway/client.js";
-import { parseSessionMeta, resolveSessionKey } from "./session-mapper.js";
+import type { AcpLocalSessionRuntime } from "./local-session-runtime.js";
+import { parseSessionMeta, resetSessionIfNeeded, resolveSessionKey } from "./session-mapper.js";
 
-function createGateway(resolveLabelKey = "agent:main:label"): {
-  gateway: GatewayClient;
-  request: ReturnType<typeof vi.fn>;
+function createRuntime(): {
+  runtime: Pick<AcpLocalSessionRuntime, "resetSessionIfNeeded" | "resolveSessionKey">;
+  reset: ReturnType<typeof vi.fn>;
+  resolve: ReturnType<typeof vi.fn>;
 } {
-  const request = vi.fn(async (method: string, params: Record<string, unknown>) => {
-    if (method === "sessions.resolve" && "label" in params) {
-      return { ok: true, key: resolveLabelKey };
-    }
-    if (method === "sessions.resolve" && "key" in params) {
-      return { ok: true, key: params.key as string };
-    }
-    return { ok: true };
-  });
-
+  const resolve = vi.fn(async () => "agent:main:resolved");
+  const reset = vi.fn(async () => undefined);
   return {
-    gateway: { request } as unknown as GatewayClient,
-    request,
+    runtime: {
+      resolveSessionKey: resolve,
+      resetSessionIfNeeded: reset,
+    },
+    reset,
+    resolve,
   };
 }
 
 describe("acp session mapper", () => {
-  it("prefers explicit sessionLabel over sessionKey", async () => {
-    const { gateway, request } = createGateway();
-    const meta = parseSessionMeta({ sessionLabel: "support", sessionKey: "agent:main:main" });
-
-    const key = await resolveSessionKey({
-      meta,
-      fallbackKey: "acp:fallback",
-      gateway,
-      opts: {},
+  it("parses supported routing aliases", () => {
+    expect(
+      parseSessionMeta({
+        session: "agent:main:work",
+        label: "support",
+        reset: true,
+        requireExistingSession: true,
+        prefixCwd: false,
+      }),
+    ).toEqual({
+      sessionKey: "agent:main:work",
+      sessionLabel: "support",
+      resetSession: true,
+      requireExisting: true,
+      prefixCwd: false,
     });
-
-    expect(key).toBe("agent:main:label");
-    expect(request).toHaveBeenCalledTimes(1);
-    expect(request).toHaveBeenCalledWith("sessions.resolve", { label: "support" });
   });
 
-  it("lets meta sessionKey override default label", async () => {
-    const { gateway, request } = createGateway();
-    const meta = parseSessionMeta({ sessionKey: "agent:main:override" });
+  it("delegates resolution without a Gateway-shaped request facade", async () => {
+    const { runtime, resolve } = createRuntime();
+    const meta = parseSessionMeta({ sessionLabel: "support" });
 
-    const key = await resolveSessionKey({
-      meta,
+    await expect(
+      resolveSessionKey({
+        meta,
+        fallbackKey: "acp:fallback",
+        runtime,
+      }),
+    ).resolves.toBe("agent:main:resolved");
+
+    expect(resolve).toHaveBeenCalledWith({
+      meta: { sessionLabel: "support" },
       fallbackKey: "acp:fallback",
-      gateway,
-      opts: { defaultSessionLabel: "default-label" },
+    });
+  });
+
+  it("delegates optional reset behavior to the local runtime", async () => {
+    const { runtime, reset } = createRuntime();
+    const meta = parseSessionMeta({ resetSession: true });
+
+    await resetSessionIfNeeded({
+      meta,
+      sessionKey: "agent:main:work",
+      cwd: "/workspace/project",
+      runtime,
     });
 
-    expect(key).toBe("agent:main:override");
-    expect(request).not.toHaveBeenCalled();
+    expect(reset).toHaveBeenCalledWith({
+      meta: { resetSession: true },
+      sessionKey: "agent:main:work",
+      cwd: "/workspace/project",
+    });
   });
 });

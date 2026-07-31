@@ -76,7 +76,12 @@ describe("ACP event ledger", () => {
 
     await expect(
       ledger.readReplay({ sessionId: "session-1", sessionKey: "agent:main:work" }),
-    ).resolves.toEqual({ complete: false, events: [] });
+    ).resolves.toEqual({
+      complete: false,
+      sessionId: "session-1",
+      sessionKey: "agent:main:work",
+      events: [],
+    });
   });
 
   it("falls back for non-finite event retention options", async () => {
@@ -179,7 +184,12 @@ describe("ACP event ledger", () => {
 
       await expect(
         ledger.readReplay({ sessionId: "session-1", sessionKey: "agent:main:work" }),
-      ).resolves.toEqual({ complete: false, events: [] });
+      ).resolves.toEqual({
+        complete: false,
+        sessionId: "session-1",
+        sessionKey: "agent:main:work",
+        events: [],
+      });
     });
   });
 
@@ -390,7 +400,12 @@ describe("ACP event ledger", () => {
 
     await expect(
       ledger.readReplay({ sessionId: "session-1", sessionKey: "acp:old-session" }),
-    ).resolves.toEqual({ complete: false, events: [] });
+    ).resolves.toEqual({
+      complete: false,
+      sessionId: "session-1",
+      sessionKey: "acp:new-session",
+      events: [],
+    });
     const replay = await ledger.readReplayBySessionId({ sessionId: "session-1" });
     expect(replay.complete).toBe(true);
     expect(replay.sessionKey).toBe("acp:new-session");
@@ -418,6 +433,11 @@ describe("ACP event ledger", () => {
 
     await expect(
       ledger.readReplay({ sessionId: "session-1", sessionKey: "agent:main:work" }),
-    ).resolves.toEqual({ complete: false, events: [] });
+    ).resolves.toEqual({
+      complete: false,
+      sessionId: "session-1",
+      sessionKey: "agent:main:work",
+      events: [],
+    });
   });
 });

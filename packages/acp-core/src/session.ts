@@ -10,14 +10,12 @@ export type AcpSessionStore = {
     cwd: string;
     sessionId?: string;
     ledgerSessionId?: string;
+    runtimeOptions?: AcpSession["runtimeOptions"];
+    protectedSessionIds?: ReadonlySet<string>;
   }) => AcpSession;
   hasSession: (sessionId: string) => boolean;
   getSession: (sessionId: string) => AcpSession | undefined;
-  getSessionByRunId: (runId: string) => AcpSession | undefined;
-  /** Binds an active runtime run to a session so cancel/close can abort it later. */
-  setActiveRun: (sessionId: string, runId: string, abortController: AbortController) => void;
-  clearActiveRun: (sessionId: string) => void;
-  cancelActiveRun: (sessionId: string) => boolean;
+  getSessionIdsByKey: (sessionKey: string) => string[];
   deleteSession: (sessionId: string) => boolean;
   clearAllSessionsForTest: () => void;
 };
@@ -37,46 +35,30 @@ export function createInMemorySessionStore(options: AcpSessionStoreOptions = {})
   const idleTtlMs = resolveIntegerOption(options.idleTtlMs, DEFAULT_IDLE_TTL_MS, { min: 1_000 });
   const now = options.now ?? Date.now;
   const sessions = new Map<string, AcpSession>();
-  const runIdToSessionId = new Map<string, string>();
 
   const touchSession = (session: AcpSession, nowMs: number) => {
     session.lastTouchedAt = nowMs;
   };
 
   const removeSession = (sessionId: string) => {
-    const session = sessions.get(sessionId);
-    if (!session) {
-      return false;
-    }
-    if (session.activeRunId) {
-      runIdToSessionId.delete(session.activeRunId);
-    }
-    session.abortController?.abort();
-    sessions.delete(sessionId);
-    return true;
+    return sessions.delete(sessionId);
   };
 
-  const reapIdleSessions = (nowMs: number) => {
+  const reapIdleSessions = (nowMs: number, protectedSessionIds: ReadonlySet<string>) => {
     const idleBefore = nowMs - idleTtlMs;
     for (const [sessionId, session] of sessions.entries()) {
-      if (session.activeRunId || session.abortController) {
-        continue;
-      }
-      if (session.lastTouchedAt > idleBefore) {
+      if (session.lastTouchedAt > idleBefore || protectedSessionIds.has(sessionId)) {
         continue;
       }
       removeSession(sessionId);
     }
   };
 
-  const evictOldestIdleSession = () => {
+  const evictOldestSession = (protectedSessionIds: ReadonlySet<string>) => {
     let oldestSessionId: string | null = null;
     let oldestLastTouchedAt = Number.POSITIVE_INFINITY;
     for (const [sessionId, session] of sessions.entries()) {
-      if (session.activeRunId || session.abortController) {
-        continue;
-      }
-      if (session.lastTouchedAt >= oldestLastTouchedAt) {
+      if (protectedSessionIds.has(sessionId) || session.lastTouchedAt >= oldestLastTouchedAt) {
         continue;
       }
       oldestLastTouchedAt = session.lastTouchedAt;
@@ -90,6 +72,7 @@ export function createInMemorySessionStore(options: AcpSessionStoreOptions = {})
 
   const createSession: AcpSessionStore["createSession"] = (params) => {
     const nowMs = now();
+    const protectedSessionIds = params.protectedSessionIds ?? new Set<string>();
     const sessionId = params.sessionId ?? randomUUID();
     const existingSession = sessions.get(sessionId);
     if (existingSession) {
@@ -97,16 +80,19 @@ export function createInMemorySessionStore(options: AcpSessionStoreOptions = {})
       if ("ledgerSessionId" in params) {
         existingSession.ledgerSessionId = params.ledgerSessionId;
       }
+      if ("runtimeOptions" in params) {
+        existingSession.runtimeOptions = params.runtimeOptions
+          ? structuredClone(params.runtimeOptions)
+          : undefined;
+      }
       existingSession.cwd = params.cwd;
       touchSession(existingSession, nowMs);
       return existingSession;
     }
-    reapIdleSessions(nowMs);
-    // Active runs are never evicted to make cancellation ownership explicit; callers must
-    // clear/cancel them before the soft cap can make room.
-    if (sessions.size >= maxSessions && !evictOldestIdleSession()) {
+    reapIdleSessions(nowMs, protectedSessionIds);
+    if (sessions.size >= maxSessions && !evictOldestSession(protectedSessionIds)) {
       throw new Error(
-        `ACP session limit reached (max ${maxSessions}). Close idle ACP clients and retry.`,
+        `ACP session limit reached (max ${maxSessions}). Close ACP clients and retry.`,
       );
     }
     const session: AcpSession = {
@@ -116,8 +102,7 @@ export function createInMemorySessionStore(options: AcpSessionStoreOptions = {})
       cwd: params.cwd,
       createdAt: nowMs,
       lastTouchedAt: nowMs,
-      abortController: null,
-      activeRunId: null,
+      ...(params.runtimeOptions ? { runtimeOptions: structuredClone(params.runtimeOptions) } : {}),
     };
     sessions.set(sessionId, session);
     return session;
@@ -133,78 +118,23 @@ export function createInMemorySessionStore(options: AcpSessionStoreOptions = {})
     return session;
   };
 
-  const getSessionByRunId: AcpSessionStore["getSessionByRunId"] = (runId) => {
-    const sessionId = runIdToSessionId.get(runId);
-    if (!sessionId) {
-      return undefined;
-    }
-    const session = sessions.get(sessionId);
-    if (session) {
-      touchSession(session, now());
-    }
-    return session;
-  };
-
-  const setActiveRun: AcpSessionStore["setActiveRun"] = (sessionId, runId, abortController) => {
-    const session = sessions.get(sessionId);
-    if (!session) {
-      return;
-    }
-    if (session.activeRunId && session.activeRunId !== runId) {
-      runIdToSessionId.delete(session.activeRunId);
-    }
-    session.activeRunId = runId;
-    session.abortController = abortController;
-    runIdToSessionId.set(runId, sessionId);
-    touchSession(session, now());
-  };
-
-  const clearActiveRun: AcpSessionStore["clearActiveRun"] = (sessionId) => {
-    const session = sessions.get(sessionId);
-    if (!session) {
-      return;
-    }
-    if (session.activeRunId) {
-      runIdToSessionId.delete(session.activeRunId);
-    }
-    session.activeRunId = null;
-    session.abortController = null;
-    touchSession(session, now());
-  };
-
-  const cancelActiveRun: AcpSessionStore["cancelActiveRun"] = (sessionId) => {
-    const session = sessions.get(sessionId);
-    if (!session?.abortController) {
-      return false;
-    }
-    session.abortController.abort();
-    if (session.activeRunId) {
-      runIdToSessionId.delete(session.activeRunId);
-    }
-    session.abortController = null;
-    session.activeRunId = null;
-    touchSession(session, now());
-    return true;
+  const getSessionIdsByKey: AcpSessionStore["getSessionIdsByKey"] = (sessionKey) => {
+    return [...sessions.values()]
+      .filter((session) => session.sessionKey === sessionKey)
+      .map((session) => session.sessionId);
   };
 
   const deleteSession: AcpSessionStore["deleteSession"] = (sessionId) => removeSession(sessionId);
 
   const clearAllSessionsForTest: AcpSessionStore["clearAllSessionsForTest"] = () => {
-    for (const session of sessions.values()) {
-      session.abortController?.abort();
-    }
     sessions.clear();
-    runIdToSessionId.clear();
   };
 
   return {
     createSession,
     hasSession,
     getSession,
-    getSessionByRunId,
-    setActiveRun,
-    clearActiveRun,
-    cancelActiveRun,
+    getSessionIdsByKey,
     deleteSession,
     clearAllSessionsForTest,
   };

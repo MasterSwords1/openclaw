@@ -8,9 +8,9 @@ import { timestampMsToIsoString } from "@openclaw/normalization-core/number-coer
 import {
   normalizeFastMode,
   normalizeOptionalString,
+  type FastMode,
 } from "@openclaw/normalization-core/string-coerce";
 import { BASE_THINKING_LEVELS } from "../auto-reply/thinking.shared.js";
-import type { GatewaySessionRow } from "../gateway/session-utils.js";
 
 /** ACP config option ids exposed to compatible ACP clients. */
 export const ACP_THOUGHT_LEVEL_CONFIG_ID = "thought_level";
@@ -23,38 +23,38 @@ export const ACP_ELEVATED_LEVEL_CONFIG_ID = "elevated_level";
 export const ACP_TIMEOUT_CONFIG_ID = "timeout";
 export const ACP_TIMEOUT_SECONDS_CONFIG_ID = "timeout_seconds";
 
-/** Gateway session fields needed to build ACP session presentation state. */
-export type GatewaySessionPresentationRow = Pick<
-  GatewaySessionRow,
-  | "key"
-  | "kind"
-  | "channel"
-  | "parentSessionKey"
-  | "spawnedBy"
-  | "spawnDepth"
-  | "subagentRole"
-  | "subagentControlScope"
-  | "spawnedWorkspaceDir"
-  | "spawnedCwd"
-  | "displayName"
-  | "label"
-  | "derivedTitle"
-  | "updatedAt"
-  | "thinkingLevel"
-  | "fastMode"
-  | "effectiveFastMode"
-  | "modelProvider"
-  | "model"
-  | "thinkingLevels"
-  | "verboseLevel"
-  | "traceLevel"
-  | "reasoningLevel"
-  | "responseUsage"
-  | "elevatedLevel"
-  | "totalTokens"
-  | "totalTokensFresh"
-  | "contextTokens"
->;
+/** Storage-neutral session fields needed to build ACP presentation state. */
+export type AcpSessionPresentationRow = {
+  key?: string;
+  kind?: string;
+  channel?: string;
+  parentSessionKey?: string;
+  spawnedBy?: string;
+  spawnDepth?: number;
+  subagentRole?: string;
+  subagentControlScope?: string;
+  spawnedWorkspaceDir?: string;
+  spawnedCwd?: string;
+  displayName?: string;
+  label?: string;
+  derivedTitle?: string;
+  updatedAt?: number;
+  thinkingLevel?: string;
+  fastMode?: FastMode;
+  effectiveFastMode?: FastMode;
+  modelProvider?: string;
+  model?: string;
+  thinkingLevels?: Array<{ id: string; name?: string }>;
+  verboseLevel?: string;
+  traceLevel?: string;
+  reasoningLevel?: string;
+  responseUsage?: string | null;
+  elevatedLevel?: string;
+  timeoutSeconds?: number;
+  totalTokens?: number;
+  totalTokensFresh?: boolean;
+  contextTokens?: number;
+};
 
 /** ACP session controls and modes shown to the client. */
 type SessionPresentation = {
@@ -94,7 +94,7 @@ function formatThinkingLevelName(level: string): string {
 
 function buildThinkingModeDescription(level: string): string | undefined {
   if (level === "adaptive") {
-    return "Use the Gateway session default thought level.";
+    return "Use the session default thought level.";
   }
   return undefined;
 }
@@ -131,8 +131,8 @@ function buildSelectConfigOption(params: {
 }
 
 export function buildSessionPresentation(params: {
-  row?: GatewaySessionPresentationRow;
-  overrides?: Partial<GatewaySessionPresentationRow>;
+  row?: AcpSessionPresentationRow;
+  overrides?: Partial<AcpSessionPresentationRow>;
 }): SessionPresentation {
   const row = {
     ...params.row,
@@ -143,6 +143,16 @@ export function buildSessionPresentation(params: {
   ];
   const currentModeId = normalizeOptionalString(row.thinkingLevel) || "adaptive";
   const currentFastMode = normalizeFastMode(row.effectiveFastMode ?? row.fastMode) ?? false;
+  const currentTimeout =
+    typeof row.timeoutSeconds === "number" &&
+    Number.isFinite(row.timeoutSeconds) &&
+    row.timeoutSeconds >= 0
+      ? String(row.timeoutSeconds)
+      : "inherit";
+  const timeoutValues = ["inherit", "30", "60", "120", "300", "600"];
+  if (!timeoutValues.includes(currentTimeout)) {
+    timeoutValues.push(currentTimeout);
+  }
   if (!availableLevelIds.includes(currentModeId)) {
     availableLevelIds.push(currentModeId);
   }
@@ -161,15 +171,14 @@ export function buildSessionPresentation(params: {
       id: ACP_THOUGHT_LEVEL_CONFIG_ID,
       name: "Thought level",
       category: "thought_level",
-      description:
-        "Controls how much deliberate reasoning OpenClaw requests from the Gateway model.",
+      description: "Controls how much deliberate reasoning OpenClaw requests from the model.",
       currentValue: currentModeId,
       values: availableLevelIds,
     }),
     buildSelectConfigOption({
       id: ACP_FAST_MODE_CONFIG_ID,
       name: "Fast mode",
-      description: "Controls whether OpenAI sessions use the Gateway fast-mode profile.",
+      description: "Controls whether OpenAI sessions use the fast-mode profile.",
       currentValue: currentFastMode === "auto" ? "auto" : currentFastMode ? "on" : "off",
       values: ["off", "auto", "on"],
     }),
@@ -210,13 +219,26 @@ export function buildSessionPresentation(params: {
       currentValue: normalizeOptionalString(row.elevatedLevel) || "off",
       values: ["off", "on", "ask", "full"],
     }),
+    {
+      type: "select",
+      id: ACP_TIMEOUT_SECONDS_CONFIG_ID,
+      name: "Turn timeout",
+      category: "_openclaw_runtime",
+      description:
+        "Controls the maximum runtime for one ACP turn. Inherit uses the OpenClaw default.",
+      currentValue: currentTimeout,
+      options: timeoutValues.map((value) => ({
+        value,
+        name: value === "inherit" ? "Inherit" : `${value}s`,
+      })),
+    },
   ];
 
   return { configOptions, modes };
 }
 
 export function buildSessionMetadata(params: {
-  row?: GatewaySessionPresentationRow;
+  row?: AcpSessionPresentationRow;
   sessionKey: string;
 }): SessionMetadata {
   const title =
@@ -238,7 +260,7 @@ export function buildSessionMetadata(params: {
 }
 
 export function buildSessionUsageSnapshot(
-  row?: GatewaySessionPresentationRow,
+  row?: AcpSessionPresentationRow,
 ): SessionUsageSnapshot | undefined {
   const totalTokens = row?.totalTokens;
   const contextTokens = row?.contextTokens;

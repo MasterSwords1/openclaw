@@ -80,6 +80,19 @@ export class AcpTranslatorSessionUpdates {
     }
   }
 
+  async deleteLedgerSession(sessionId: string): Promise<void> {
+    await this.enqueueLedgerMutation(sessionId, async () => {
+      if (this.stopped) {
+        return;
+      }
+      try {
+        await this.options.eventLedger.deleteSession({ sessionId });
+      } catch (err) {
+        this.options.log(`event ledger session delete failed for ${sessionId}: ${String(err)}`);
+      }
+    });
+  }
+
   async readLedgerReplayBySessionId(sessionId: string): Promise<AcpEventLedgerReplay> {
     if (this.stopped) {
       return { complete: false, events: [] };
