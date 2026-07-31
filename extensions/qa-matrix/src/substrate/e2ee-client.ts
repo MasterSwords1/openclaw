@@ -322,11 +322,6 @@ async function prepareMatrixQaE2eeStorage(params: {
   await fs.mkdir(storage.rootDir, { recursive: true });
   await fs.mkdir(storage.accountDir, { recursive: true });
   await fs.mkdir(path.dirname(storage.storagePath), { recursive: true });
-  await fs.writeFile(storage.idbSnapshotPath, "[]\n", { flag: "wx" }).catch((error: unknown) => {
-    if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
-      throw error;
-    }
-  });
   return storage;
 }
 
@@ -583,6 +578,7 @@ export const testing = {
   MATRIX_QA_E2EE_SYNC_FILTER,
   buildMatrixQaE2eeStoragePaths,
   findMatrixQaObservedEventMatch,
+  prepareMatrixQaE2eeStorage,
   shouldRecordMatrixQaObservedEventUpdate,
 };
 export { testing as __testing };
