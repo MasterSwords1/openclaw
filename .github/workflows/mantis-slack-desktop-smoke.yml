@@ -47,6 +47,14 @@ on:
         description: Optional existing Crabbox desktop/browser lease id or slug to reuse
         required: false
         type: string
+      operator_ssh_cidr:
+        description: Optional temporary operator IPv4 /32 allowed to reach a newly created lease
+        required: false
+        type: string
+      operator_ssh_public_key_b64:
+        description: Optional base64-encoded one-time Ed25519 public key for a kept lease
+        required: false
+        type: string
       hydrate_mode:
         description: Remote workspace hydrate mode
         required: false
@@ -241,6 +249,7 @@ jobs:
           CRABBOX_LEASE_ID: ${{ inputs.crabbox_lease_id }}
           CRABBOX_PROVIDER: ${{ inputs.crabbox_provider }}
           CRABBOX_MARKET: ${{ inputs.crabbox_market }}
+          OPERATOR_SSH_CIDR: ${{ inputs.operator_ssh_cidr }}
           KEEP_VM: ${{ inputs.keep_vm }}
           HYDRATE_MODE: ${{ inputs.hydrate_mode }}
           SCENARIO_ID: ${{ inputs.scenario_id }}
@@ -292,7 +301,21 @@ jobs:
               echo "Could not resolve GitHub runner public IPv4 for AWS SSH ingress." >&2
               exit 1
             fi
-            export CRABBOX_AWS_SSH_CIDRS="${runner_ip}/32"
+            operator_ssh_cidr="${OPERATOR_SSH_CIDR:-}"
+            if [[ -n "$operator_ssh_cidr" && ! "$operator_ssh_cidr" =~ ^(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})/32$ ]]; then
+              echo "operator_ssh_cidr must be an IPv4 /32." >&2
+              exit 1
+            fi
+            if [[ -n "$operator_ssh_cidr" ]]; then
+              IFS=./ read -r -a operator_ip_octets <<<"$operator_ssh_cidr"
+              for octet in "${operator_ip_octets[@]:0:4}"; do
+                if ((10#$octet > 255)); then
+                  echo "operator_ssh_cidr contains an invalid IPv4 octet." >&2
+                  exit 1
+                fi
+              done
+            fi
+            export CRABBOX_AWS_SSH_CIDRS="${runner_ip}/32${operator_ssh_cidr:+,$operator_ssh_cidr}"
             echo "Using AWS SSH CIDR ${CRABBOX_AWS_SSH_CIDRS}"
           fi
 
@@ -475,6 +498,45 @@ jobs:
             echo "Slack desktop smoke exited with $mantis_exit after reporting status $status." >&2
             exit "$mantis_exit"
           fi
+
+      - name: Authorize temporary operator SSH key
+        if: ${{ always() && inputs.keep_vm && inputs.operator_ssh_public_key_b64 != '' && steps.run_mantis.outputs.output_dir != '' }}
+        env:
+          CRABBOX_COORDINATOR: ${{ secrets.CRABBOX_COORDINATOR }}
+          CRABBOX_COORDINATOR_TOKEN: ${{ secrets.CRABBOX_COORDINATOR_TOKEN }}
+          OPENCLAW_QA_MANTIS_CRABBOX_COORDINATOR: ${{ secrets.OPENCLAW_QA_MANTIS_CRABBOX_COORDINATOR }}
+          OPENCLAW_QA_MANTIS_CRABBOX_COORDINATOR_TOKEN: ${{ secrets.OPENCLAW_QA_MANTIS_CRABBOX_COORDINATOR_TOKEN }}
+          CRABBOX_ACCESS_CLIENT_ID: ${{ secrets.CRABBOX_ACCESS_CLIENT_ID }}
+          CRABBOX_ACCESS_CLIENT_SECRET: ${{ secrets.CRABBOX_ACCESS_CLIENT_SECRET }}
+          CRABBOX_PROVIDER: ${{ inputs.crabbox_provider }}
+          MANTIS_OUTPUT_DIR: ${{ steps.run_mantis.outputs.output_dir }}
+          OPERATOR_SSH_PUBLIC_KEY_B64: ${{ inputs.operator_ssh_public_key_b64 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          CRABBOX_COORDINATOR="${CRABBOX_COORDINATOR:-${OPENCLAW_QA_MANTIS_CRABBOX_COORDINATOR:-}}"
+          CRABBOX_COORDINATOR_TOKEN="${CRABBOX_COORDINATOR_TOKEN:-${OPENCLAW_QA_MANTIS_CRABBOX_COORDINATOR_TOKEN:-}}"
+          export CRABBOX_COORDINATOR CRABBOX_COORDINATOR_TOKEN
+
+          summary_path="$MANTIS_OUTPUT_DIR/mantis-slack-desktop-smoke-summary.json"
+          lease_id="$(jq -r '.crabbox.id // empty' "$summary_path")"
+          if [[ ! "$lease_id" =~ ^cbx_[a-z0-9]+$ ]]; then
+            echo "Could not resolve a Crabbox lease id from $summary_path." >&2
+            exit 1
+          fi
+
+          public_key="$(printf '%s' "$OPERATOR_SSH_PUBLIC_KEY_B64" | base64 -d)"
+          if [[ ! "$public_key" =~ ^ssh-ed25519\ [A-Za-z0-9+/=]+\ claw639-proof-access$ ]]; then
+            echo "The temporary operator key must be an Ed25519 key named claw639-proof-access." >&2
+            exit 1
+          fi
+          encoded_key="$(printf '%s' "$public_key" | base64 -w0)"
+          crabbox run --provider "$CRABBOX_PROVIDER" --id "$lease_id" --shell -- \
+            "key=\$(printf '%s' '$encoded_key' | base64 -d); install -d -m 700 ~/.ssh; touch ~/.ssh/authorized_keys; grep -qxF \"\$key\" ~/.ssh/authorized_keys || printf '%s\\n' \"\$key\" >> ~/.ssh/authorized_keys; chmod 600 ~/.ssh/authorized_keys"
+
+          crabbox status --provider "$CRABBOX_PROVIDER" --id "$lease_id" --json | \
+            jq '{id: .id, state: .state, sshHost: .sshHost, sshUser: .sshUser, sshPort: .sshPort}'
 
       - name: Upload Mantis Slack desktop artifacts
         id: upload_artifact
