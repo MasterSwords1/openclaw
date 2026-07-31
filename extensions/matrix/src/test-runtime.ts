@@ -24,6 +24,7 @@ type MatrixTestRuntimeOptions = {
   getOutboundDeliveryQueueStatus?: NonNullable<
     PluginRuntime["state"]
   >["getOutboundDeliveryQueueStatus"];
+  openBlobStore?: PluginRuntime["state"]["openBlobStore"];
 };
 
 type MatrixRuntimeStub = {
@@ -102,11 +103,13 @@ export function installMatrixTestRuntime(options: MatrixTestRuntimeOptions = {})
       resolveStateDir: defaultStateDirResolver,
       getOutboundDeliveryQueueStatus:
         options.getOutboundDeliveryQueueStatus ?? (async () => "absent" as const),
-      openBlobStore: (<T>(storeOptions: OpenBlobStoreOptions) =>
-        createPluginBlobStoreForTests<T>("matrix", storeOptions, {
-          ...process.env,
-          OPENCLAW_STATE_DIR: defaultStateDirResolver(process.env, osHomedirForTest),
-        })) as PluginRuntime["state"]["openBlobStore"],
+      openBlobStore:
+        options.openBlobStore ??
+        ((<T>(storeOptions: OpenBlobStoreOptions) =>
+          createPluginBlobStoreForTests<T>("matrix", storeOptions, {
+            ...process.env,
+            OPENCLAW_STATE_DIR: defaultStateDirResolver(process.env, osHomedirForTest),
+          })) as PluginRuntime["state"]["openBlobStore"]),
       openKeyedStore: (<T>(storeOptions: OpenKeyedStoreOptions) =>
         createPluginStateKeyedStoreForTests<T>("matrix", {
           ...storeOptions,

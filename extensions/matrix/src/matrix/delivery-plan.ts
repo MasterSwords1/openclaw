@@ -345,7 +345,11 @@ export async function persistMatrixDeliveryPlan(params: {
   };
   const store = createDeliveryPlanStore();
   const bytes = new TextEncoder().encode(JSON.stringify(plan));
-  if (await store.registerIfAbsent(planKey(identity), bytes, planMetadata(plan))) {
+  if (
+    await store.registerIfAbsent(planKey(identity), bytes, planMetadata(plan), {
+      snapshotOwner: { kind: "delivery-queue", id: identity.queueId },
+    })
+  ) {
     return plan;
   }
   const existing = await loadMatrixDeliveryPlan(params);
@@ -519,6 +523,7 @@ export async function cleanupMatrixDeliveryPlans(ctx: {
   queueId: string;
   deliveryQueueStateDir?: string;
 }): Promise<void> {
+  const runtimeState = getMatrixRuntime().state;
   const store = createDeliveryPlanStore();
   try {
     const keys = (await store.entries())
@@ -532,9 +537,10 @@ export async function cleanupMatrixDeliveryPlans(ctx: {
       )
       .map((entry) => entry.key);
     await Promise.all(keys.map(async (key) => await store.delete(key)));
-  } finally {
+  } catch (error) {
     // A failed terminal cleanup must re-arm GC for the next send in this process.
-    initialPlanPrune = undefined;
+    initialPlanPrunes.delete(runtimeState);
+    throw error;
   }
 }
 
@@ -579,21 +585,22 @@ async function pruneMatrixTerminalDeliveryPlans(): Promise<MatrixDeliveryPlanPru
   return { deleted: deletions.length, retained, invalid };
 }
 
-let initialPlanPrune: Promise<MatrixDeliveryPlanPruneResult> | undefined;
+const initialPlanPrunes = new WeakMap<object, Promise<MatrixDeliveryPlanPruneResult>>();
 
 export async function ensureMatrixDeliveryPlanGarbageCollection(options?: {
   force?: boolean;
 }): Promise<MatrixDeliveryPlanPruneResult> {
+  const runtimeState = getMatrixRuntime().state;
   const current =
     options?.force === true
       ? pruneMatrixTerminalDeliveryPlans()
-      : (initialPlanPrune ?? pruneMatrixTerminalDeliveryPlans());
-  initialPlanPrune = current;
+      : (initialPlanPrunes.get(runtimeState) ?? pruneMatrixTerminalDeliveryPlans());
+  initialPlanPrunes.set(runtimeState, current);
   try {
     return await current;
   } catch (error) {
-    if (initialPlanPrune === current) {
-      initialPlanPrune = undefined;
+    if (initialPlanPrunes.get(runtimeState) === current) {
+      initialPlanPrunes.delete(runtimeState);
     }
     throw error;
   }

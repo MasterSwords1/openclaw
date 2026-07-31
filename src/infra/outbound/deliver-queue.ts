@@ -181,10 +181,9 @@ async function runOutboundDeliveryWithQueue(
         `Required durable message send is unsupported for ${channel}: prepared payload capability mismatch${support.capability ? ` (${support.capability})` : ""}`,
       );
     }
-    // A capable adapter should receive queue identity even when the caller did
-    // not require exact recovery. Otherwise response loss bypasses the adapter's
-    // provider plan and turns an avoidable retry into an ambiguous send.
-    unknownSendReconciliationEnabled = support.ok;
+    // Capability alone preserves explicit-call compatibility. Ordinary sends
+    // receive queue identity only when the adapter also accepts that routing change.
+    unknownSendReconciliationEnabled = support.ok && support.automaticUnknownSendReconciliation;
   }
   const deliveryParams: DeliverOutboundPayloadsParams = {
     ...params,

@@ -82,6 +82,7 @@ describe("slack channel message adapter", () => {
     const sendMedia = requireMediaSender(adapter);
     const sendPayload = requirePayloadSender(adapter);
     expect(adapter.durableFinal?.reconcileUnknownSendKinds).toEqual({ text: true });
+    expect(adapter.durableFinal?.automaticUnknownSendReconciliation).not.toBe(true);
 
     const proveText = async () => {
       sendSlack.mockClear();

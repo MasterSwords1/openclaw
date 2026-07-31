@@ -11,18 +11,27 @@ export type PluginBlobEntry<TMetadata> = PluginBlobEntryInfo<TMetadata> & {
   bytes: Uint8Array;
 };
 
+export type PluginBlobRegisterOptions = {
+  ttlMs?: number;
+  /** Queue owner required for snapshot-excluded durable recovery rows. */
+  snapshotOwner?: {
+    kind: "delivery-queue";
+    id: string;
+  };
+};
+
 export type PluginBlobStore<TMetadata> = {
   register(
     key: string,
     bytes: Uint8Array,
     metadata: TMetadata,
-    opts?: { ttlMs?: number },
+    opts?: PluginBlobRegisterOptions,
   ): Promise<void>;
   registerIfAbsent(
     key: string,
     bytes: Uint8Array,
     metadata: TMetadata,
-    opts?: { ttlMs?: number },
+    opts?: PluginBlobRegisterOptions,
   ): Promise<boolean>;
   lookup(key: string): Promise<PluginBlobEntry<TMetadata> | undefined>;
   entries(): Promise<PluginBlobEntryInfo<TMetadata>[]>;

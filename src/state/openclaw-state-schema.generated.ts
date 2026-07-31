@@ -1460,6 +1460,20 @@ CREATE INDEX IF NOT EXISTS idx_delivery_queue_target
   ON delivery_queue_entries(queue_name, status, channel, target, enqueued_at, id)
   WHERE channel IS NOT NULL AND target IS NOT NULL;
 
+-- Queue-owned excluded blobs must disappear when the authoritative queue row
+-- is removed. Keeping this as a persisted trigger also protects backups made
+-- after downgrading to a release that only deletes delivery_queue_entries.
+CREATE TRIGGER IF NOT EXISTS trg_delivery_queue_snapshot_blob_cleanup
+AFTER DELETE ON delivery_queue_entries
+BEGIN
+  DELETE FROM plugin_blob_entries
+  WHERE substr(namespace, 1, 28) = '_openclaw_snapshot_excluded_'
+    AND json_extract(
+      CASE WHEN json_valid(metadata_json) THEN metadata_json ELSE '{}' END,
+      '$.snapshotOwner.id'
+    ) = OLD.id;
+END;
+
 CREATE TABLE IF NOT EXISTS task_runs (
   task_id TEXT NOT NULL PRIMARY KEY,
   runtime TEXT NOT NULL,

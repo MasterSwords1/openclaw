@@ -1,4 +1,8 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import {
+  createPluginBlobStoreForTests,
   resetPluginBlobStoreForTests,
   resetPluginStateStoreForTests,
 } from "openclaw/plugin-sdk/plugin-state-test-runtime";
@@ -33,21 +37,29 @@ vi.mock("./send/targets.js", () => ({
   resolveMatrixRoomId: vi.fn(async () => "!room:example.org"),
 }));
 
-const identity = {
+let identity = {
   queueId: "queue-1",
-  queueStateDir: "/tmp",
+  queueStateDir: "",
   payloadIndex: 0,
   payloadCount: 1,
   partIndex: 0,
   partIndexes: [0],
 };
-const target = {
+let target = {
   identity,
   accountId: "default",
   roomId: "!room:example.org",
   transactionScopeId: "scope-1",
   wireEventType: "m.room.message" as const,
 };
+
+let stateDir = "";
+
+function installDeliveryPlanTestRuntime(
+  options: Parameters<typeof installMatrixTestRuntime>[0] = {},
+): void {
+  installMatrixTestRuntime({ ...options, stateDir });
+}
 
 function plannedEvents(
   planIdentity: typeof identity,
@@ -60,6 +72,9 @@ describe("Matrix durable delivery plans", () => {
   beforeEach(() => {
     resetPluginStateStoreForTests();
     resetPluginBlobStoreForTests();
+    stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "openclaw-matrix-delivery-plan-"));
+    identity = { ...identity, queueStateDir: stateDir };
+    target = { ...target, identity };
     client.getTransactionScopeId.mockReset().mockResolvedValue("scope-1");
     client.getMessageWireEventType.mockReset().mockResolvedValue("m.room.message");
   });
@@ -82,10 +97,11 @@ describe("Matrix durable delivery plans", () => {
     ]);
     resetPluginStateStoreForTests();
     resetPluginBlobStoreForTests();
+    fs.rmSync(stateDir, { recursive: true, force: true });
   });
 
   it("keeps the first exact event batch and deterministic transaction ids", async () => {
-    installMatrixTestRuntime({ getOutboundDeliveryQueueStatus: async () => "pending" });
+    installDeliveryPlanTestRuntime({ getOutboundDeliveryQueueStatus: async () => "pending" });
     const first = await persistMatrixDeliveryPlan({
       ...target,
       events: plannedEvents(identity, [
@@ -106,7 +122,7 @@ describe("Matrix durable delivery plans", () => {
   });
 
   it("stores long exact plans without the keyed-state JSON value limit", async () => {
-    installMatrixTestRuntime({ getOutboundDeliveryQueueStatus: async () => "pending" });
+    installDeliveryPlanTestRuntime({ getOutboundDeliveryQueueStatus: async () => "pending" });
     const body = "x".repeat(100_000);
     const longTarget = {
       ...target,
@@ -124,7 +140,7 @@ describe("Matrix durable delivery plans", () => {
   });
 
   it("isolates identical queue ids owned by different queue stores", async () => {
-    installMatrixTestRuntime({ getOutboundDeliveryQueueStatus: async () => "pending" });
+    installDeliveryPlanTestRuntime({ getOutboundDeliveryQueueStatus: async () => "pending" });
     const identityA = {
       ...identity,
       queueId: "queue-shared",
@@ -162,7 +178,7 @@ describe("Matrix durable delivery plans", () => {
   });
 
   it("canonicalizes implicit and explicit references to the same queue store", () => {
-    installMatrixTestRuntime({ stateDir: "/tmp/matrix-canonical-root" });
+    installDeliveryPlanTestRuntime();
 
     expect(
       resolveMatrixDurableDeliveryIdentity({
@@ -175,7 +191,7 @@ describe("Matrix durable delivery plans", () => {
     ).toEqual(
       resolveMatrixDurableDeliveryIdentity({
         queueId: "queue-canonical",
-        queueStateDir: "/tmp/matrix-canonical-root/.",
+        queueStateDir: `${stateDir}/.`,
         payloadIndex: 0,
         payloadCount: 1,
         partIndex: 0,
@@ -185,7 +201,7 @@ describe("Matrix durable delivery plans", () => {
   });
 
   it("authorizes replay only while the stored account, room, scope, and wire type match", async () => {
-    installMatrixTestRuntime({ getOutboundDeliveryQueueStatus: async () => "pending" });
+    installDeliveryPlanTestRuntime({ getOutboundDeliveryQueueStatus: async () => "pending" });
     await persistMatrixDeliveryPlan({
       ...target,
       events: plannedEvents(identity, [
@@ -222,7 +238,7 @@ describe("Matrix durable delivery plans", () => {
   });
 
   it("fails closed when persisted part coordinates contain a gap", async () => {
-    installMatrixTestRuntime({ getOutboundDeliveryQueueStatus: async () => "pending" });
+    installDeliveryPlanTestRuntime({ getOutboundDeliveryQueueStatus: async () => "pending" });
     const gapIdentity = { ...identity, queueId: "queue-gap" };
     for (const partIndex of [0, 2]) {
       await persistMatrixDeliveryPlan({
@@ -265,7 +281,7 @@ describe("Matrix durable delivery plans", () => {
   });
 
   it("accepts a complete sparse provider part topology", async () => {
-    installMatrixTestRuntime({ getOutboundDeliveryQueueStatus: async () => "pending" });
+    installDeliveryPlanTestRuntime({ getOutboundDeliveryQueueStatus: async () => "pending" });
     const sparseIdentity = {
       ...identity,
       queueId: "queue-sparse",
@@ -297,7 +313,7 @@ describe("Matrix durable delivery plans", () => {
   });
 
   it("fails closed when persisted parts disagree about their authoritative topology", async () => {
-    installMatrixTestRuntime({ getOutboundDeliveryQueueStatus: async () => "pending" });
+    installDeliveryPlanTestRuntime({ getOutboundDeliveryQueueStatus: async () => "pending" });
     const queueId = "queue-topology-change";
     const firstIdentity = { ...identity, queueId, partIndex: 0, partIndexes: [0, 1] };
     const secondIdentity = { ...identity, queueId, partIndex: 1, partIndexes: [0, 1, 2] };
@@ -326,7 +342,7 @@ describe("Matrix durable delivery plans", () => {
   });
 
   it("refuses ambiguous replay when no event plan exists", async () => {
-    installMatrixTestRuntime({ getOutboundDeliveryQueueStatus: async () => "pending" });
+    installDeliveryPlanTestRuntime({ getOutboundDeliveryQueueStatus: async () => "pending" });
     await expect(
       reconcileMatrixUnknownSend({
         cfg: {},
@@ -343,7 +359,7 @@ describe("Matrix durable delivery plans", () => {
 
   it("retains pending plans and deletes terminal or explicitly cleaned plans", async () => {
     let status: "pending" | "terminal" = "pending";
-    installMatrixTestRuntime({ getOutboundDeliveryQueueStatus: async () => status });
+    installDeliveryPlanTestRuntime({ getOutboundDeliveryQueueStatus: async () => status });
     await persistMatrixDeliveryPlan({
       ...target,
       events: plannedEvents(identity, [
@@ -372,5 +388,31 @@ describe("Matrix durable delivery plans", () => {
     });
     await cleanupMatrixDeliveryPlans({ queueId: identity.queueId });
     await expect(loadMatrixDeliveryPlan(target)).resolves.toBeNull();
+  });
+
+  it("keeps a successful initial prune latched after terminal cleanup", async () => {
+    const baseStore = createPluginBlobStoreForTests<unknown>(
+      "matrix",
+      {
+        namespace: "outbound-delivery-plans",
+        maxEntries: 10_000,
+        maxBytesPerEntry: 8 * 1024 * 1024,
+        maxBytesPerNamespace: 256 * 1024 * 1024,
+        overflowPolicy: "reject-new",
+        snapshotPolicy: "exclude",
+      },
+      { ...process.env, OPENCLAW_STATE_DIR: stateDir },
+    );
+    const entries = vi.fn(async () => await baseStore.entries());
+    installDeliveryPlanTestRuntime({
+      openBlobStore: () => ({ ...baseStore, entries }) as never,
+    });
+
+    await ensureMatrixDeliveryPlanGarbageCollection();
+    expect(entries).toHaveBeenCalledTimes(1);
+    await cleanupMatrixDeliveryPlans({ queueId: "queue-none" });
+    expect(entries).toHaveBeenCalledTimes(2);
+    await ensureMatrixDeliveryPlanGarbageCollection();
+    expect(entries).toHaveBeenCalledTimes(2);
   });
 });

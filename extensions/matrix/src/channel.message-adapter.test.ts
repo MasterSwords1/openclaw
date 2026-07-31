@@ -21,6 +21,7 @@ vi.mock("./matrix/send.js", () => ({
 }));
 
 vi.mock("./runtime.js", () => ({
+  getOptionalMatrixRuntime: () => undefined,
   getMatrixRuntime: () => ({
     channel: {
       text: {
@@ -35,6 +36,8 @@ import { matrixPlugin } from "./channel.js";
 const cfg = {
   channels: {
     matrix: {
+      homeserver: "https://matrix.example.org",
+      userId: "@bot:example.org",
       accessToken: "resolved-token",
     },
   },
@@ -70,6 +73,7 @@ describe("matrix channel message adapter", () => {
 
   it("declares replay-safe durable text, media, payload, and batch delivery", () => {
     expect(matrixPlugin.message?.durableFinal).toMatchObject({
+      automaticUnknownSendReconciliation: true,
       capabilities: {
         text: true,
         media: true,
@@ -141,11 +145,26 @@ describe("matrix channel message adapter", () => {
     }
     const payload = { text: "durable tool send" };
 
-    expect(await prepareSendPayload({ ctx: { action: "send" } as never, payload } as never)).toBe(
-      payload,
-    );
     expect(
-      await prepareSendPayload({ ctx: { action: "edit" } as never, payload } as never),
+      await prepareSendPayload({ ctx: { action: "send", cfg } as never, payload } as never),
+    ).toBe(payload);
+    expect(
+      await prepareSendPayload({ ctx: { action: "edit", cfg } as never, payload } as never),
+    ).toBeNull();
+    expect(
+      await prepareSendPayload({
+        ctx: {
+          action: "send",
+          cfg: {
+            ...cfg,
+            channels: {
+              ...cfg.channels,
+              matrix: { ...cfg.channels?.matrix, actions: { messages: false } },
+            },
+          },
+        } as never,
+        payload,
+      } as never),
     ).toBeNull();
   });
 

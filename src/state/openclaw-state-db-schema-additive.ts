@@ -11,7 +11,7 @@ import {
   repairLegacyTaskAgentAttribution,
   repairLegacyTaskDeliveryStatuses,
 } from "./openclaw-state-db-legacy-backfills.js";
-import { ensureColumn } from "./openclaw-state-db-schema-helpers.js";
+import { ensureColumn, tableExists } from "./openclaw-state-db-schema-helpers.js";
 
 export function ensureAgentDeletionJournalSchema(database: DatabaseSync): void {
   database.exec(`
@@ -41,6 +41,26 @@ export function ensureAgentDatabaseLeaseSchema(database: DatabaseSync): void {
       owner_start_time INTEGER,
       opened_at INTEGER NOT NULL
     ) STRICT
+  `);
+}
+
+export function ensureDeliveryQueueSnapshotBlobCleanupTrigger(db: DatabaseSync): void {
+  if (!tableExists(db, "delivery_queue_entries") || !tableExists(db, "plugin_blob_entries")) {
+    return;
+  }
+  // Persist the cascade in every upgraded DB. Older backup binaries still run
+  // this trigger when they sanitize their copy by deleting delivery queue rows.
+  db.exec(`
+    CREATE TRIGGER IF NOT EXISTS trg_delivery_queue_snapshot_blob_cleanup
+    AFTER DELETE ON delivery_queue_entries
+    BEGIN
+      DELETE FROM plugin_blob_entries
+      WHERE substr(namespace, 1, 28) = '_openclaw_snapshot_excluded_'
+        AND json_extract(
+          CASE WHEN json_valid(metadata_json) THEN metadata_json ELSE '{}' END,
+          '$.snapshotOwner.id'
+        ) = OLD.id;
+    END;
   `);
 }
 
@@ -256,6 +276,7 @@ export function ensureAdditiveStateColumns(db: DatabaseSync): void {
   ensureColumn(db, "delivery_queue_entries", "recovery_state TEXT");
   ensureColumn(db, "delivery_queue_entries", "platform_send_started_at INTEGER");
   backfillDeliveryQueueEntriesFromEntryJson(db);
+  ensureDeliveryQueueSnapshotBlobCleanupTrigger(db);
   ensureColumn(db, "commitments", "account_id TEXT");
   ensureColumn(db, "commitments", "recipient_id TEXT");
   ensureColumn(db, "commitments", "thread_id TEXT");

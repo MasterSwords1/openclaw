@@ -62,7 +62,10 @@ import {
 } from "./openclaw-state-db-maintenance.js";
 import * as operatorApprovalMigration from "./openclaw-state-db-operator-approval-migration.js";
 import { ensureOpenClawStatePermissions } from "./openclaw-state-db-permissions.js";
-import { ensureAdditiveStateColumns } from "./openclaw-state-db-schema-additive.js";
+import {
+  ensureAdditiveStateColumns,
+  ensureDeliveryQueueSnapshotBlobCleanupTrigger,
+} from "./openclaw-state-db-schema-additive.js";
 import { tableExists } from "./openclaw-state-db-schema-helpers.js";
 import {
   assertCanonicalStateSchemaShape,
@@ -544,6 +547,9 @@ function assertStateDatabaseIntegrityBeforeMutation(
     });
   }
   if (userVersion === OPENCLAW_STATE_SCHEMA_VERSION) {
+    // This additive trigger was introduced without a schema-version bump so
+    // existing current-version databases need it before strict shape proof.
+    ensureDeliveryQueueSnapshotBlobCleanupTrigger(database);
     verifyAndRepairCanonicalSqliteIndexes(database, pathname, OPENCLAW_STATE_SCHEMA_SQL, {
       allowMissingColumns: true,
       validateAfterRepair: () => assertCurrentStateRuntimeSchema(database, pathname),

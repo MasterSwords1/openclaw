@@ -31,6 +31,7 @@ export function createMatrixMessageAdapter(params: {
     ...base,
     durableFinal: {
       ...base.durableFinal,
+      automaticUnknownSendReconciliation: true,
       capabilities: {
         ...base.durableFinal?.capabilities,
         payload: true,

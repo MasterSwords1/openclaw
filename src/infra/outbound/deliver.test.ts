@@ -604,7 +604,7 @@ describe("deliverOutboundPayloads", () => {
           silent: true,
         },
       }),
-    ).resolves.toEqual({ ok: true });
+    ).resolves.toEqual({ ok: true, automaticUnknownSendReconciliation: false });
   });
 
   it("requires a real reconciler for required unknown-send recovery support", async () => {
@@ -687,7 +687,7 @@ describe("deliverOutboundPayloads", () => {
           reconcileUnknownSend: true,
         },
       }),
-    ).resolves.toEqual({ ok: true });
+    ).resolves.toEqual({ ok: true, automaticUnknownSendReconciliation: false });
 
     await expect(
       resolveOutboundDurableFinalDeliverySupport({
@@ -729,7 +729,38 @@ describe("deliverOutboundPayloads", () => {
         channel: "matrix",
         requirements: { text: true, reconcileUnknownSend: true },
       }),
-    ).resolves.toEqual({ ok: true });
+    ).resolves.toEqual({ ok: true, automaticUnknownSendReconciliation: false });
+  });
+
+  it("does not change ordinary routing for a capable adapter without automatic opt-in", async () => {
+    const messageSendText = vi.fn(async (_ctx: ChannelMessageSendTextContext) => ({
+      messageId: "message-adapter-1",
+      receipt: createMessageReceiptFromOutboundResults({
+        results: [{ channel: "matrix", messageId: "message-adapter-1" }],
+        kind: "text",
+      }),
+    }));
+    setMatrixMessageAdapter({
+      id: "matrix",
+      durableFinal: {
+        capabilities: { text: true, reconcileUnknownSend: true },
+        reconcileUnknownSendKinds: { text: true },
+        reconcileUnknownSend: async () => ({ status: "not_sent" }),
+      },
+      send: { text: messageSendText },
+    });
+
+    await deliverMatrix({ queuePolicy: "required" });
+
+    expect(requireMockCallArg(queueMocks.enqueueDelivery, "enqueueDelivery")).not.toEqual(
+      expect.objectContaining({ requireUnknownSendReconciliation: true }),
+    );
+    expect(messageSendText).toHaveBeenCalledWith(
+      expect.objectContaining({
+        deliveryQueueId: undefined,
+        deliveryPayloadIndex: undefined,
+      }),
+    );
   });
 
   it("requires every concrete reconciliation kind for heterogeneous batches", async () => {
@@ -1216,6 +1247,7 @@ describe("deliverOutboundPayloads", () => {
     setMatrixMessageAdapter({
       id: "matrix",
       durableFinal: {
+        automaticUnknownSendReconciliation: true,
         capabilities: { text: true, reconcileUnknownSend: true },
         reconcileUnknownSendKinds: { text: true },
         reconcileUnknownSend: async () => ({ status: "not_sent" }),
@@ -1280,6 +1312,7 @@ describe("deliverOutboundPayloads", () => {
     setMatrixMessageAdapter({
       id: "matrix",
       durableFinal: {
+        automaticUnknownSendReconciliation: true,
         capabilities: { text: true, batch: true, reconcileUnknownSend: true },
         reconcileUnknownSendKinds: { text: true, batch: true },
         reconcileUnknownSend: async () => ({ status: "not_sent" }),
@@ -1384,6 +1417,7 @@ describe("deliverOutboundPayloads", () => {
     setMatrixMessageAdapter({
       id: "matrix",
       durableFinal: {
+        automaticUnknownSendReconciliation: true,
         capabilities: { text: true, reconcileUnknownSend: true },
         reconcileUnknownSendKinds: { text: true },
         reconcileUnknownSend: async () => ({ status: "not_sent" }),

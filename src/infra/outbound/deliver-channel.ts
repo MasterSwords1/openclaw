@@ -179,7 +179,11 @@ export async function resolveOutboundDurableFinalDeliverySupport(params: {
     }
   }
 
-  return { ok: true };
+  return {
+    ok: true,
+    automaticUnknownSendReconciliation:
+      messageDurableFinal?.automaticUnknownSendReconciliation === true,
+  };
 }
 
 function createPluginHandler(

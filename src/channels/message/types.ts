@@ -368,6 +368,8 @@ type ChannelMessageSendAdapter<
 /** Durable final-delivery extension for queue reconciliation and capability declaration. */
 export type ChannelMessageDurableFinalAdapter = {
   capabilities?: DurableFinalDeliveryRequirementMap;
+  /** Opt into provider reconciliation for ordinary queued sends, not only explicit requirements. */
+  automaticUnknownSendReconciliation?: boolean;
   /**
    * Synchronous provider admission before a durable intent is created or replayed.
    * Providers must not perform I/O from this hook.
