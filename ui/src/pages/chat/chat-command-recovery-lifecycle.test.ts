@@ -8,7 +8,11 @@ import { createStorageMock } from "../../test-helpers/storage.ts";
 import { createTestChatPane } from "./chat-pane.test-support.ts";
 import { chatCommandComposerRetryState } from "./chat-send.ts";
 import { createPageState } from "./chat-state-page.ts";
-import { loadChatComposerSnapshot } from "./composer-persistence.ts";
+import {
+  loadChatComposerSnapshot,
+  resolveStoredChatOutboxScope,
+  storedChatOutboxScopeKey,
+} from "./composer-persistence.ts";
 
 function createDeferred<T>() {
   let resolve!: (value: T) => void;
@@ -29,6 +33,7 @@ describe("chat pane command recovery lifecycle", () => {
   it("restores a late failed command only after returning to its submitted session", async () => {
     vi.stubGlobal("sessionStorage", createStorageMock());
     const sends = [
+      createDeferred<unknown>(),
       createDeferred<unknown>(),
       createDeferred<unknown>(),
       createDeferred<unknown>(),
@@ -82,11 +87,6 @@ describe("chat pane command recovery lifecycle", () => {
       id: "selected-attachment",
       mimeType: "image/png",
       dataUrl: "data:image/png;base64,BBB",
-    };
-    const resubmittedAttachment = {
-      id: "resubmitted-attachment",
-      mimeType: "image/png",
-      dataUrl: "data:image/png;base64,CCC",
     };
     state.sessionKey = "global";
     state.assistantAgentId = null;
@@ -183,7 +183,18 @@ describe("chat pane command recovery lifecycle", () => {
       state.chatRunId = "active-run";
       state.chatStream = "Waiting for approval";
       state.handleChatDraftChange("/approve approval-456 allow-once");
-      pane.chatState.updateComposerAttachments([resubmittedAttachment]);
+      const retryScopeKey = storedChatOutboxScopeKey(
+        resolveStoredChatOutboxScope(state, "global", "main"),
+      );
+      state.chatComposerFallbackByScope[retryScopeKey] = {
+        message: "/approve stale-approval allow-once",
+        attachments: [],
+        commandRunId: "stale-command-run",
+        commandRunIdExpiresAtMs: Date.now() + 60_000,
+        commandRunScopeKey: retryScopeKey,
+        storageFailed: false,
+        sequence: 100,
+      };
       const resubmit = state.handleSendChat();
       await vi.waitFor(() => expect(chatSendPayloads()).toHaveLength(3));
       const resubmittedRunId = (chatSendPayloads()[2] as { idempotencyKey?: unknown } | undefined)
@@ -192,28 +203,38 @@ describe("chat pane command recovery lifecycle", () => {
       sends[2]!.reject(new Error("connection closed before the response"));
       await resubmit;
       expect(state.chatMessage).toBe("/approve approval-456 allow-once");
-      expect(state.chatAttachments).toEqual([resubmittedAttachment]);
-      const expiredFallback = Object.values(state.chatComposerFallbackByScope).find(
+      expect(state.chatAttachments).toEqual([]);
+      const retryFallback = Object.values(state.chatComposerFallbackByScope).find(
         (fallback) => fallback.commandRunId === resubmittedRunId,
       );
-      expect(expiredFallback).toBeDefined();
+      expect(retryFallback).toBeDefined();
       expect(
         chatCommandComposerRetryState(state, {
-          attachments: [resubmittedAttachment],
           draft: "/approve approval-456 allow-once",
         })?.runId,
       ).toBe(resubmittedRunId);
-      expiredFallback!.commandRunIdExpiresAtMs = Date.now() - 1;
+      const originalRetryExpiry = retryFallback!.commandRunIdExpiresAtMs;
+      const inheritedRetry = state.handleSendChat();
+      await vi.waitFor(() => expect(chatSendPayloads()).toHaveLength(4));
+      expect(
+        (chatSendPayloads()[3] as { idempotencyKey?: unknown } | undefined)?.idempotencyKey,
+      ).toBe(resubmittedRunId);
+      sends[3]!.reject(new Error("connection closed before the response"));
+      await inheritedRetry;
+      const retainedRetryFallback = Object.values(state.chatComposerFallbackByScope).find(
+        (fallback) => fallback.commandRunId === resubmittedRunId,
+      );
+      expect(retainedRetryFallback?.commandRunIdExpiresAtMs).toBe(originalRetryExpiry);
+      retainedRetryFallback!.commandRunIdExpiresAtMs = Date.now() - 1;
       expect(
         chatCommandComposerRetryState(state, {
-          attachments: [resubmittedAttachment],
           draft: "/approve approval-456 allow-once",
         })?.runId,
       ).toBeUndefined();
 
       const staleSend = state.handleSendChat();
-      await vi.waitFor(() => expect(chatSendPayloads()).toHaveLength(4));
-      const staleRunId = (chatSendPayloads()[3] as { idempotencyKey?: unknown } | undefined)
+      await vi.waitFor(() => expect(chatSendPayloads()).toHaveLength(5));
+      const staleRunId = (chatSendPayloads()[4] as { idempotencyKey?: unknown } | undefined)
         ?.idempotencyKey;
       expect(staleRunId).not.toBe(resubmittedRunId);
       const replacementClient = {
@@ -228,7 +249,7 @@ describe("chat pane command recovery lifecycle", () => {
       state.lastError = "replacement connection error";
       state.chatError = "replacement connection error";
 
-      sends[3]!.resolve({ runId: staleRunId, status: "error" });
+      sends[4]!.resolve({ runId: staleRunId, status: "error" });
       await staleSend;
 
       expect(state.chatMessage).toBe("replacement connection draft");

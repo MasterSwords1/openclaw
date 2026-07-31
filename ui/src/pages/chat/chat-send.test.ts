@@ -3101,33 +3101,83 @@ describe("handleSendChat", () => {
     expect(host.chatMessage).toBe("/approve approval-123 allow-once");
   });
 
-  it("restores a command after a nonretryable Gateway rejection", async () => {
-    vi.stubGlobal("sessionStorage", createStorageMock());
-    const host = makeHost({
-      requestHandlers: {
-        "chat.send": () =>
-          Promise.reject(
-            new GatewayRequestError({
-              code: "UNAVAILABLE",
-              message: "chat run admission failed",
-              retryable: false,
-            }),
-          ),
-      },
-      chatRunId: "run-main",
-      chatMessage: "/approve approval-123 allow-once",
-      sessionKey: "agent:main",
-      settings: { gatewayUrl: "ws://gateway.test/control" },
-    });
-    const persistence = enableComposerRecovery(host);
+  it.each([
+    { editsDuringSettingsWait: false, expiresDuringSettingsWait: false },
+    { editsDuringSettingsWait: false, expiresDuringSettingsWait: true },
+    { editsDuringSettingsWait: true, expiresDuringSettingsWait: false },
+  ])(
+    "handles a nonretryable Gateway rejection (edits: $editsDuringSettingsWait, expires: $expiresDuringSettingsWait)",
+    async ({ editsDuringSettingsWait, expiresDuringSettingsWait }) => {
+      vi.stubGlobal("sessionStorage", createStorageMock());
+      const command = "/approve approval-123 allow-once";
+      const newerDraft = "newer draft";
+      const settingsPatch = createDeferred<boolean>();
+      const waitsForSettings = editsDuringSettingsWait || expiresDuringSettingsWait;
+      const host = makeHost({
+        requestHandlers: {
+          "chat.send": () =>
+            Promise.reject(
+              new GatewayRequestError({
+                code: "UNAVAILABLE",
+                message: "chat run admission failed",
+                retryable: false,
+              }),
+            ),
+        },
+        chatRunId: "run-main",
+        chatMessage: command,
+        ...(waitsForSettings
+          ? { pendingSettingsPatches: { "agent:main": settingsPatch.promise } }
+          : {}),
+        sessionKey: "agent:main",
+        settings: { gatewayUrl: "ws://gateway.test/control" },
+      });
+      const scopeKey = queueScopeKey(host, "agent:main");
+      host.chatComposerFallbackByScope[scopeKey] = {
+        message: command,
+        attachments: [],
+        commandRunId: "inherited-run",
+        commandRunIdExpiresAtMs: Date.now() + 60_000,
+        commandRunScopeKey: scopeKey,
+        storageFailed: false,
+        sequence: 1,
+      };
+      const persistence = enableComposerRecovery(host);
 
-    try {
-      await handleSendChat(host);
-      expect(host.chatMessage).toBe("/approve approval-123 allow-once");
-    } finally {
-      persistence.stop();
-    }
-  });
+      try {
+        const send = handleSendChat(host);
+        if (waitsForSettings) {
+          expect(await raceWithMacrotask(send)).toBe("pending");
+          if (expiresDuringSettingsWait) {
+            host.chatComposerFallbackByScope[scopeKey]!.commandRunIdExpiresAtMs = Date.now() - 1;
+          }
+          if (editsDuringSettingsWait) {
+            host.chatMessage = newerDraft;
+          }
+          settingsPatch.resolve(true);
+        }
+        await send;
+        const payload = findRequestPayload(
+          host.request as unknown as MockCallSource,
+          "chat.send",
+          "rejected command payload",
+        );
+        if (expiresDuringSettingsWait) {
+          expect(payload.idempotencyKey).not.toBe("inherited-run");
+        } else {
+          expect(payload.idempotencyKey).toBe("inherited-run");
+        }
+        expect(host.chatMessage).toBe(editsDuringSettingsWait ? newerDraft : command);
+        if (!editsDuringSettingsWait) {
+          expect(Object.values(host.chatComposerFallbackByScope)).not.toContainEqual(
+            expect.objectContaining({ commandRunId: "inherited-run" }),
+          );
+        }
+      } finally {
+        persistence.stop();
+      }
+    },
+  );
 
   it("recovers a delayed failed local command under its submitted session", async () => {
     vi.stubGlobal("sessionStorage", createStorageMock());

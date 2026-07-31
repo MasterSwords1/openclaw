@@ -44,6 +44,7 @@ import {
   beginChatCommandComposerRecovery,
   cancelPendingSendBeforeRequest,
   chatCommandComposerRetryState,
+  chatRetryRunId,
   chatOutboxDrainDependencies,
   checkpointChatCommandComposerClear,
   completeChatCommandComposerSend,
@@ -240,10 +241,17 @@ async function sendDetachedCommandMessage(
     releaseChatAttachmentPayloads(excludeComposerAttachments(host, opts.attachments));
     return ack;
   }
-  const retryRunId =
-    attempt.kind === "rejected" || attempt.kind === "unknown" ? attempt.retryRunId : undefined;
+  const retryRun =
+    (attempt.kind === "rejected" || attempt.kind === "unknown") && attempt.retryRunId
+      ? {
+          inherited: attempt.retryRunId === opts.recovery?.retryRunId,
+          runId: attempt.retryRunId,
+        }
+      : attempt.kind === "not-sent"
+        ? undefined
+        : null;
   if (!ok && opts.recovery) {
-    const restored = restoreChatCommandComposer(host, opts.recovery, { retryRunId });
+    const restored = restoreChatCommandComposer(host, opts.recovery, { retryRun });
     if (!restored.attachmentsRetained) {
       releaseChatAttachmentPayloads(excludeComposerAttachments(host, opts.attachments));
     }
@@ -339,12 +347,10 @@ export async function handleSendChat(
     }
     // The backend resolves /approve before active-run admission. Send it now so
     // the approval command cannot queue behind the run that is waiting for it.
+    const commandSnapshot = { attachments: attachmentsToSend, draft: previousDraft };
     const detachedRetry =
       messageOverride == null && parsed?.command.key === "approve"
-        ? chatCommandComposerRetryState(host, {
-            attachments: attachmentsToSend,
-            draft: previousDraft,
-          })
+        ? chatCommandComposerRetryState(host, commandSnapshot)
         : null;
     const shouldSendDetachedCommand =
       parsed?.command.key === "approve" && (isChatBusy(host) || detachedRetry !== null);
@@ -361,13 +367,12 @@ export async function handleSendChat(
         if (!chatCommandSubmitIdentityIsCurrent(host, submittedCommandIdentity)) {
           return;
         }
-        const recovery =
+        const currentRetryRunId =
           messageOverride == null
-            ? beginChatCommandComposerRecovery(host, {
-                attachments: attachmentsToSend,
-                draft: previousDraft,
-              })
-            : null;
+            ? chatRetryRunId(host, commandSnapshot, submittedCommandIdentity)
+            : undefined;
+        const recovery =
+          messageOverride == null ? beginChatCommandComposerRecovery(host, commandSnapshot) : null;
         const cleared =
           messageOverride == null
             ? clearSubmittedComposerState(host, previousDraft, attachmentsToSend)
@@ -375,7 +380,7 @@ export async function handleSendChat(
         if (messageOverride == null) {
           recordNonTranscriptInputHistory(host, message);
         }
-        const ack = await sendDetachedCommandMessage(host, message, {
+        await sendDetachedCommandMessage(host, message, {
           attachments: hasAttachments ? attachmentsToSend : undefined,
           identity: submittedCommandIdentity,
           recovery:
@@ -385,9 +390,8 @@ export async function handleSendChat(
                   attachments: cleared.previousAttachments ?? [],
                 }
               : null,
-          runId: recovery?.retryRunId ?? detachedRetry?.runId,
+          runId: recovery?.retryRunId ?? currentRetryRunId,
         });
-        void ack;
       });
       return;
     }

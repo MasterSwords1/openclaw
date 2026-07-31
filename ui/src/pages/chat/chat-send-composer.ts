@@ -41,6 +41,11 @@ type ChatCommandComposerRecoveryResult = {
   restored: boolean;
 };
 
+type ChatCommandRetryRun = {
+  inherited: boolean;
+  runId: string;
+} | null;
+
 // Gateway terminal chat dedupe expires after five minutes. Active runs remain
 // protected longer, but a terminal retry ID must not be presented as durable.
 const CHAT_COMMAND_RETRY_RUN_ID_TTL_MS = 5 * 60_000;
@@ -53,10 +58,7 @@ function matchingChatCommandComposerFallback(
   },
   scope: StoredChatOutboxScope,
 ) {
-  const { fallback, scopeKey } = resolveChatComposerMemoryFallback(
-    host,
-    scope.sessionKey,
-  );
+  const { fallback, scopeKey } = resolveChatComposerMemoryFallback(host, scope.sessionKey);
   const attachments = snapshot.attachments ?? [];
   return fallback?.message === snapshot.draft &&
     chatAttachmentIdsMatch(fallback.attachments, attachments)
@@ -81,6 +83,17 @@ export function chatCommandComposerRetryState(
     fallbackMatch.scopeKey,
   );
   return commandRun ? { runId: commandRun.id } : {};
+}
+
+export function chatRetryRunId(
+  host: ChatHost,
+  snapshot: {
+    attachments?: ChatAttachment[];
+    draft: string;
+  },
+  scope: StoredChatOutboxScope,
+): string | undefined {
+  return chatCommandComposerRetryState(host, snapshot, scope)?.runId;
 }
 
 export function beginChatCommandComposerRecovery(
@@ -216,7 +229,7 @@ export function checkpointChatCommandComposerClear(
           }
         : {}),
     };
-  } else if (submittedFallback) {
+  } else {
     delete nextFallbacks[scopeKey];
   }
   host.chatComposerFallbackByScope = nextFallbacks;
@@ -244,7 +257,7 @@ export function completeChatCommandComposerSend(
 export function restoreChatCommandComposer(
   host: ChatHost,
   recovery: ChatCommandComposerRecovery,
-  options: { retryRunId?: string } = {},
+  options: { retryRun?: ChatCommandRetryRun } = {},
 ): ChatCommandComposerRecoveryResult {
   if (host.client !== recovery.client || host.connectionEpoch !== recovery.connectionEpoch) {
     discardChatCommandComposerClearFallback(host, recovery);
@@ -321,17 +334,28 @@ export function restoreChatCommandComposer(
       host.chatComposerRecovery?.adoptCommandRecovery(persistenceRecovery);
     }
   }
+  const retryRun =
+    options.retryRun === undefined
+      ? recovery.retryRunId
+        ? { inherited: true, runId: recovery.retryRunId }
+        : null
+      : options.retryRun;
+  const retryRunId = retryRun?.runId;
+  const retryRunIdExpiresAtMs = retryRun?.inherited
+    ? recovery.retryRunIdExpiresAtMs
+    : retryRun
+      ? recovery.submittedAtMs + CHAT_COMMAND_RETRY_RUN_ID_TTL_MS
+      : undefined;
+  const retryRunScopeKey = retryRun?.inherited
+    ? recovery.retryRunScopeKey
+    : retryRun
+      ? scopeKey
+      : undefined;
   const retainFallback =
     persisted.status === "conflict" ||
     recovery.attachments.length > 0 ||
     persisted.status === "storage-failed" ||
-    options.retryRunId !== undefined ||
-    recovery.retryRunId !== undefined;
-  const retryRunId = options.retryRunId ?? recovery.retryRunId;
-  const retryRunIdExpiresAtMs = options.retryRunId
-    ? recovery.submittedAtMs + CHAT_COMMAND_RETRY_RUN_ID_TTL_MS
-    : recovery.retryRunIdExpiresAtMs;
-  const retryRunScopeKey = options.retryRunId ? scopeKey : recovery.retryRunScopeKey;
+    retryRun !== null;
   const storageFailed =
     persisted.status === "storage-failed" ||
     (locallyOwnedConflict ? (existingFallback?.storageFailed ?? false) : false);

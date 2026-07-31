@@ -2,6 +2,7 @@ export {
   beginChatCommandComposerRecovery,
   cancelPendingSendBeforeRequest,
   chatCommandComposerRetryState,
+  chatRetryRunId,
   checkpointChatCommandComposerClear,
   completeChatCommandComposerSend,
   restoreChatCommandComposer,
