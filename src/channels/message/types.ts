@@ -181,6 +181,10 @@ export type ChannelMessageSendTextContext<TConfig = OpenClawConfig> = {
   gatewayClientScopes?: readonly string[];
   /** @internal Opaque durable intent id for exact provider-side send reconciliation. */
   deliveryQueueId?: string;
+  /** @internal State root owning the durable intent when recovery uses an explicit root. */
+  deliveryQueueStateDir?: string;
+  /** @internal Stable queue-local payload index within one durable intent. */
+  deliveryPayloadIndex?: number;
   /** @internal Stable platform-send index within one durable payload. */
   deliveryPartIndex?: number;
   /** @internal Channel-valid id reserved before a correlated conversation turn is sent. */
@@ -279,6 +283,7 @@ export type ChannelMessageSendCommitContext<
 export type ChannelMessageUnknownSendContext<TConfig = OpenClawConfig> = {
   cfg: TConfig;
   queueId: string;
+  deliveryQueueStateDir?: string;
   channel: string;
   to: string;
   accountId?: string | null;
@@ -304,6 +309,10 @@ export type ChannelMessageUnknownSendReconciliationResult =
     }
   | {
       status: "not_sent";
+    }
+  | {
+      /** Replaying the stored provider plan with this queue identity is idempotent. */
+      status: "replay_safe";
     }
   | {
       status: "unresolved";
@@ -370,6 +379,15 @@ export type ChannelMessageDurableFinalAdapter = {
     | Promise<ChannelMessageUnknownSendReconciliationResult | null>
     | ChannelMessageUnknownSendReconciliationResult
     | null;
+  /** Cleanup provider-owned recovery artifacts after core commits a terminal queue state. */
+  afterQueueTerminal?: (ctx: {
+    cfg: OpenClawConfig;
+    queueId: string;
+    deliveryQueueStateDir?: string;
+    channel: string;
+    to: string;
+    accountId?: string | null;
+  }) => Promise<void> | void;
 };
 
 /** Live-message feature key declared by adapters that support preview or streaming behavior. */

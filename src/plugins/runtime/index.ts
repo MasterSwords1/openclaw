@@ -47,6 +47,9 @@ const loadModelAuthRuntime = createLazyRuntimeModule(
 const loadGatewayPluginRuntime = createLazyRuntimeModule(
   () => import("../../gateway/server-plugins.js"),
 );
+const loadOutboundDeliveryQueueRuntime = createLazyRuntimeModule(
+  () => import("../../infra/outbound/delivery-queue-status.js"),
+);
 
 function createRuntimeGateway(): PluginRuntime["gateway"] {
   return {
@@ -335,6 +338,11 @@ export function createPluginRuntime(_options: CreatePluginRuntimeOptions = {}): 
     logging: createRuntimeLogging(),
     state: {
       resolveStateDir,
+      getOutboundDeliveryQueueStatus: async (queueId, stateDir) =>
+        (await loadOutboundDeliveryQueueRuntime()).getOutboundDeliveryQueueStatus(
+          queueId,
+          stateDir,
+        ),
       openBlobStore: () => {
         throw new Error("openBlobStore is only available through the plugin runtime proxy.");
       },

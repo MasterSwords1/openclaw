@@ -134,6 +134,7 @@ export type ChannelHandlerParams = {
   gatewayClientScopes?: readonly string[];
   conversationReadOrigin?: "delegated" | "direct-operator";
   deliveryQueueId?: string;
+  deliveryQueueStateDir?: string;
   preparedMessageId?: string;
   requiredUnknownSendReconciliation?: boolean;
   onPlatformSendStart?: (route: PlatformSendRoute) => Promise<void>;
@@ -174,6 +175,8 @@ export type DeliverOutboundPayloadsCoreParams = {
   onPlatformSendStart?: (route: PlatformSendRoute) => Promise<void>;
   /** @internal Opaque durable intent id forwarded to provider reconciliation hooks. */
   deliveryQueueId?: string;
+  /** @internal State directory that owns the existing queue entry. */
+  deliveryQueueStateDir?: string;
   /** @internal Stable producer id used to make queue creation idempotent across crashes. */
   deliveryIntentId?: string;
   /** @internal Retain the completed receipt for a producer-owned replayable intent. */
@@ -214,8 +217,6 @@ export type DeliverOutboundPayloadsParams = DeliverOutboundPayloadsCoreParams & 
   deliveryProducerClaimId?: string;
   /** @internal Recovery already ran provider admission after its pending-row re-read. */
   deferredDeliveryAdmissionPassed?: true;
-  /** @internal State directory that owns the existing recovery queue entry. */
-  deliveryQueueStateDir?: string;
   /** @internal Let recovery run commit hooks after it has acked the recovered queue entry. */
   deferCommitHooks?: boolean;
   queuePolicy?: OutboundDeliveryQueuePolicy;

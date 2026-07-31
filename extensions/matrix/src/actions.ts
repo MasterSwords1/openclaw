@@ -150,6 +150,7 @@ export const matrixMessageActions: ChannelMessageActionAdapter = {
   extractToolSend: ({ args }) => {
     return extractToolSend(args, "sendMessage");
   },
+  prepareSendPayload: ({ ctx, payload }) => (ctx.action === "send" ? payload : null),
   handleAction: async (ctx: ChannelMessageActionContext) => {
     const { handleMatrixAction } = await import("./tool-actions.runtime.js");
     const { action, params, cfg, accountId, mediaLocalRoots } = ctx;

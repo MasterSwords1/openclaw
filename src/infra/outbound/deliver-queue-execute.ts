@@ -29,6 +29,7 @@ import {
   rejectDurableDelivery,
   suppressDurableDelivery,
 } from "./delivery-completion.js";
+import { runOutboundQueueTerminalHook } from "./delivery-queue-terminal-hook.js";
 import {
   failDelivery,
   failDeliveryAfterPlatformSend,
@@ -74,13 +75,14 @@ export async function deliverOutboundPayloadsWithQueueCleanup(
   const platformQueueId = queueId ?? params.deliveryQueueId;
   const platformQueuePolicy = queueId ? queuePolicy : (params.queuePolicy ?? "required");
   const platformQueueStateDir = queueId ? undefined : params.deliveryQueueStateDir;
-  const exactReconciliationRequired =
+  const exactReconciliationEnabled =
     params.requireUnknownSendReconciliation === true && platformQueueId !== undefined;
   let queuedPreSendState: QueuedPreSendState | undefined;
   let queuedPostSendState: QueuedPostSendState | undefined;
   let platformSendRoute: PlatformSendRoute | undefined;
   let deliveredResults: OutboundDeliveryResult[] = [];
   let commitHooksRun = false;
+  let terminalHookRun = false;
   // Deliberately process-local: message_sent is best-effort after queue
   // settlement, not a durable plugin outbox or a reason to retry delivery.
   const messageSentEvents: MessageSentEvent[] = [];
@@ -156,7 +158,24 @@ export async function deliverOutboundPayloadsWithQueueCleanup(
     });
   };
   const runCommitHooksAfterAck = async (): Promise<void> => {
-    if (queuedPostSendState !== "acked" || params.deferCommitHooks || commitHooksRun) {
+    if (queuedPostSendState !== "acked") {
+      return;
+    }
+    if (!terminalHookRun && platformQueueId) {
+      // Ack already made the intent non-replayable. Commit hooks isolate their
+      // own failures, so provider cleanup can precede best-effort observers.
+      terminalHookRun = true;
+      await runOutboundQueueTerminalHook({
+        cfg: params.cfg,
+        queueId: platformQueueId,
+        ...(platformQueueStateDir !== undefined ? { stateDir: platformQueueStateDir } : {}),
+        channel: params.channel,
+        to: params.to,
+        accountId: params.accountId,
+        warn: (message) => log.warn(message),
+      });
+    }
+    if (params.deferCommitHooks || commitHooksRun) {
       return;
     }
     commitHooksRun = true;
@@ -167,15 +186,16 @@ export async function deliverOutboundPayloadsWithQueueCleanup(
   };
   const wrappedParams: DeliverOutboundPayloadsParams = {
     ...params,
-    // A provider marker can represent the whole durable intent only when one payload owns it.
-    // Adapters must narrow further when one payload can fan out into multiple platform sends.
-    ...(exactReconciliationRequired && params.payloads.length === 1
-      ? { deliveryQueueId: platformQueueId }
-      : { deliveryQueueId: undefined }),
-    requiredUnknownSendReconciliation: exactReconciliationRequired,
+    // Only reconciliation-capable adapters receive queue identity. Legacy adapters
+    // may treat one queue id as one provider idempotency key and cannot index batches.
+    deliveryQueueId: exactReconciliationEnabled ? platformQueueId : undefined,
+    deliveryQueueStateDir: exactReconciliationEnabled ? platformQueueStateDir : undefined,
+    requiredUnknownSendReconciliation: exactReconciliationEnabled,
     onPlatformSendStart: async (route) => {
       platformSendRoute = route;
-      if (platformQueueId && !exactReconciliationRequired && queuedPreSendState === undefined) {
+      // Exact-reconciliation adapters persist their provider plan before dispatch.
+      // Until their dispatch callback runs, a crash leaves an ordinary safe retry.
+      if (platformQueueId && !exactReconciliationEnabled && queuedPreSendState === undefined) {
         queuedPreSendState = await persistQueuedPreSendState({
           queueId: platformQueueId,
           queuePolicy: platformQueuePolicy,
@@ -211,7 +231,7 @@ export async function deliverOutboundPayloadsWithQueueCleanup(
           }
           queuedPreSendState ??= "marked";
         } catch (dispatchMarkError) {
-          if (exactReconciliationRequired || producerClaimId) {
+          if (exactReconciliationEnabled || producerClaimId) {
             throw dispatchMarkError;
           }
           log.warn(

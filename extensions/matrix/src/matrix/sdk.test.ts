@@ -261,6 +261,8 @@ type MatrixJsClientStub = {
   getRoom: ReturnType<typeof vi.fn>;
   getRooms: ReturnType<typeof vi.fn>;
   getCrypto: ReturnType<typeof vi.fn<() => unknown>>;
+  getVersions: ReturnType<typeof vi.fn>;
+  resendEvent: ReturnType<typeof vi.fn>;
   decryptEventIfNeeded: ReturnType<typeof vi.fn>;
   relations: ReturnType<typeof vi.fn>;
 };
@@ -324,6 +326,8 @@ function createMatrixJsClientStub(): MatrixJsClientStub {
   client.getRoom = vi.fn(() => ({ hasEncryptionStateEvent: () => false }));
   client.getRooms = vi.fn(() => []);
   client.getCrypto = vi.fn(() => undefined);
+  client.getVersions = vi.fn(async () => ({ versions: ["v1.7"] }));
+  client.resendEvent = vi.fn(async () => ({ event_id: "$resent" }));
   client.decryptEventIfNeeded = vi.fn(async () => {});
   client.relations = vi.fn(async () => ({
     originalEvent: null,
@@ -390,6 +394,118 @@ describe("MatrixClient request hardening", () => {
     });
     expect(matrixJsClient.getAccountDataFromServer).toHaveBeenCalledWith("m.direct");
     expect(matrixJsClient.getAccountData).not.toHaveBeenCalled();
+  });
+
+  it("uses device-scoped transaction identity on Matrix v1.7 and later", async () => {
+    const first = new MatrixClient("https://matrix.example.org", "token-a", {
+      userId: "@bot:example.org",
+      deviceId: "DEVICE123",
+    });
+    const second = new MatrixClient("https://matrix.example.org", "token-b", {
+      userId: "@bot:example.org",
+      deviceId: "DEVICE123",
+    });
+    const whoami = { user_id: "@bot:example.org", device_id: "DEVICE123" };
+    vi.spyOn(first, "doRequest").mockResolvedValue(whoami);
+    vi.spyOn(second, "doRequest").mockResolvedValue(whoami);
+
+    await expect(first.getTransactionScopeId()).resolves.toBe(await second.getTransactionScopeId());
+  });
+
+  it("keeps transaction identity token-scoped on older Matrix versions", async () => {
+    matrixJsClient.getVersions.mockResolvedValue({ versions: ["v1.6"] });
+    const first = new MatrixClient("https://matrix.example.org", "token-a");
+    const second = new MatrixClient("https://matrix.example.org", "token-b");
+    const whoami = { user_id: "@bot:example.org", device_id: "DEVICE123" };
+    vi.spyOn(first, "doRequest").mockResolvedValue(whoami);
+    vi.spyOn(second, "doRequest").mockResolvedValue(whoami);
+
+    expect(await first.getTransactionScopeId()).not.toBe(await second.getTransactionScopeId());
+  });
+
+  it("passes durable transaction ids into matrix-js-sdk timeline sends", async () => {
+    const client = new MatrixClient("https://matrix.example.org", "token");
+
+    await expect(
+      client.sendMessage(
+        "!room:example.org",
+        { msgtype: "m.text", body: "hello" },
+        "oc_transaction",
+      ),
+    ).resolves.toBe("$sent");
+    expect(matrixJsClient.sendMessage).toHaveBeenCalledWith(
+      "!room:example.org",
+      { msgtype: "m.text", body: "hello" },
+      "oc_transaction",
+    );
+  });
+
+  it("runs the durable dispatch guard after the SDK selects the wire endpoint and before PUT", async () => {
+    const order: string[] = [];
+    const fetchMock = vi.fn(async () => {
+      order.push("put");
+      return new Response(JSON.stringify({ event_id: "$sent" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    });
+    stubRuntimeFetch(fetchMock as unknown as typeof fetch);
+    const client = new MatrixClient("http://127.0.0.1:8008", "token", {
+      ssrfPolicy: { allowPrivateNetwork: true },
+    });
+    const fetchFn = lastCreateClientOpts?.fetchFn as typeof fetch;
+    matrixJsClient.sendMessage = vi.fn(async (roomId, _content, transactionId) => {
+      await fetchFn(
+        `http://127.0.0.1:8008/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/send/m.room.encrypted/${transactionId}`,
+        { method: "PUT", body: "{}" },
+      );
+      return { event_id: "$sent" };
+    });
+
+    await expect(
+      client.sendMessage(
+        "!room:example.org",
+        { msgtype: "m.text", body: "hello" },
+        "oc_transaction",
+        async (dispatch) => {
+          order.push("guard");
+          expect(dispatch).toEqual({
+            roomId: "!room:example.org",
+            eventType: "m.room.encrypted",
+            transactionId: "oc_transaction",
+          });
+        },
+      ),
+    ).resolves.toBe("$sent");
+    expect(order).toEqual(["guard", "put"]);
+  });
+
+  it("blocks the Matrix PUT when the durable dispatch guard fails", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 200 }));
+    stubRuntimeFetch(fetchMock as unknown as typeof fetch);
+    const client = new MatrixClient("http://127.0.0.1:8008", "token", {
+      ssrfPolicy: { allowPrivateNetwork: true },
+    });
+    const fetchFn = lastCreateClientOpts?.fetchFn as typeof fetch;
+    matrixJsClient.sendMessage = vi.fn(async (roomId, _content, transactionId) => {
+      await fetchFn(
+        `http://127.0.0.1:8008/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/send/m.room.message/${transactionId}`,
+        { method: "PUT", body: "{}" },
+      );
+      return { event_id: "$sent" };
+    });
+
+    await expect(
+      client.sendMessage(
+        "!room:example.org",
+        { msgtype: "m.text", body: "hello" },
+        "oc_transaction",
+        async () => {
+          throw new Error("plan persistence failed");
+        },
+      ),
+    ).rejects.toThrow("plan persistence failed");
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("blocks absolute endpoints unless explicitly allowed", async () => {

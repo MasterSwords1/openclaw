@@ -63,6 +63,7 @@ import {
   type QueuedDelivery,
   type QueuedDeliveryPayload,
 } from "./delivery-queue-storage.js";
+import { runOutboundQueueTerminalHook } from "./delivery-queue-terminal-hook.js";
 import { createMessageSentEmitter, type MessageSentEvent } from "./message-sent-hook.js";
 import {
   completedOutboundAuditTerminals,
@@ -177,10 +178,28 @@ function emitRecoveredTerminalFailure(
   const collectedBySourceIndex = new Map(
     collected.map(({ sourceIndex, event }) => [sourceIndex, event] as const),
   );
+
   const terminalEvents = fallbackEvents.map(
     ({ sourceIndex, event }) => collectedBySourceIndex.get(sourceIndex) ?? event,
   );
   emitRecoveredMessageSentEvents(entry, terminalEvents);
+}
+
+async function runRecoveryTerminalHook(params: {
+  entry: QueuedDelivery;
+  cfg: OpenClawConfig;
+  log: RecoveryLogger;
+  stateDir?: string;
+}): Promise<void> {
+  await runOutboundQueueTerminalHook({
+    cfg: params.cfg,
+    queueId: params.entry.id,
+    ...(params.stateDir !== undefined ? { stateDir: params.stateDir } : {}),
+    channel: params.entry.channel,
+    to: params.entry.to,
+    accountId: params.entry.accountId,
+    warn: (message) => params.log.warn(message),
+  });
 }
 
 function emitRecoveredTerminalSuccess(entry: QueuedDelivery, result: OutboundDeliveryResult): void {
@@ -359,6 +378,7 @@ async function applyRecoveryDeliveryAdmission(params: {
     params.stateDir,
   );
   if (result.status === "failed") {
+    await runRecoveryTerminalHook(params);
     emitRecoveredTerminalFailure(params.entry, admission.reason);
     emitQueuedAuditTerminals(params.entry, () => queuedDeadLetterAuditTerminals(params.entry));
     params.log.warn(
@@ -483,6 +503,7 @@ async function runReconciledSentCommitHooks(params: {
 
 async function moveEntryToFailedWithLogging(
   entry: QueuedDelivery,
+  cfg: OpenClawConfig,
   log: RecoveryLogger,
   stateDir?: string,
 ): Promise<boolean> {
@@ -492,6 +513,7 @@ async function moveEntryToFailedWithLogging(
     await (attemptId !== undefined
       ? moveToFailed(entry.id, stateDir, attemptId)
       : moveToFailed(entry.id, stateDir));
+    await runRecoveryTerminalHook({ entry, cfg, log, stateDir });
     emitRecoveredTerminalFailure(entry, "delivery retry budget exhausted");
     return true;
   } catch (err) {
@@ -555,6 +577,7 @@ function markDurableDeliveryFailedBestEffort(entry: QueuedDelivery, log: Recover
 
 async function resolveCompletedOwnerBeforeRecovery(opts: {
   entry: QueuedDelivery;
+  cfg: OpenClawConfig;
   log: RecoveryLogger;
   stateDir?: string;
   onRecovered?: (entry: QueuedDelivery) => void;
@@ -585,6 +608,12 @@ async function resolveCompletedOwnerBeforeRecovery(opts: {
       opts.log.warn(`Delivery entry ${opts.entry.id} ${errMsg}`);
       return "failed";
     }
+    await runRecoveryTerminalHook({
+      entry: opts.entry,
+      cfg: opts.cfg,
+      log: opts.log,
+      stateDir: opts.stateDir,
+    });
     const messageId = operation.platformMessageId ?? operation.preparedMessageId;
     if (messageId) {
       const result: OutboundDeliveryResult = { channel: opts.entry.channel, messageId };
@@ -612,6 +641,12 @@ async function resolveCompletedOwnerBeforeRecovery(opts: {
       opts.log.warn(`Delivery entry ${opts.entry.id} ${errMsg}`);
       return "failed";
     }
+    await runRecoveryTerminalHook({
+      entry: opts.entry,
+      cfg: opts.cfg,
+      log: opts.log,
+      stateDir: opts.stateDir,
+    });
     opts.onRecovered?.(opts.entry);
     return "recovered";
   }
@@ -626,6 +661,12 @@ async function resolveCompletedOwnerBeforeRecovery(opts: {
       opts.log.warn(`Delivery entry ${opts.entry.id} ${errMsg}`);
       return "failed";
     }
+    await runRecoveryTerminalHook({
+      entry: opts.entry,
+      cfg: opts.cfg,
+      log: opts.log,
+      stateDir: opts.stateDir,
+    });
     emitQueuedAuditTerminals(opts.entry, () =>
       failedOutboundAuditTerminals({
         payloadCount: queuedPayloadCount(opts.entry),
@@ -645,7 +686,7 @@ async function resolveCompletedOwnerBeforeRecovery(opts: {
     return "failed";
   }
   if (operation.status === "unknown") {
-    const moved = await moveEntryToFailedWithLogging(opts.entry, opts.log, opts.stateDir);
+    const moved = await moveEntryToFailedWithLogging(opts.entry, opts.cfg, opts.log, opts.stateDir);
     return moved ? "moved-to-failed" : "failed";
   }
   return "continue";
@@ -705,6 +746,7 @@ async function drainQueuedEntry(opts: {
         entry,
         payloads: queuedPayloads(entry),
         cfg: opts.cfg,
+        stateDir: opts.stateDir,
         warn: (message) => opts.log.warn(message),
       }));
     if (reconciliation?.status === "sent") {
@@ -714,6 +756,12 @@ async function drainQueuedEntry(opts: {
           completeDurableDelivery(entry.deliveryCompletion, result);
         }
         await ackRecoveredDelivery(entry, opts.stateDir, undefined, entry.platformSendAttemptId);
+        await runRecoveryTerminalHook({
+          entry,
+          cfg: opts.cfg,
+          log: opts.log,
+          stateDir: opts.stateDir,
+        });
         emitRecoveredTerminalSuccess(entry, result);
         await runReconciledSentCommitHooks({
           entry,
@@ -755,13 +803,16 @@ async function drainQueuedEntry(opts: {
         return "failed";
       }
     }
+    const reconciliationMakesReplaySafe = reconciliation?.status === "replay_safe";
     const reconciliationProvedPreSendFailure =
       reconciliation?.status === "not_sent" && entry.recoveryState === "send_attempt_started";
-    if (reconciliationProvedPreSendFailure) {
+    if (reconciliationMakesReplaySafe || reconciliationProvedPreSendFailure) {
       reconciledPlatformSendAttemptId = entry.platformSendAttemptId;
       reconciledPlatformSendStartedAt = entry.platformSendStartedAt;
       opts.log.info(
-        `Delivery entry ${entry.id} reconciled ${entry.recoveryState} as not sent; replaying`,
+        reconciliationMakesReplaySafe
+          ? `Delivery entry ${entry.id} has a provider-idempotent replay plan; replaying`
+          : `Delivery entry ${entry.id} reconciled ${entry.recoveryState} as not sent; replaying`,
       );
     } else {
       let errMsg = `delivery state is ${entry.recoveryState}; refusing blind replay without adapter reconciliation`;
@@ -793,6 +844,12 @@ async function drainQueuedEntry(opts: {
         await (attemptId !== undefined
           ? moveToFailed(entry.id, opts.stateDir, attemptId)
           : moveToFailed(entry.id, opts.stateDir));
+        await runRecoveryTerminalHook({
+          entry,
+          cfg: opts.cfg,
+          log: opts.log,
+          stateDir: opts.stateDir,
+        });
         emitRecoveredTerminalFailure(entry, errMsg);
         emitQueuedAuditTerminals(entry, () => queuedUnknownAuditTerminals(entry));
         return "moved-to-failed";
@@ -811,6 +868,7 @@ async function drainQueuedEntry(opts: {
   let postSendState: QueuedPostSendState | undefined;
   let deliveredResults: OutboundDeliveryResult[] = [];
   let commitHooksRun = false;
+  let terminalHookRun = false;
   const collectResults = (results: readonly OutboundDeliveryResult[]): void => {
     for (const result of results) {
       if (!deliveredResults.includes(result)) {
@@ -824,7 +882,19 @@ async function drainQueuedEntry(opts: {
     }
   };
   const runCommitHooksAfterAck = async (): Promise<void> => {
-    if (postSendState !== "acked" || commitHooksRun) {
+    if (postSendState !== "acked") {
+      return;
+    }
+    if (!terminalHookRun) {
+      terminalHookRun = true;
+      await runRecoveryTerminalHook({
+        entry,
+        cfg: opts.cfg,
+        log: opts.log,
+        stateDir: opts.stateDir,
+      });
+    }
+    if (commitHooksRun) {
       return;
     }
     commitHooksRun = true;
@@ -1092,6 +1162,12 @@ async function drainQueuedEntry(opts: {
         await (producerClaimId
           ? moveToFailed(entry.id, opts.stateDir, producerClaimId)
           : moveToFailed(entry.id, opts.stateDir));
+        await runRecoveryTerminalHook({
+          entry,
+          cfg: opts.cfg,
+          log: opts.log,
+          stateDir: opts.stateDir,
+        });
         emitRecoveredTerminalFailure(entry, errMsg, messageSentEvents);
         emitQueuedAuditTerminals(entry, () =>
           failedOutboundAuditTerminals({
@@ -1187,6 +1263,12 @@ export async function drainPendingDeliveries(opts: {
             await (attemptId !== undefined
               ? moveToFailed(currentEntry.id, opts.stateDir, attemptId)
               : moveToFailed(currentEntry.id, opts.stateDir));
+            await runRecoveryTerminalHook({
+              entry: currentEntry,
+              cfg: opts.cfg,
+              log: opts.log,
+              stateDir: opts.stateDir,
+            });
             emitRecoveredTerminalFailure(currentEntry, "delivery retry budget exhausted");
           } catch (err) {
             if (getErrnoCode(err) === "ENOENT") {
@@ -1314,6 +1396,7 @@ export async function recoverPendingDeliveries(opts: {
         );
         const movedToFailed = await moveEntryToFailedWithLogging(
           currentEntry,
+          opts.cfg,
           opts.log,
           opts.stateDir,
         );

@@ -5,6 +5,7 @@ import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { openOpenClawStateDatabase } from "../../state/openclaw-state-db.js";
 import { OUTBOUND_DELIVERY_QUEUE_NAME } from "./delivery-queue-media-staging.js";
+import { getOutboundDeliveryQueueStatus } from "./delivery-queue-status.js";
 import {
   ackDelivery,
   claimDeliveryPlatformSendAttempt,
@@ -58,6 +59,18 @@ describe("delivery-queue storage", () => {
   }
 
   describe("enqueue + ack lifecycle", () => {
+    it("exposes only pending, terminal, or absent ownership to plugin cleanup", async () => {
+      const id = await enqueueTextDelivery({
+        channel: "matrix",
+        to: "!room:example.org",
+        payloads: [{ text: "hello" }],
+      });
+      await expect(getOutboundDeliveryQueueStatus(id, tmpDir())).resolves.toBe("pending");
+      await moveToFailed(id, tmpDir());
+      await expect(getOutboundDeliveryQueueStatus(id, tmpDir())).resolves.toBe("terminal");
+      await expect(getOutboundDeliveryQueueStatus("missing", tmpDir())).resolves.toBe("absent");
+    });
+
     it("fences stale same-millisecond terminal mutations without releasing newer owner media", async () => {
       vi.useFakeTimers();
       try {

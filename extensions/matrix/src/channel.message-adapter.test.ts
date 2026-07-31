@@ -68,6 +68,60 @@ describe("matrix channel message adapter", () => {
     expect(matrixPlugin.meta.markdownCapable).toBe(true);
   });
 
+  it("declares replay-safe durable text, media, payload, and batch delivery", () => {
+    expect(matrixPlugin.message?.durableFinal).toMatchObject({
+      capabilities: {
+        text: true,
+        media: true,
+        payload: true,
+        batch: true,
+        reconcileUnknownSend: true,
+      },
+      reconcileUnknownSendKinds: {
+        text: true,
+        media: true,
+        payload: true,
+        batch: true,
+      },
+    });
+  });
+
+  it("forwards stable queue coordinates into Matrix sends", async () => {
+    mocks.sendMessageMatrix.mockResolvedValue({ messageId: "$sent", roomId: "!room:example" });
+    await matrixPlugin.message?.send?.text?.({
+      cfg,
+      to: "room:!room:example",
+      text: "durable",
+      accountId: "default",
+      deliveryQueueId: "queue-1",
+      deliveryQueueStateDir: "/queue-state",
+      deliveryPayloadIndex: 4,
+      deliveryPartIndex: 2,
+    });
+
+    expect(lastMatrixSendOptions()).toMatchObject({
+      deliveryQueueId: "queue-1",
+      deliveryQueueStateDir: "/queue-state",
+      deliveryPayloadIndex: 4,
+      deliveryPartIndex: 2,
+    });
+  });
+
+  it("routes standard Matrix message-tool sends through core durability", async () => {
+    const prepareSendPayload = matrixPlugin.actions?.prepareSendPayload;
+    if (!prepareSendPayload) {
+      throw new Error("Expected Matrix prepared-send adapter");
+    }
+    const payload = { text: "durable tool send" };
+
+    expect(await prepareSendPayload({ ctx: { action: "send" } as never, payload } as never)).toBe(
+      payload,
+    );
+    expect(
+      await prepareSendPayload({ ctx: { action: "edit" } as never, payload } as never),
+    ).toBeNull();
+  });
+
   it.each([
     {
       name: "the current room with reply quoting disabled",
@@ -219,10 +273,19 @@ describe("matrix channel message adapter", () => {
       proofs: {
         text: proveText,
         media: proveMedia,
+        payload: () => {
+          expect(adapter.send?.payload).toBeTypeOf("function");
+        },
         replyTo: proveReplyThread,
         thread: proveReplyThread,
         messageSendingHooks: () => {
           expect(adapter.send?.text).toBeTypeOf("function");
+        },
+        batch: () => {
+          expect(adapter.durableFinal?.capabilities?.batch).toBe(true);
+        },
+        reconcileUnknownSend: () => {
+          expect(adapter.durableFinal?.reconcileUnknownSend).toBeTypeOf("function");
         },
       },
     });

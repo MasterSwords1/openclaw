@@ -235,6 +235,7 @@ function createPluginHandler(
     threadId: overrides && "threadId" in overrides ? overrides.threadId : baseCtx.threadId,
     audioAsVoice: overrides?.audioAsVoice,
     deliveryPartIndex: overrides?.deliveryPartIndex,
+    deliveryPayloadIndex: overrides?.deliveryPayloadIndex,
     preparedMessageId:
       overrides?.deliveryPartIndex === undefined || overrides.deliveryPartIndex === 0
         ? baseCtx.preparedMessageId
@@ -495,6 +496,7 @@ const createChannelOutboundContextBase = (params: ChannelHandlerParams) => ({
   gatewayClientScopes: params.gatewayClientScopes,
   conversationReadOrigin: params.conversationReadOrigin,
   deliveryQueueId: params.deliveryQueueId,
+  deliveryQueueStateDir: params.deliveryQueueStateDir,
   preparedMessageId: params.preparedMessageId,
   onPlatformSendDispatch: params.onPlatformSendDispatch,
   onDeliveryResult: params.onDeliveryResult,

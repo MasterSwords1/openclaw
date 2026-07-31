@@ -116,6 +116,7 @@ async function prepareLegacyEntryCheckpoint(params: {
         entry: params.entry,
         payloads: params.entry.payloads,
         cfg: params.cfg,
+        stateDir: params.stateDir,
         warn: (message) => params.log.warn(message),
       })
     : undefined;

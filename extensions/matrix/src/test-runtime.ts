@@ -3,8 +3,12 @@ import {
   implicitMentionKindWhen,
   resolveInboundMentionDecision,
 } from "openclaw/plugin-sdk/channel-mention-gating";
-import type { OpenKeyedStoreOptions } from "openclaw/plugin-sdk/plugin-state-runtime";
+import type {
+  OpenBlobStoreOptions,
+  OpenKeyedStoreOptions,
+} from "openclaw/plugin-sdk/plugin-state-runtime";
 import {
+  createPluginBlobStoreForTests,
   createPluginStateKeyedStoreForTests,
   createPluginStateSyncKeyedStoreForTests,
 } from "openclaw/plugin-sdk/plugin-state-test-runtime";
@@ -17,6 +21,9 @@ type MatrixTestRuntimeOptions = {
   logging?: Partial<PluginRuntime["logging"]>;
   channel?: Partial<PluginRuntime["channel"]>;
   stateDir?: string;
+  getOutboundDeliveryQueueStatus?: NonNullable<
+    PluginRuntime["state"]
+  >["getOutboundDeliveryQueueStatus"];
 };
 
 type MatrixRuntimeStub = {
@@ -25,7 +32,11 @@ type MatrixRuntimeStub = {
   logging?: PluginRuntime["logging"];
   state: Pick<
     NonNullable<PluginRuntime["state"]>,
-    "openKeyedStore" | "openSyncKeyedStore" | "resolveStateDir"
+    | "openBlobStore"
+    | "openKeyedStore"
+    | "openSyncKeyedStore"
+    | "resolveStateDir"
+    | "getOutboundDeliveryQueueStatus"
   >;
 };
 
@@ -89,6 +100,13 @@ export function installMatrixTestRuntime(options: MatrixTestRuntimeOptions = {})
     ...(logging ? { logging } : {}),
     state: {
       resolveStateDir: defaultStateDirResolver,
+      getOutboundDeliveryQueueStatus:
+        options.getOutboundDeliveryQueueStatus ?? (async () => "absent" as const),
+      openBlobStore: (<T>(storeOptions: OpenBlobStoreOptions) =>
+        createPluginBlobStoreForTests<T>("matrix", storeOptions, {
+          ...process.env,
+          OPENCLAW_STATE_DIR: defaultStateDirResolver(process.env, osHomedirForTest),
+        })) as PluginRuntime["state"]["openBlobStore"],
       openKeyedStore: (<T>(storeOptions: OpenKeyedStoreOptions) =>
         createPluginStateKeyedStoreForTests<T>("matrix", {
           ...storeOptions,

@@ -1,8 +1,15 @@
 // Matrix tests cover send plugin behavior.
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  createPluginBlobStoreForTests,
+  createPluginStateKeyedStoreForTests,
+  resetPluginBlobStoreForTests,
+  resetPluginStateStoreForTests,
+} from "openclaw/plugin-sdk/plugin-state-test-runtime";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PluginRuntime } from "../../runtime-api.js";
 import { setMatrixRuntime } from "../runtime.js";
 import { voteMatrixPoll } from "./actions/polls.js";
+import { cleanupMatrixDeliveryPlans, loadMatrixDeliveryPlan } from "./delivery-plan.js";
 import { markdownToMatrixBody, markdownToMatrixHtml } from "./format.js";
 import {
   chunkMatrixText,
@@ -79,6 +86,17 @@ const runtimeStub = {
       convertMarkdownTables: (text: string) => text,
     },
   },
+  state: {
+    resolveStateDir: () => "/tmp/matrix-send-test",
+    getOutboundDeliveryQueueStatus: async () => "pending" as const,
+    openBlobStore: <T>(options: Parameters<typeof createPluginBlobStoreForTests<T>>[1]) =>
+      createPluginBlobStoreForTests<T>("matrix", options, {
+        ...process.env,
+        OPENCLAW_STATE_DIR: "/tmp/matrix-send-test",
+      }),
+    openKeyedStore: <T>(options: Parameters<typeof createPluginStateKeyedStoreForTests<T>>[1]) =>
+      createPluginStateKeyedStoreForTests<T>("matrix", options),
+  },
 } as unknown as PluginRuntime;
 
 function applyMatrixSendRuntimeStub() {
@@ -104,7 +122,28 @@ function createEncryptedMediaPayload() {
 }
 
 const makeClient = () => {
-  const sendMessage = vi.fn().mockResolvedValue("evt1");
+  const getMessageWireEventType = vi.fn().mockResolvedValue("m.room.message");
+  const sendMessage = vi.fn(
+    async (
+      roomId: string,
+      _content: unknown,
+      transactionId?: string,
+      beforeWireDispatch?: (dispatch: {
+        roomId: string;
+        eventType: "m.room.message" | "m.room.encrypted";
+        transactionId: string;
+      }) => Promise<void>,
+    ) => {
+      if (beforeWireDispatch && transactionId) {
+        await beforeWireDispatch({
+          roomId,
+          eventType: await getMessageWireEventType(),
+          transactionId,
+        });
+      }
+      return "evt1";
+    },
+  );
   const sendEvent = vi.fn().mockResolvedValue("evt-poll-vote");
   const getEvent = vi.fn();
   const getJoinedRoomMembers = vi.fn().mockResolvedValue([]);
@@ -116,12 +155,22 @@ const makeClient = () => {
     getJoinedRoomMembers,
     uploadContent,
     getUserId: vi.fn().mockResolvedValue("@bot:example.org"),
+    getTransactionScopeId: vi.fn().mockResolvedValue("scope-1"),
+    getMessageWireEventType,
     prepareForOneOff: vi.fn(async () => undefined),
     start: vi.fn(async () => undefined),
     stop: vi.fn(() => undefined),
     stopAndPersist: vi.fn(async () => undefined),
   } as unknown as import("./sdk.js").MatrixClient;
-  return { client, sendMessage, sendEvent, getEvent, getJoinedRoomMembers, uploadContent };
+  return {
+    client,
+    sendMessage,
+    sendEvent,
+    getEvent,
+    getJoinedRoomMembers,
+    uploadContent,
+    getMessageWireEventType,
+  };
 };
 
 function makeEncryptedMediaClient() {
@@ -178,6 +227,8 @@ function splitTextAtLimit(text: string, limit = text.length): string[] {
 }
 
 function resetMatrixSendRuntimeMocks() {
+  resetPluginStateStoreForTests();
+  resetPluginBlobStoreForTests();
   setMatrixRuntime(runtimeStub);
   loadOutboundMediaFromUrlMock.mockReset().mockImplementation(
     async (
@@ -881,7 +932,7 @@ describe("sendMessageMatrix threads", () => {
 
   it("reports the first Matrix event before a later event fails", async () => {
     const { client, sendMessage } = makeClient();
-    resolveTextChunkLimitMock.mockReturnValue(5);
+    resolveTextChunkLimitMock.mockReturnValue(6);
     sendMessage
       .mockReset()
       .mockResolvedValueOnce("$m1")
@@ -1464,6 +1515,133 @@ describe("sendTypingMatrix", () => {
     });
 
     expect(setTyping).toHaveBeenCalledWith("!room:example", true, 12_345);
+  });
+});
+
+describe("sendMessageMatrix durable replay", () => {
+  beforeEach(async () => {
+    resetMatrixSendRuntimeMocks();
+    await Promise.all(
+      ["queue-replay", "queue-encryption-change"].map(
+        async (queueId) => await cleanupMatrixDeliveryPlans({ queueId }),
+      ),
+    );
+  });
+
+  afterEach(async () => {
+    await Promise.all(
+      ["queue-replay", "queue-encryption-change"].map(
+        async (queueId) => await cleanupMatrixDeliveryPlans({ queueId }),
+      ),
+    );
+  });
+
+  it("reuses the exact media event plan and transaction ids after response loss", async () => {
+    resolveTextChunkLimitMock.mockReturnValue(100);
+    chunkMarkdownTextWithModeMock.mockReturnValue(["caption", "followup"]);
+    const { client, sendMessage, uploadContent } = makeClient();
+    sendMessage
+      .mockImplementationOnce(async (roomId, _content, transactionId, beforeWireDispatch) => {
+        await beforeWireDispatch?.({
+          roomId,
+          eventType: "m.room.message",
+          transactionId: transactionId!,
+        });
+        return "evt-media";
+      })
+      .mockImplementationOnce(async (roomId, _content, transactionId, beforeWireDispatch) => {
+        await beforeWireDispatch?.({
+          roomId,
+          eventType: "m.room.message",
+          transactionId: transactionId!,
+        });
+        throw new Error("simulated response loss");
+      });
+    const onPlatformSendDispatch = vi.fn(async () => undefined);
+    const opts = {
+      client,
+      cfg: {} as never,
+      mediaUrl: "https://example.test/photo.png",
+      deliveryQueueId: "queue-replay",
+      deliveryPayloadIndex: 3,
+      deliveryPartIndex: 0,
+      onPlatformSendDispatch,
+    };
+
+    await expect(
+      sendMessageMatrix("!room:example.org", "caption ".repeat(30), opts),
+    ).rejects.toThrow("simulated response loss");
+    const firstTransactionIds = sendMessage.mock.calls.map((call) => call[2]);
+    expect(firstTransactionIds).toHaveLength(2);
+    expect(firstTransactionIds.every((value) => typeof value === "string")).toBe(true);
+
+    sendMessage.mockReset();
+    sendMessage
+      .mockImplementationOnce(async (roomId, _content, transactionId, beforeWireDispatch) => {
+        await beforeWireDispatch?.({
+          roomId,
+          eventType: "m.room.message",
+          transactionId: transactionId!,
+        });
+        return "evt-media";
+      })
+      .mockImplementationOnce(async (roomId, _content, transactionId, beforeWireDispatch) => {
+        await beforeWireDispatch?.({
+          roomId,
+          eventType: "m.room.message",
+          transactionId: transactionId!,
+        });
+        return "evt-followup";
+      });
+    await expect(
+      sendMessageMatrix("!room:example.org", "different on retry", opts),
+    ).resolves.toMatchObject({
+      messageId: "evt-followup",
+      content: "caption\nfollowup",
+    });
+
+    expect(sendMessage.mock.calls.map((call) => call[2])).toEqual(firstTransactionIds);
+    expect(loadOutboundMediaFromUrlMock).toHaveBeenCalledTimes(1);
+    expect(uploadContent).toHaveBeenCalledTimes(1);
+    expect(onPlatformSendDispatch).toHaveBeenCalledTimes(2);
+  });
+
+  it("binds the durable plan to the SDK-selected encrypted wire endpoint", async () => {
+    const { client, sendMessage, uploadContent, getMessageWireEventType } = makeClient();
+    getMessageWireEventType
+      .mockResolvedValueOnce("m.room.message")
+      .mockResolvedValueOnce("m.room.encrypted");
+    const onPlatformSendDispatch = vi.fn(async () => undefined);
+
+    await expect(
+      sendMessageMatrix("!room:example.org", "caption", {
+        client,
+        cfg: {} as never,
+        mediaUrl: "https://example.test/photo.png",
+        deliveryQueueId: "queue-encryption-change",
+        deliveryPayloadIndex: 0,
+        deliveryPartIndex: 0,
+        onPlatformSendDispatch,
+      }),
+    ).resolves.toMatchObject({ messageId: "evt1", content: "caption" });
+
+    expect(uploadContent).toHaveBeenCalledOnce();
+    expect(onPlatformSendDispatch).toHaveBeenCalledOnce();
+    expect(sendMessage).toHaveBeenCalledOnce();
+    await expect(
+      loadMatrixDeliveryPlan({
+        identity: {
+          queueId: "queue-encryption-change",
+          queueStateDir: "/tmp/matrix-send-test",
+          payloadIndex: 0,
+          partIndex: 0,
+        },
+        accountId: undefined,
+        roomId: "!room:example.org",
+        transactionScopeId: "scope-1",
+        wireEventType: "m.room.encrypted",
+      }),
+    ).resolves.toMatchObject({ wireEventType: "m.room.encrypted" });
   });
 });
 /* oxlint-disable max-lines -- TODO: split this grandfathered oversized file. */

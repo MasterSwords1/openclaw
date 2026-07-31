@@ -104,6 +104,13 @@ export type MatrixSendOpts = {
   extraContent?: MatrixExtraContentFields;
   /** Send audio as voice message instead of audio file. Defaults to false. */
   audioAsVoice?: boolean;
+  /** Opaque core queue identity used only for provider-idempotent durable sends. */
+  deliveryQueueId?: string;
+  deliveryQueueStateDir?: string;
+  deliveryPayloadIndex?: number;
+  deliveryPartIndex?: number;
+  /** Runs after the immutable event plan is committed and before timeline I/O. */
+  onPlatformSendDispatch?: () => Promise<void>;
   /** Persist each concrete platform send before any later event can fail. */
   onDeliveryResult?: (result: MatrixSendResult) => Promise<void> | void;
 };

@@ -1,0 +1,307 @@
+import {
+  resetPluginBlobStoreForTests,
+  resetPluginStateStoreForTests,
+} from "openclaw/plugin-sdk/plugin-state-test-runtime";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { installMatrixTestRuntime } from "../test-runtime.js";
+import {
+  cleanupMatrixDeliveryPlans,
+  createMatrixPlannedEvents,
+  ensureMatrixDeliveryPlanGarbageCollection,
+  loadMatrixDeliveryPlan,
+  persistMatrixDeliveryPlan,
+  reconcileMatrixUnknownSend,
+  resolveMatrixDurableDeliveryIdentity,
+} from "./delivery-plan.js";
+import type { MatrixPlannedEvent } from "./delivery-plan.js";
+
+const client = {
+  getTransactionScopeId: vi.fn(async () => "scope-1"),
+  getMessageWireEventType: vi.fn<() => Promise<"m.room.message" | "m.room.encrypted">>(
+    async () => "m.room.message",
+  ),
+};
+
+vi.mock("./send/client.js", () => ({
+  withResolvedMatrixSendClient: async (
+    _opts: unknown,
+    run: (resolved: typeof client) => Promise<unknown>,
+  ) => await run(client),
+}));
+
+vi.mock("./send/targets.js", () => ({
+  resolveMatrixRoomId: vi.fn(async () => "!room:example.org"),
+}));
+
+const identity = {
+  queueId: "queue-1",
+  queueStateDir: "/tmp",
+  payloadIndex: 2,
+  partIndex: 0,
+};
+const target = {
+  identity,
+  accountId: "default",
+  roomId: "!room:example.org",
+  transactionScopeId: "scope-1",
+  wireEventType: "m.room.message" as const,
+};
+
+function plannedEvents(
+  planIdentity: typeof identity,
+  events: readonly Omit<MatrixPlannedEvent, "transactionId">[],
+) {
+  return createMatrixPlannedEvents({ identity: planIdentity, events });
+}
+
+describe("Matrix durable delivery plans", () => {
+  beforeEach(() => {
+    resetPluginStateStoreForTests();
+    resetPluginBlobStoreForTests();
+    client.getTransactionScopeId.mockReset().mockResolvedValue("scope-1");
+    client.getMessageWireEventType.mockReset().mockResolvedValue("m.room.message");
+  });
+
+  afterEach(async () => {
+    await Promise.all([
+      cleanupMatrixDeliveryPlans({ queueId: "queue-1" }),
+      cleanupMatrixDeliveryPlans({ queueId: "queue-long" }),
+      cleanupMatrixDeliveryPlans({ queueId: "queue-gap" }),
+      cleanupMatrixDeliveryPlans({
+        queueId: "queue-shared",
+        deliveryQueueStateDir: "/tmp/matrix-queue-a",
+      }),
+      cleanupMatrixDeliveryPlans({
+        queueId: "queue-shared",
+        deliveryQueueStateDir: "/tmp/matrix-queue-b",
+      }),
+    ]);
+    resetPluginStateStoreForTests();
+    resetPluginBlobStoreForTests();
+  });
+
+  it("keeps the first exact event batch and deterministic transaction ids", async () => {
+    installMatrixTestRuntime({ getOutboundDeliveryQueueStatus: async () => "pending" });
+    const first = await persistMatrixDeliveryPlan({
+      ...target,
+      events: plannedEvents(identity, [
+        { receiptKind: "text", content: { msgtype: "m.text", body: "first" } },
+      ]),
+    });
+    await expect(
+      persistMatrixDeliveryPlan({
+        ...target,
+        events: plannedEvents(identity, [
+          { receiptKind: "text", content: { msgtype: "m.text", body: "different" } },
+        ]),
+      }),
+    ).rejects.toThrow("prepared event batch");
+    expect(first.events[0]?.content.body).toBe("first");
+    expect(first.events[0]?.transactionId).toMatch(/^oc_[A-Za-z0-9_-]+$/u);
+    await expect(loadMatrixDeliveryPlan(target)).resolves.toEqual(first);
+  });
+
+  it("stores long exact plans without the keyed-state JSON value limit", async () => {
+    installMatrixTestRuntime({ getOutboundDeliveryQueueStatus: async () => "pending" });
+    const body = "x".repeat(100_000);
+    const longTarget = {
+      ...target,
+      identity: { ...identity, queueId: "queue-long" },
+    };
+    const plan = await persistMatrixDeliveryPlan({
+      ...longTarget,
+      events: plannedEvents(longTarget.identity, [
+        { receiptKind: "text", content: { msgtype: "m.text", body } },
+      ]),
+    });
+
+    expect(plan.events[0]?.content.body).toBe(body);
+    await expect(loadMatrixDeliveryPlan(longTarget)).resolves.toEqual(plan);
+  });
+
+  it("isolates identical queue ids owned by different queue stores", async () => {
+    installMatrixTestRuntime({ getOutboundDeliveryQueueStatus: async () => "pending" });
+    const identityA = {
+      ...identity,
+      queueId: "queue-shared",
+      queueStateDir: "/tmp/matrix-queue-a",
+    };
+    const identityB = {
+      ...identity,
+      queueId: "queue-shared",
+      queueStateDir: "/tmp/matrix-queue-b",
+    };
+    const planA = await persistMatrixDeliveryPlan({
+      ...target,
+      identity: identityA,
+      events: plannedEvents(identityA, [
+        { receiptKind: "text", content: { msgtype: "m.text", body: "a" } },
+      ]),
+    });
+    const planB = await persistMatrixDeliveryPlan({
+      ...target,
+      identity: identityB,
+      events: plannedEvents(identityB, [
+        { receiptKind: "text", content: { msgtype: "m.text", body: "b" } },
+      ]),
+    });
+
+    expect(planA.events[0]?.transactionId).not.toBe(planB.events[0]?.transactionId);
+    await cleanupMatrixDeliveryPlans({
+      queueId: identityA.queueId,
+      deliveryQueueStateDir: identityA.queueStateDir,
+    });
+    await expect(loadMatrixDeliveryPlan({ ...target, identity: identityA })).resolves.toBeNull();
+    await expect(loadMatrixDeliveryPlan({ ...target, identity: identityB })).resolves.toEqual(
+      planB,
+    );
+  });
+
+  it("canonicalizes implicit and explicit references to the same queue store", () => {
+    installMatrixTestRuntime({ stateDir: "/tmp/matrix-canonical-root" });
+
+    expect(
+      resolveMatrixDurableDeliveryIdentity({
+        queueId: "queue-canonical",
+        payloadIndex: 0,
+        partIndex: 0,
+      }),
+    ).toEqual(
+      resolveMatrixDurableDeliveryIdentity({
+        queueId: "queue-canonical",
+        queueStateDir: "/tmp/matrix-canonical-root/.",
+        payloadIndex: 0,
+        partIndex: 0,
+      }),
+    );
+  });
+
+  it("authorizes replay only while the stored account, room, scope, and wire type match", async () => {
+    installMatrixTestRuntime({ getOutboundDeliveryQueueStatus: async () => "pending" });
+    await persistMatrixDeliveryPlan({
+      ...target,
+      events: plannedEvents(identity, [
+        { receiptKind: "text", content: { msgtype: "m.text", body: "hello" } },
+      ]),
+    });
+    const context = {
+      cfg: {},
+      queueId: identity.queueId,
+      channel: "matrix",
+      to: "room:!room:example.org",
+      accountId: "default",
+      enqueuedAt: 1,
+      retryCount: 1,
+      payloads: [{ text: "hello" }],
+      renderedBatchPlan: {
+        payloadCount: 1,
+        textCount: 1,
+        mediaCount: 0,
+        voiceCount: 0,
+        presentationCount: 0,
+        interactiveCount: 0,
+        channelDataCount: 0,
+        items: [{ index: 2, kinds: ["text" as const], mediaUrls: [] }],
+      },
+    };
+
+    await expect(reconcileMatrixUnknownSend(context)).resolves.toEqual({ status: "replay_safe" });
+    client.getMessageWireEventType.mockResolvedValueOnce("m.room.encrypted");
+    await expect(reconcileMatrixUnknownSend(context)).resolves.toMatchObject({
+      status: "unresolved",
+      retryable: false,
+    });
+  });
+
+  it("fails closed when persisted part coordinates contain a gap", async () => {
+    installMatrixTestRuntime({ getOutboundDeliveryQueueStatus: async () => "pending" });
+    const gapIdentity = { ...identity, queueId: "queue-gap" };
+    for (const partIndex of [0, 2]) {
+      await persistMatrixDeliveryPlan({
+        ...target,
+        identity: { ...gapIdentity, partIndex },
+        events: plannedEvents({ ...gapIdentity, partIndex }, [
+          { receiptKind: "media", content: { msgtype: "m.image", body: `part-${partIndex}` } },
+        ]),
+      });
+    }
+
+    await expect(
+      reconcileMatrixUnknownSend({
+        cfg: {},
+        queueId: gapIdentity.queueId,
+        channel: "matrix",
+        to: "room:!room:example.org",
+        accountId: "default",
+        enqueuedAt: 1,
+        retryCount: 1,
+        payloads: [{ mediaUrls: ["one", "two", "three"] }],
+        renderedBatchPlan: {
+          payloadCount: 1,
+          textCount: 0,
+          mediaCount: 3,
+          voiceCount: 0,
+          presentationCount: 0,
+          interactiveCount: 0,
+          channelDataCount: 0,
+          items: [
+            {
+              index: gapIdentity.payloadIndex,
+              kinds: ["media"],
+              mediaUrls: ["one", "two", "three"],
+            },
+          ],
+        },
+      }),
+    ).resolves.toMatchObject({ status: "unresolved", retryable: false });
+  });
+
+  it("refuses ambiguous replay when no event plan exists", async () => {
+    installMatrixTestRuntime({ getOutboundDeliveryQueueStatus: async () => "pending" });
+    await expect(
+      reconcileMatrixUnknownSend({
+        cfg: {},
+        queueId: "missing",
+        channel: "matrix",
+        to: "room:!room:example.org",
+        accountId: "default",
+        enqueuedAt: 1,
+        retryCount: 1,
+        payloads: [{ text: "hello" }],
+      }),
+    ).resolves.toMatchObject({ status: "unresolved", retryable: false });
+  });
+
+  it("retains pending plans and deletes terminal or explicitly cleaned plans", async () => {
+    let status: "pending" | "terminal" = "pending";
+    installMatrixTestRuntime({ getOutboundDeliveryQueueStatus: async () => status });
+    await persistMatrixDeliveryPlan({
+      ...target,
+      events: plannedEvents(identity, [
+        { receiptKind: "text", content: { msgtype: "m.text", body: "hello" } },
+      ]),
+    });
+
+    await expect(ensureMatrixDeliveryPlanGarbageCollection({ force: true })).resolves.toEqual({
+      deleted: 0,
+      retained: 1,
+      invalid: 0,
+    });
+    status = "terminal";
+    await expect(ensureMatrixDeliveryPlanGarbageCollection({ force: true })).resolves.toEqual({
+      deleted: 1,
+      retained: 0,
+      invalid: 0,
+    });
+    await expect(loadMatrixDeliveryPlan(target)).resolves.toBeNull();
+
+    await persistMatrixDeliveryPlan({
+      ...target,
+      events: plannedEvents(identity, [
+        { receiptKind: "text", content: { msgtype: "m.text", body: "again" } },
+      ]),
+    });
+    await cleanupMatrixDeliveryPlans({ queueId: identity.queueId });
+    await expect(loadMatrixDeliveryPlan(target)).resolves.toBeNull();
+  });
+});

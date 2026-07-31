@@ -458,6 +458,11 @@ export type PluginRuntimeCore = {
   };
   state: {
     resolveStateDir: typeof import("../../config/paths.js").resolveStateDir;
+    /** Read an opaque outbound queue id for plugin-owned durable artifact cleanup. */
+    getOutboundDeliveryQueueStatus?: (
+      queueId: string,
+      stateDir?: string,
+    ) => Promise<"pending" | "terminal" | "absent">;
     openBlobStore: <TMetadata>(
       options: import("../../plugin-state/plugin-blob-store.types.js").OpenBlobStoreOptions,
     ) => import("../../plugin-state/plugin-blob-store.types.js").PluginBlobStore<TMetadata>;

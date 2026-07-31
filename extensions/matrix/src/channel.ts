@@ -9,10 +9,7 @@ import type {
   ChannelThreadingToolContext,
 } from "openclaw/plugin-sdk/channel-contract";
 import { createChatChannelPlugin, type ChannelPlugin } from "openclaw/plugin-sdk/channel-core";
-import {
-  createChannelMessageAdapterFromOutbound,
-  createRuntimeOutboundDelegates,
-} from "openclaw/plugin-sdk/channel-outbound";
+import { createRuntimeOutboundDelegates } from "openclaw/plugin-sdk/channel-outbound";
 import {
   createAllowlistProviderOpenWarningCollector,
   projectAccountConfigWarningCollector,
@@ -45,6 +42,7 @@ import {
 import { matrixMessageActions } from "./actions.js";
 import { matrixApprovalCapability } from "./approval-native.js";
 import { createMatrixPairingText, createMatrixProbeAccount } from "./channel-account-paths.js";
+import { createMatrixMessageAdapter } from "./channel-message-adapter.js";
 import { DEFAULT_ACCOUNT_ID, matrixConfigAdapter } from "./config-adapter.js";
 import { MatrixChannelConfigSchema } from "./config-schema.js";
 import {
@@ -370,9 +368,12 @@ const matrixChannelOutbound: ChannelOutboundAdapter = {
     durableFinal: {
       text: true,
       media: true,
+      payload: true,
       replyTo: true,
       thread: true,
       messageSendingHooks: true,
+      batch: true,
+      reconcileUnknownSend: true,
     },
   },
   presentationCapabilities: {
@@ -419,25 +420,9 @@ const matrixChannelOutbound: ChannelOutboundAdapter = {
   }),
 };
 
-const matrixMessageAdapter = createChannelMessageAdapterFromOutbound({
-  id: "matrix",
+const matrixMessageAdapter = createMatrixMessageAdapter({
   outbound: matrixChannelOutbound,
-  live: {
-    capabilities: {
-      draftPreview: true,
-      previewFinalization: true,
-      progressUpdates: true,
-      quietFinalization: true,
-    },
-    finalizer: {
-      capabilities: {
-        finalEdit: true,
-        normalFallback: true,
-        discardPending: true,
-        previewReceipt: true,
-      },
-    },
-  },
+  getRuntime: loadMatrixChannelRuntime,
 });
 
 export const matrixPlugin: ChannelPlugin<ResolvedMatrixAccount, MatrixProbe> =

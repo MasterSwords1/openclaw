@@ -35,6 +35,7 @@ import {
   resolveSharedMatrixClient,
 } from "../client.js";
 import { releaseSharedClientInstance } from "../client/shared.js";
+import { ensureMatrixDeliveryPlanGarbageCollection } from "../delivery-plan.js";
 import type { MatrixClient } from "../sdk.js";
 import { isMatrixStartupAbortError } from "../startup-abort.js";
 import {
@@ -111,6 +112,9 @@ export async function monitorMatrixProvider(opts: MonitorMatrixOpts = {}): Promi
   }
 
   const logger = core.logging.getChildLogger({ module: "matrix-auto-reply" });
+  await ensureMatrixDeliveryPlanGarbageCollection().catch((error: unknown) => {
+    logger.warn(`matrix: durable delivery plan cleanup deferred (${String(error)})`);
+  });
   const formatRuntimeMessage = (...args: Parameters<RuntimeEnv["log"]>) => format(...args);
   const runtime: RuntimeEnv = opts.runtime ?? {
     log: (...args) => {

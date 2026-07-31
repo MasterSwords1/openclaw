@@ -88,6 +88,7 @@ export async function deliverOutboundPayloadsCore(
       gatewayClientScopes: params.gatewayClientScopes,
       conversationReadOrigin: params.conversationReadOrigin,
       deliveryQueueId: params.deliveryQueueId,
+      deliveryQueueStateDir: params.deliveryQueueStateDir,
       preparedMessageId: params.preparedMessageId,
       requiredUnknownSendReconciliation: params.requiredUnknownSendReconciliation,
       onPlatformSendStart: params.onPlatformSendStart,
@@ -299,6 +300,7 @@ export async function deliverOutboundPayloadsCore(
       params.onPayload?.(payloadSummary);
       const replyToResolution = resolveCurrentReplyTo(effectivePayload);
       const sendOverrides: OutboundMessageSendOverrides = {
+        ...(params.deliveryQueueId !== undefined ? { deliveryPayloadIndex: payloadIndex } : {}),
         replyToId: replyToResolution.replyToId,
         replyToIdSource: replyToResolution.source,
         ...(params.threadId !== undefined ? { threadId: params.threadId } : {}),

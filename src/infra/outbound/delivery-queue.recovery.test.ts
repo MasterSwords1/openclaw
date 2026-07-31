@@ -985,6 +985,40 @@ describe("delivery-queue recovery", () => {
     expect(await loadPendingDeliveries(tmpDir())).toHaveLength(0);
   });
 
+  it("replays ambiguous entries when the provider has an idempotent stored plan", async () => {
+    const id = await enqueueRecoveryDelivery({ payloads: [{ text: "planned" }] });
+    setQueuedEntryState(tmpDir(), id, {
+      retryCount: 0,
+      platformSendStartedAt: Date.now(),
+      recoveryState: "unknown_after_send",
+    });
+    const afterQueueTerminal = vi.fn();
+    resolveOutboundChannelMessageAdapterMock.mockReturnValue({
+      durableFinal: {
+        capabilities: { reconcileUnknownSend: true },
+        reconcileUnknownSend: vi.fn().mockResolvedValue({ status: "replay_safe" }),
+        afterQueueTerminal,
+      },
+    });
+    const deliver = vi
+      .fn()
+      .mockResolvedValue([{ channel: "demo-channel-a", messageId: "provider-id" }]);
+
+    const { result } = await runRecovery({ deliver });
+
+    expect(result).toMatchObject({ recovered: 1, failed: 0 });
+    expect(deliver).toHaveBeenCalledOnce();
+    expect(afterQueueTerminal).toHaveBeenCalledOnce();
+    expect(afterQueueTerminal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        queueId: id,
+        deliveryQueueStateDir: tmpDir(),
+        channel: "demo-channel-a",
+      }),
+    );
+    expect(await loadPendingDeliveries(tmpDir())).toHaveLength(0);
+  });
+
   it("keeps an in-flight stable platform send fenced across recovery", async () => {
     const id = "cron-direct-delivery:v1:in-flight-producer-lease";
     await enqueueDeliveryOnce(
@@ -1155,6 +1189,9 @@ describe("delivery-queue recovery", () => {
     const afterCommit = vi.fn(() => {
       order.push("afterCommit");
     });
+    const afterQueueTerminal = vi.fn(() => {
+      order.push("cleanup");
+    });
     const reconcileUnknownSend = vi.fn().mockResolvedValue({
       status: "sent",
       messageId: "platform-1",
@@ -1169,6 +1206,7 @@ describe("delivery-queue recovery", () => {
       durableFinal: {
         capabilities: { reconcileUnknownSend: true },
         reconcileUnknownSend,
+        afterQueueTerminal,
       },
       send: {
         lifecycle: {
@@ -1229,7 +1267,7 @@ describe("delivery-queue recovery", () => {
     expect(afterCommitInput.threadId).toBe("thread-1");
     expect(afterCommitInput.silent).toBe(true);
     expect(afterCommitInput.result?.messageId).toBe("platform-1");
-    expect(order).toEqual(["afterCommit"]);
+    expect(order).toEqual(["cleanup", "afterCommit"]);
     expect(await loadPendingDeliveries(tmpDir())).toHaveLength(0);
     expect(auditEvents).toHaveLength(1);
     expect(auditEvents[0]).toMatchObject({

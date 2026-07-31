@@ -844,6 +844,9 @@ describe("deliverOutboundPayloads", () => {
     const afterCommit = vi.fn((ctx: { attemptToken?: unknown; result: { messageId?: string } }) => {
       order.push(`commit:${String(ctx.attemptToken)}:${ctx.result.messageId ?? ""}`);
     });
+    const afterQueueTerminal = vi.fn(() => {
+      order.push("cleanup");
+    });
     setMatrixMessageAdapter({
       id: "matrix",
       durableFinal: {
@@ -855,6 +858,7 @@ describe("deliverOutboundPayloads", () => {
         },
         reconcileUnknownSendKinds: { text: true },
         reconcileUnknownSend: async () => ({ status: "not_sent" }),
+        afterQueueTerminal,
       },
       send: {
         lifecycle: { beforeSendAttempt, afterSendSuccess, afterCommit },
@@ -880,8 +884,12 @@ describe("deliverOutboundPayloads", () => {
       "mark-unknown",
       "complete",
       "ack",
+      "cleanup",
       "commit:pending-1:message-adapter-1",
     ]);
+    expect(afterQueueTerminal).toHaveBeenCalledWith(
+      expect.objectContaining({ queueId: "queue-1", channel: "matrix" }),
+    );
     const [beforeParams] = expectDefined(
       (beforeSendAttempt.mock.calls as unknown as Array<[Record<string, unknown>]>)[0],
       "(beforeSendAttempt.mock.calls as unknown as Array<[Record<string, unknown>]>)[0] test invariant",
@@ -1169,7 +1177,7 @@ describe("deliverOutboundPayloads", () => {
     );
   });
 
-  it("does not assign one durable delivery id to multiple payload sends", async () => {
+  it("does not expose indexed queue identity to non-reconciling batch adapters", async () => {
     const messageSendText = vi.fn(async (_ctx: ChannelMessageSendTextContext) => ({
       messageId: "message-adapter-1",
       receipt: createMessageReceiptFromOutboundResults({
@@ -1189,9 +1197,106 @@ describe("deliverOutboundPayloads", () => {
     });
 
     expect(messageSendText).toHaveBeenCalledTimes(2);
-    for (const [ctx] of messageSendText.mock.calls) {
-      expect(ctx.deliveryQueueId).toBeUndefined();
-    }
+    const contexts = messageSendText.mock.calls.map(([ctx]) => ctx);
+    expect(contexts.map((ctx) => ctx.deliveryQueueId)).toEqual([undefined, undefined]);
+    expect(contexts.map((ctx) => ctx.deliveryPayloadIndex)).toEqual([undefined, undefined]);
+  });
+
+  it("uses applicable provider reconciliation for ordinary queued sends", async () => {
+    const messageSendText = vi.fn(async (ctx: ChannelMessageSendTextContext) => {
+      await ctx.onPlatformSendDispatch?.();
+      return {
+        messageId: "message-adapter-1",
+        receipt: createMessageReceiptFromOutboundResults({
+          results: [{ channel: "matrix", messageId: "message-adapter-1" }],
+          kind: "text",
+        }),
+      };
+    });
+    setMatrixMessageAdapter({
+      id: "matrix",
+      durableFinal: {
+        capabilities: { text: true, reconcileUnknownSend: true },
+        reconcileUnknownSendKinds: { text: true },
+        reconcileUnknownSend: async () => ({ status: "not_sent" }),
+      },
+      send: { text: messageSendText },
+    });
+
+    await deliverMatrix({ queuePolicy: "required" });
+
+    expect(requireMockCallArg(queueMocks.enqueueDelivery, "enqueueDelivery")).toEqual(
+      expect.objectContaining({ requireUnknownSendReconciliation: true }),
+    );
+    expect(messageSendText).toHaveBeenCalledWith(
+      expect.objectContaining({
+        deliveryQueueId: "mock-queue-id",
+        deliveryPayloadIndex: 0,
+        deliveryPartIndex: 0,
+      }),
+    );
+  });
+
+  it("preserves an explicit opt-out from provider reconciliation", async () => {
+    const messageSendText = vi.fn(async (_ctx: ChannelMessageSendTextContext) => ({
+      messageId: "message-adapter-1",
+      receipt: createMessageReceiptFromOutboundResults({
+        results: [{ channel: "matrix", messageId: "message-adapter-1" }],
+        kind: "text",
+      }),
+    }));
+    setMatrixMessageAdapter({
+      id: "matrix",
+      durableFinal: {
+        capabilities: { text: true, reconcileUnknownSend: true },
+        reconcileUnknownSendKinds: { text: true },
+        reconcileUnknownSend: async () => ({ status: "not_sent" }),
+      },
+      send: { text: messageSendText },
+    });
+
+    await deliverMatrix({
+      queuePolicy: "required",
+      requireUnknownSendReconciliation: false,
+    });
+
+    expect(messageSendText).toHaveBeenCalledWith(
+      expect.objectContaining({
+        deliveryQueueId: undefined,
+        deliveryPayloadIndex: undefined,
+        deliveryPartIndex: 0,
+      }),
+    );
+  });
+
+  it("uses applicable provider reconciliation for ordinary queued batches", async () => {
+    const messageSendText = vi.fn(async (ctx: ChannelMessageSendTextContext) => ({
+      messageId: `message-adapter-${ctx.deliveryPayloadIndex}`,
+      receipt: createMessageReceiptFromOutboundResults({
+        results: [{ channel: "matrix", messageId: `message-adapter-${ctx.deliveryPayloadIndex}` }],
+        kind: "text",
+      }),
+    }));
+    setMatrixMessageAdapter({
+      id: "matrix",
+      durableFinal: {
+        capabilities: { text: true, batch: true, reconcileUnknownSend: true },
+        reconcileUnknownSendKinds: { text: true, batch: true },
+        reconcileUnknownSend: async () => ({ status: "not_sent" }),
+      },
+      send: { text: messageSendText },
+    });
+
+    await deliverMatrix({
+      payloads: [{ text: "first" }, { text: "second" }],
+      queuePolicy: "required",
+    });
+
+    expect(messageSendText.mock.calls.map(([ctx]) => ctx.deliveryQueueId)).toEqual([
+      "mock-queue-id",
+      "mock-queue-id",
+    ]);
+    expect(messageSendText.mock.calls.map(([ctx]) => ctx.deliveryPayloadIndex)).toEqual([0, 1]);
   });
 
   it("rejects explicitly reconciled multi-payload sends before enqueue or platform I/O", async () => {

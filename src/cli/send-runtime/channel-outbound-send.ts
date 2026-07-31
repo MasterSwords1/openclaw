@@ -27,6 +27,12 @@ type RuntimeSendOpts = {
   gatewayClientScopes?: readonly string[];
   /** @internal Opaque durable intent id for provider-side reconciliation. */
   deliveryQueueId?: string;
+  /** @internal State root owning the durable intent during recovery. */
+  deliveryQueueStateDir?: string;
+  /** @internal Stable queue-local payload index. */
+  deliveryPayloadIndex?: number;
+  /** @internal Stable provider-send index within one payload. */
+  deliveryPartIndex?: number;
   /** @internal Refresh durable timing before recipient-visible or finalizing platform I/O. */
   onPlatformSendDispatch?: () => Promise<void>;
   textMode?: "markdown" | "html";
@@ -70,6 +76,9 @@ export function createChannelOutboundRuntimeSend(params: {
         gifPlayback: opts.gifPlayback,
         gatewayClientScopes: opts.gatewayClientScopes,
         deliveryQueueId: opts.deliveryQueueId,
+        deliveryQueueStateDir: opts.deliveryQueueStateDir,
+        deliveryPayloadIndex: opts.deliveryPayloadIndex,
+        deliveryPartIndex: opts.deliveryPartIndex,
         onPlatformSendDispatch: opts.onPlatformSendDispatch,
       });
       const hasMedia = Boolean(opts.mediaUrl);

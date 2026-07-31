@@ -30,6 +30,7 @@ export async function reconcileUnknownQueuedDelivery(params: {
   payloads: readonly ReplyPayload[];
   cfg: OpenClawConfig;
   warn: (message: string) => void;
+  stateDir?: string;
 }): Promise<ChannelMessageUnknownSendReconciliationResult | null> {
   const adapter = resolveOutboundChannelMessageAdapter({
     channel: params.entry.channel,
@@ -48,6 +49,7 @@ export async function reconcileUnknownQueuedDelivery(params: {
     return await reconcileUnknownSend({
       cfg: params.cfg,
       queueId: entry.id,
+      ...(params.stateDir !== undefined ? { deliveryQueueStateDir: params.stateDir } : {}),
       channel: entry.channel,
       to: entry.to,
       ...(entry.accountId !== undefined ? { accountId: entry.accountId } : {}),

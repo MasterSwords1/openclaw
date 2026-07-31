@@ -201,6 +201,12 @@ Use `payloadOutcomes` when a batch mixes sent, suppressed, and failed
 payloads. Do not infer hook cancellation from an empty legacy
 direct-delivery result.
 
+### Provider-idempotent recovery
+
+A transport whose native API accepts idempotency keys can make an ambiguous queued send replay-safe. Persist the exact provider request plan before native I/O, keyed by `deliveryQueueId`, `deliveryPayloadIndex`, and `deliveryPartIndex`. Invoke `onPlatformSendDispatch` only after that plan is durable and immediately before the first native finalization call. Recovery receives the same queue coordinates and must reuse the stored plan without rerunning modifying hooks or rebuilding media requests.
+
+When `reconcileUnknownSend(...)` verifies that the stored plan still matches the active account, destination, and provider idempotency scope, it may return `{ status: "replay_safe" }`. Return `unresolved` and fail closed if the plan is absent, corrupt, or no longer matches. Use `afterQueueTerminal(...)` to delete provider-owned plans only after core has committed a non-replayable queue terminal. Cleanup is best-effort; pair it with `api.runtime.state.getOutboundDeliveryQueueStatus(...)` garbage collection so an interrupted deletion cannot retain plans indefinitely.
+
 ## Deferred delivery admission
 
 Use `message.durableFinal.admitDeferredDelivery(...)` when a resolved account
