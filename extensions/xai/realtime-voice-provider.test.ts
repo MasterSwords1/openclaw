@@ -17,6 +17,8 @@ const { FakeWebSocket, isProviderAuthProfileConfiguredMock, resolveApiKeyForProv
       sent: string[] = [];
       closed = false;
       terminated = false;
+      deferClose = false;
+      pendingClose: { code: number; reason: Buffer } | undefined;
       args: unknown[];
 
       constructor(...args: unknown[]) {
@@ -44,12 +46,25 @@ const { FakeWebSocket, isProviderAuthProfileConfiguredMock, resolveApiKeyForProv
       close(code?: number, reason?: string): void {
         this.closed = true;
         this.readyState = MockWebSocket.CLOSED;
-        this.emit("close", code ?? 1000, Buffer.from(reason ?? ""));
+        const closeEvent = { code: code ?? 1000, reason: Buffer.from(reason ?? "") };
+        if (this.deferClose) {
+          this.pendingClose = closeEvent;
+          return;
+        }
+        this.emit("close", closeEvent.code, closeEvent.reason);
       }
 
       terminate(): void {
         this.terminated = true;
         this.close(1006, "terminated");
+      }
+
+      flushClose(): void {
+        const closeEvent = this.pendingClose;
+        this.pendingClose = undefined;
+        if (closeEvent) {
+          this.emit("close", closeEvent.code, closeEvent.reason);
+        }
       }
     }
 
@@ -207,6 +222,162 @@ describe("buildXaiRealtimeVoiceProvider", () => {
 
     await expect(bridge.connect()).rejects.toThrow("xAI credentials missing for realtime voice");
     expect(FakeWebSocket.instances).toHaveLength(0);
+  });
+
+  it("coalesces concurrent connects and ignores connects after readiness", async () => {
+    vi.stubEnv("XAI_API_KEY", "xai-env"); // pragma: allowlist secret
+    const bridge = buildXaiRealtimeVoiceProvider().createBridge({
+      providerConfig: { apiKey: "xai-test" }, // pragma: allowlist secret
+      onAudio: vi.fn(),
+      onClearAudio: vi.fn(),
+    });
+
+    const firstConnect = bridge.connect();
+    const secondConnect = bridge.connect();
+    await waitForRealtimeState(() => expect(FakeWebSocket.instances).toHaveLength(1));
+    const socket = requireSocket();
+    socket.readyState = FakeWebSocket.OPEN;
+    socket.emit("open");
+    socket.emit("message", Buffer.from(JSON.stringify({ type: "session.updated" })));
+
+    await Promise.all([firstConnect, secondConnect]);
+    await bridge.connect();
+
+    expect(FakeWebSocket.instances).toHaveLength(1);
+    expect(bridge.isConnected()).toBe(true);
+    bridge.close();
+  });
+
+  it("cancels credential resolution without creating a late socket", async () => {
+    let resolveCredentials: ((value: { apiKey: string | undefined }) => void) | undefined;
+    const credentials = new Promise<{ apiKey: string | undefined }>((resolve) => {
+      resolveCredentials = resolve;
+    });
+    resolveApiKeyForProviderMock.mockImplementation(() => credentials);
+    const onClose = vi.fn();
+    const bridge = buildXaiRealtimeVoiceProvider().createBridge({
+      cfg: {} as never,
+      providerConfig: {},
+      onAudio: vi.fn(),
+      onClearAudio: vi.fn(),
+      onClose,
+    });
+
+    const connecting = bridge.connect();
+    await waitForRealtimeState(() => expect(resolveApiKeyForProviderMock).toHaveBeenCalledOnce());
+    bridge.close();
+    bridge.close();
+    await connecting;
+
+    expect(onClose).toHaveBeenCalledOnce();
+    expect(onClose).toHaveBeenCalledWith("completed");
+    expect(FakeWebSocket.instances).toHaveLength(0);
+
+    resolveCredentials?.({ apiKey: "xai-late" }); // pragma: allowlist secret
+    await waitForRealtimeState(() => expect(FakeWebSocket.instances).toHaveLength(0));
+  });
+
+  it("ignores late events and timeout from a canceled socket after replacement", async () => {
+    vi.useFakeTimers();
+    vi.stubEnv("XAI_API_KEY", "xai-env"); // pragma: allowlist secret
+    const onAudio = vi.fn();
+    const onClose = vi.fn();
+    const onError = vi.fn();
+    const onReady = vi.fn();
+    const bridge = buildXaiRealtimeVoiceProvider().createBridge({
+      providerConfig: { apiKey: "xai-test" }, // pragma: allowlist secret
+      onAudio,
+      onClose,
+      onError,
+      onReady,
+      onClearAudio: vi.fn(),
+    });
+
+    const firstConnect = bridge.connect();
+    await waitForRealtimeState(() => expect(FakeWebSocket.instances).toHaveLength(1));
+    const staleSocket = requireSocket();
+    staleSocket.deferClose = true;
+    bridge.sendAudio(Buffer.from("queued-before-close"));
+    bridge.close();
+    bridge.close();
+    await firstConnect;
+
+    const replacementConnect = bridge.connect();
+    await waitForRealtimeState(() => expect(FakeWebSocket.instances).toHaveLength(2));
+    const replacementSocket = requireSocket(1);
+    replacementSocket.readyState = FakeWebSocket.OPEN;
+    replacementSocket.emit("open");
+    replacementSocket.emit("message", Buffer.from(JSON.stringify({ type: "session.updated" })));
+    await replacementConnect;
+
+    staleSocket.emit("open");
+    staleSocket.emit("message", Buffer.from(JSON.stringify({ type: "session.updated" })));
+    staleSocket.emit(
+      "message",
+      Buffer.from(
+        JSON.stringify({
+          type: "response.output_audio.delta",
+          delta: Buffer.from("late audio").toString("base64"),
+        }),
+      ),
+    );
+    staleSocket.emit("error", new Error("late socket error"));
+    staleSocket.flushClose();
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    expect(replacementSocket.terminated).toBe(false);
+    expect(bridge.isConnected()).toBe(true);
+    expect(onReady).toHaveBeenCalledOnce();
+    expect(onAudio).not.toHaveBeenCalled();
+    expect(onError).not.toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalledOnce();
+    expect(onClose).toHaveBeenCalledWith("completed");
+    expect(
+      parseSent(replacementSocket).filter((event) => event.type === "input_audio_buffer.append"),
+    ).toEqual([]);
+    bridge.close();
+  });
+
+  it("ignores a deferred startup close after a successful replacement", async () => {
+    vi.stubEnv("XAI_API_KEY", "xai-env"); // pragma: allowlist secret
+    const onClose = vi.fn();
+    const onError = vi.fn();
+    const onReady = vi.fn();
+    const bridge = buildXaiRealtimeVoiceProvider().createBridge({
+      providerConfig: { apiKey: "xai-test" }, // pragma: allowlist secret
+      onAudio: vi.fn(),
+      onClose,
+      onError,
+      onReady,
+      onClearAudio: vi.fn(),
+    });
+
+    const firstConnect = bridge.connect();
+    await waitForRealtimeState(() => expect(FakeWebSocket.instances).toHaveLength(1));
+    const staleSocket = requireSocket();
+    staleSocket.readyState = FakeWebSocket.OPEN;
+    staleSocket.deferClose = true;
+    staleSocket.emit("open");
+    staleSocket.emit("error", new Error("startup failed"));
+    await expect(firstConnect).rejects.toThrow("startup failed");
+
+    const replacementConnect = bridge.connect();
+    await waitForRealtimeState(() => expect(FakeWebSocket.instances).toHaveLength(2));
+    const replacementSocket = requireSocket(1);
+    replacementSocket.readyState = FakeWebSocket.OPEN;
+    replacementSocket.emit("open");
+    replacementSocket.emit("message", Buffer.from(JSON.stringify({ type: "session.updated" })));
+    await replacementConnect;
+
+    staleSocket.emit("message", Buffer.from(JSON.stringify({ type: "session.updated" })));
+    staleSocket.emit("error", new Error("stale startup error"));
+    staleSocket.flushClose();
+
+    expect(bridge.isConnected()).toBe(true);
+    expect(onReady).toHaveBeenCalledOnce();
+    expect(onError).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+    bridge.close();
   });
 
   it("uses XAI_API_KEY for default Grok realtime bridges", async () => {
@@ -719,6 +890,18 @@ describe("buildXaiRealtimeVoiceProvider", () => {
       "xAI realtime voice stream returned malformed base64 audio data",
     );
     expect(FakeWebSocket.instances).toHaveLength(1);
+    bridge.close();
+    socket.emit(
+      "message",
+      Buffer.from(
+        JSON.stringify({
+          type: "response.output_audio.delta",
+          delta: Buffer.from("late audio").toString("base64"),
+        }),
+      ),
+    );
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(onClose).toHaveBeenLastCalledWith("error");
   });
 
   it("rejects startup when malformed audio arrives before session.updated", async () => {
