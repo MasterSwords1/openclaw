@@ -31,8 +31,12 @@ type RuntimeSendOpts = {
   deliveryQueueStateDir?: string;
   /** @internal Stable queue-local payload index. */
   deliveryPayloadIndex?: number;
+  /** @internal Total prepared payload count needed to validate durable recovery topology. */
+  deliveryPayloadCount?: number;
   /** @internal Stable provider-send index within one payload. */
   deliveryPartIndex?: number;
+  /** @internal Complete ordered provider-send topology for this payload. */
+  deliveryPartIndexes?: readonly number[];
   /** @internal Refresh durable timing before recipient-visible or finalizing platform I/O. */
   onPlatformSendDispatch?: () => Promise<void>;
   textMode?: "markdown" | "html";
@@ -78,7 +82,9 @@ export function createChannelOutboundRuntimeSend(params: {
         deliveryQueueId: opts.deliveryQueueId,
         deliveryQueueStateDir: opts.deliveryQueueStateDir,
         deliveryPayloadIndex: opts.deliveryPayloadIndex,
+        deliveryPayloadCount: opts.deliveryPayloadCount,
         deliveryPartIndex: opts.deliveryPartIndex,
+        deliveryPartIndexes: opts.deliveryPartIndexes,
         onPlatformSendDispatch: opts.onPlatformSendDispatch,
       });
       const hasMedia = Boolean(opts.mediaUrl);

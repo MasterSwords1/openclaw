@@ -85,7 +85,9 @@ describe("createChannelOutboundRuntimeSend", () => {
       deliveryQueueId: "queue-1",
       deliveryQueueStateDir: "/tmp/queue-state",
       deliveryPayloadIndex: 2,
+      deliveryPayloadCount: 4,
       deliveryPartIndex: 3,
+      deliveryPartIndexes: [0, 3],
       onPlatformSendDispatch,
     });
 
@@ -97,7 +99,9 @@ describe("createChannelOutboundRuntimeSend", () => {
     expect(params.deliveryQueueId).toBe("queue-1");
     expect(params.deliveryQueueStateDir).toBe("/tmp/queue-state");
     expect(params.deliveryPayloadIndex).toBe(2);
+    expect(params.deliveryPayloadCount).toBe(4);
     expect(params.deliveryPartIndex).toBe(3);
+    expect(params.deliveryPartIndexes).toEqual([0, 3]);
     expect(params.onPlatformSendDispatch).toBe(onPlatformSendDispatch);
   });
 
