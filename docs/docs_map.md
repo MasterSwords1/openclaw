@@ -10231,6 +10231,7 @@ Do not edit it by hand; run `pnpm docs:map:gen`.
 - Headings:
   - H2: Get an API key
   - H2: Config
+  - H3: Request headers
   - H2: How it works
   - H2: Supported parameters
   - H2: Model selection
