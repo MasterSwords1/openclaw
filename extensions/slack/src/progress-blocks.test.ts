@@ -170,6 +170,34 @@ describe("native Slack semantic task chunks", () => {
     expect(shrunk.chunks).toContainEqual(taskUpdate(patchId, "Patch code", "complete"));
   });
 
+  it("preserves semantic task identities when a plan inserts a new first step", () => {
+    const first = reconcileSlackNativeTaskChunks({
+      previousTasks: new Map(),
+      chunks: buildSlackProgressStreamStartChunks({
+        plan: [
+          { step: "Inspect code", status: "in_progress" },
+          { step: "Run tests", status: "pending" },
+        ],
+      }),
+    });
+    const inserted = reconcileSlackNativeTaskChunks({
+      previousTasks: first.tasks,
+      chunks: buildSlackProgressStreamUpdateChunks({
+        plan: [
+          { step: "Prepare workspace", status: "completed" },
+          { step: "Inspect code", status: "completed" },
+          { step: "Run tests", status: "in_progress" },
+        ],
+      }),
+    });
+
+    expect(inserted.chunks?.filter((chunk) => chunk.type === "task_update")).toEqual([
+      taskUpdate("plan_step_3", "Prepare workspace", "complete"),
+      taskUpdate("plan_step_1", "Inspect code", "complete"),
+      taskUpdate("plan_step_2", "Run tests", "in_progress"),
+    ]);
+  });
+
   it("maps active completion and error terminal states accurately", () => {
     const plan = [
       { step: "Inspect", status: "completed" as const },

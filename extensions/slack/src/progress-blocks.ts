@@ -82,8 +82,8 @@ function legacyLineDetail(line: ChannelProgressDraftLine, maxChars: number): str
 
 function buildPlanTasks(plan: readonly AgentPlanStep[]): SlackPlanTask[] {
   // Codex and the portable plan event expose ordered full snapshots but no
-  // item id. Position is therefore the only identity that survives a title
-  // refinement; Slack updates the same row instead of duplicating it.
+  // item id. These ordered ids seed the first snapshot; reconciliation below
+  // preserves them by semantic title across later inserts and reorders.
   return plan.slice(-SLACK_MAX_BLOCKS).map((entry, index) => ({
     id: `plan_step_${index + 1}`,
     title: compactTitle(entry.step),
@@ -194,7 +194,7 @@ export function buildSlackProgressDraftBlocks(params: {
 
 export type SlackNativeTaskSnapshot = ReadonlyMap<
   string,
-  { title: string; status: SlackPlanTaskStatus }
+  { active: boolean; title: string; status: SlackPlanTaskStatus }
 >;
 
 /**
@@ -206,20 +206,85 @@ export function reconcileSlackNativeTaskChunks(params: {
   previousTasks: SlackNativeTaskSnapshot;
   chunks: AnyChunk[] | undefined;
 }): { chunks: AnyChunk[] | undefined; tasks: SlackNativeTaskSnapshot } {
-  const nextTasks = new Map<string, { title: string; status: SlackPlanTaskStatus }>();
-  for (const chunk of params.chunks ?? []) {
-    if (chunk.type === "task_update") {
-      nextTasks.set(chunk.id, {
-        title: chunk.title,
-        status: chunk.status as SlackPlanTaskStatus,
-      });
+  type TaskChunk = Extract<AnyChunk, { type: "task_update" }>;
+  const taskChunks = (params.chunks ?? []).filter(
+    (chunk): chunk is TaskChunk => chunk.type === "task_update",
+  );
+  const previousActive = [...params.previousTasks].filter(([, task]) => task.active !== false);
+  const assignedIds = new Map<TaskChunk, string>();
+  const usedPreviousIds = new Set<string>();
+
+  // Exact semantic titles survive inserts, removals, and reorderings. Match
+  // duplicate titles in their existing order so each row remains addressable.
+  for (const chunk of taskChunks) {
+    const match = previousActive.find(
+      ([id, task]) => !usedPreviousIds.has(id) && task.title === chunk.title,
+    );
+    if (match) {
+      assignedIds.set(chunk, match[0]);
+      usedPreviousIds.add(match[0]);
     }
   }
-  const orphaned = [...params.previousTasks].filter(
+
+  // A same-size snapshot with at least one unchanged title is a title
+  // refinement, not a structural replacement. Preserve remaining positions;
+  // a single-step plan has the same unambiguous refinement behavior.
+  if (
+    taskChunks.length === previousActive.length &&
+    (usedPreviousIds.size > 0 || taskChunks.length === 1)
+  ) {
+    taskChunks.forEach((chunk, index) => {
+      const previous = previousActive[index];
+      if (!assignedIds.has(chunk) && previous && !usedPreviousIds.has(previous[0])) {
+        assignedIds.set(chunk, previous[0]);
+        usedPreviousIds.add(previous[0]);
+      }
+    });
+  }
+
+  const reservedIds = new Set(params.previousTasks.keys());
+  let nextOrdinal =
+    Math.max(
+      0,
+      ...[...reservedIds].map((id) => {
+        const match = /^plan_step_(\d+)$/u.exec(id);
+        return match ? Number.parseInt(match[1] ?? "0", 10) : 0;
+      }),
+    ) + 1;
+  for (const chunk of taskChunks) {
+    if (assignedIds.has(chunk)) {
+      continue;
+    }
+    let id = `plan_step_${nextOrdinal}`;
+    while (reservedIds.has(id) || usedPreviousIds.has(id)) {
+      nextOrdinal += 1;
+      id = `plan_step_${nextOrdinal}`;
+    }
+    assignedIds.set(chunk, id);
+    usedPreviousIds.add(id);
+    nextOrdinal += 1;
+  }
+
+  const remappedChunks = params.chunks?.map((chunk) =>
+    chunk.type === "task_update" ? { ...chunk, id: assignedIds.get(chunk) ?? chunk.id } : chunk,
+  );
+  const nextTasks = new Map<
+    string,
+    { active: boolean; title: string; status: SlackPlanTaskStatus }
+  >();
+  for (const chunk of taskChunks) {
+    const id = assignedIds.get(chunk) ?? chunk.id;
+    nextTasks.set(id, {
+      active: true,
+      title: chunk.title,
+      status: chunk.status as SlackPlanTaskStatus,
+    });
+  }
+  const orphaned = previousActive.filter(
     ([id, task]) => !nextTasks.has(id) && task.status !== "complete" && task.status !== "error",
   );
   const terminalized = orphaned.map(([id, task]) => {
-    const entry = { title: task.title, status: "complete" as const };
+    const entry = { active: false, title: task.title, status: "complete" as const };
     nextTasks.set(id, entry);
     return {
       type: "task_update" as const,
@@ -228,16 +293,17 @@ export function reconcileSlackNativeTaskChunks(params: {
       status: "complete" as const,
     };
   });
-  // Carry forward already-terminal rows so a later reappearance diffs correctly.
+  // Carry retired rows only to reserve their ids; they are not candidates for
+  // later positional reconciliation with a different semantic task.
   for (const [id, task] of params.previousTasks) {
     if (!nextTasks.has(id)) {
-      nextTasks.set(id, task);
+      nextTasks.set(id, { ...task, active: false });
     }
   }
   // An explicitly cleared source still needs its previous rows retired even
   // when the current build produced no chunks of its own.
-  const chunks = params.chunks?.length
-    ? [...params.chunks, ...terminalized]
+  const chunks = remappedChunks?.length
+    ? [...remappedChunks, ...terminalized]
     : terminalized.length
       ? terminalized
       : params.chunks;
