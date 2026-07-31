@@ -29,7 +29,10 @@ import {
   type TelegramApiContext,
   type TelegramThreadScopedParams,
 } from "./send-context.js";
-import { isTelegramPhotoLimitError } from "./send-error-predicates.js";
+import {
+  isTelegramPhotoLimitError,
+  isTelegramVoiceMessagesForbiddenError,
+} from "./send-error-predicates.js";
 import { createTelegramTextSender } from "./send-message-text.js";
 import type { TelegramSendOpts, TelegramSendResult } from "./send-message-types.js";
 import {
@@ -307,6 +310,12 @@ async function sendMessageTelegramWithContext(
         effectiveParams: TelegramThreadScopedParams | undefined,
       ) => Promise<TelegramMessageLike>,
     ) => {
+      const shouldLogMediaError =
+        label === "photo"
+          ? (error: unknown) => !isTelegramPhotoLimitError(error)
+          : label === "voice"
+            ? (error: unknown) => !isTelegramVoiceMessagesForbiddenError(error)
+            : undefined;
       const requestMedia = (requestParams: TelegramThreadScopedParams, retryLabel: string) =>
         withTelegramNativeQuoteFallback({
           label: retryLabel,
@@ -315,9 +324,7 @@ async function sendMessageTelegramWithContext(
             requestWithChatNotFound(
               () => sender(effectiveParams as TelegramThreadScopedParams),
               effectiveLabel,
-              label === "photo"
-                ? { shouldLog: (error) => !isTelegramPhotoLimitError(error) }
-                : undefined,
+              shouldLogMediaError ? { shouldLog: shouldLogMediaError } : undefined,
             ),
         });
       if (!htmlCaption || !plainCaption) {
@@ -426,6 +433,24 @@ async function sendMessageTelegramWithContext(
       try {
         mediaDelivery = await sendMedia(mediaSender.label, mediaSender.sender);
       } catch (error) {
+        if (
+          mediaSender.label === "voice" &&
+          isTelegramVoiceMessagesForbiddenError(error) &&
+          text.trim()
+        ) {
+          // Voice privacy settings reject the media only; the original text still owns
+          // its topic, quote, keyboard, delivery receipt, and prompt projection.
+          logVerbose(
+            "telegram sendVoice forbidden (recipient has voice messages blocked in privacy settings); falling back to text",
+          );
+          const fallbackResult = await sendChunkedText(text, "voice fallback text send");
+          recordChannelActivity({
+            channel: "telegram",
+            accountId: account.accountId,
+            direction: "outbound",
+          });
+          return fallbackResult;
+        }
         if (mediaSender.label !== "photo" || !isTelegramPhotoLimitError(error)) {
           throw error;
         }

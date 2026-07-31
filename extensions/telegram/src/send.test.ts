@@ -3351,6 +3351,95 @@ describe("sendMessageTelegram", () => {
     }
   });
 
+  it.each([false, true])(
+    "preserves delivery context for voice privacy fallback with rich messages %s",
+    async (richMessages) => {
+      const chatId = "-1001234567890";
+      const onDeliveryResult = vi.fn();
+      const cursor = createTelegramPromptContextProjectionCursor({
+        transcriptMessageId: "assistant-voice-fallback",
+      });
+      const buttons = [[{ text: "Open", callback_data: "open" }]];
+      const rejectedVoice = new Error("Bad Request: VOICE_MESSAGES_FORBIDDEN");
+      botApi.sendVoice.mockRejectedValueOnce(rejectedVoice);
+      botApi.sendMessage.mockResolvedValueOnce({ message_id: 77, chat: { id: chatId } });
+      botRawApi.sendRichMessage.mockResolvedValueOnce({ message_id: 77, chat: { id: chatId } });
+      mockLoadedMedia({
+        buffer: Buffer.from("voice"),
+        contentType: "audio/ogg",
+        fileName: "note.ogg",
+      });
+
+      const result = await sendMessageTelegram(chatId, "Hello **there**", {
+        cfg: {
+          channels: { telegram: { richMessages } },
+          session: { store: `/tmp/openclaw-telegram-voice-fallback-${richMessages}.json` },
+        },
+        token: "tok",
+        mediaUrl: "https://example.com/note.ogg",
+        asVoice: true,
+        messageThreadId: 271,
+        replyToMessageId: 500,
+        buttons,
+        silent: true,
+        onDeliveryResult,
+        promptContextProjectionPlan: { cursor, finalPart: true },
+      });
+
+      expect(botApi.sendVoice).toHaveBeenCalledTimes(1);
+      const fallback = richMessages ? botRawApi.sendRichMessage : botApi.sendMessage;
+      const unusedFallback = richMessages ? botApi.sendMessage : botRawApi.sendRichMessage;
+      expect(fallback).toHaveBeenCalledTimes(1);
+      expect(unusedFallback).not.toHaveBeenCalled();
+      const fallbackOptions = richMessages
+        ? botRawApi.sendRichMessage.mock.calls[0]?.[0]
+        : botApi.sendMessage.mock.calls[0]?.[2];
+      expect(fallbackOptions).toEqual(
+        expect.objectContaining({
+          message_thread_id: 271,
+          disable_notification: true,
+          ...(richMessages
+            ? { reply_parameters: { message_id: 500, allow_sending_without_reply: true } }
+            : { reply_to_message_id: 500, allow_sending_without_reply: true }),
+          reply_markup: {
+            inline_keyboard: [[{ text: "Open", callback_data: "open" }]],
+          },
+        }),
+      );
+      expect(onDeliveryResult).toHaveBeenCalledWith({
+        messageId: "77",
+        chatId,
+        meta: { telegramDeliveredText: "Hello there", telegramHasInlineKeyboard: true },
+      });
+      expect(cursor.nextPartIndex).toBe(1);
+      expect(result).toEqual({ messageId: "77", chatId });
+    },
+  );
+
+  it.each([
+    { name: "without visible fallback text", text: "   ", reason: "VOICE_MESSAGES_FORBIDDEN" },
+    { name: "for unrelated voice errors", text: "Visible", reason: "VOICE_MESSAGE_INVALID" },
+  ])("rethrows voice privacy fallback $name", async ({ text, reason }) => {
+    const voiceError = new Error(`Bad Request: ${reason}`);
+    botApi.sendVoice.mockRejectedValueOnce(voiceError);
+    mockLoadedMedia({
+      buffer: Buffer.from("voice"),
+      contentType: "audio/ogg",
+      fileName: "note.ogg",
+    });
+
+    await expect(
+      sendMessageTelegram("123", text, {
+        cfg: TELEGRAM_TEST_CFG,
+        token: "tok",
+        mediaUrl: "https://example.com/note.ogg",
+        asVoice: true,
+      }),
+    ).rejects.toBe(voiceError);
+    expect(botApi.sendMessage).not.toHaveBeenCalled();
+    expect(botRawApi.sendRichMessage).not.toHaveBeenCalled();
+  });
+
   it("keeps message_thread_id for forum/private/group sends", async () => {
     const cases = [
       {

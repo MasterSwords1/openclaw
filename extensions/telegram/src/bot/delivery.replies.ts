@@ -54,7 +54,10 @@ import {
   type TelegramInputRichMessage,
 } from "../rich-message.js";
 import { isTelegramHtmlParseError } from "../rich-plain-fallback.js";
-import { isTelegramPhotoLimitError } from "../send-error-predicates.js";
+import {
+  isTelegramPhotoLimitError,
+  isTelegramVoiceMessagesForbiddenError,
+} from "../send-error-predicates.js";
 import { buildInlineKeyboard, reactMessageTelegram } from "../send.js";
 import { resolveTelegramTargetChatType } from "../targets.js";
 import { resolveTelegramVoiceSend } from "../voice.js";
@@ -72,7 +75,6 @@ import {
   type DeliveryProgress as ReplyThreadDeliveryProgress,
 } from "./reply-threading.js";
 
-const VOICE_FORBIDDEN_MARKER = "VOICE_MESSAGES_FORBIDDEN";
 const CAPTION_TOO_LONG_RE = /caption is too long/i;
 const GrammyErrorCtor: typeof GrammyError | undefined =
   typeof GrammyError === "function" ? GrammyError : undefined;
@@ -294,13 +296,6 @@ async function deliverTextReply(params: {
     },
   });
   return firstDeliveredMessageId;
-}
-
-function isVoiceMessagesForbidden(err: unknown): boolean {
-  if (GrammyErrorCtor && err instanceof GrammyErrorCtor) {
-    return err.description.includes(VOICE_FORBIDDEN_MARKER);
-  }
-  return formatErrorMessage(err).includes(VOICE_FORBIDDEN_MARKER);
 }
 
 function isCaptionTooLong(err: unknown): boolean {
@@ -570,9 +565,9 @@ async function deliverMediaReply(params: {
         };
         await params.onVoiceRecording?.();
         try {
-          await sendVoiceMedia(mediaParams, (err) => !isVoiceMessagesForbidden(err));
+          await sendVoiceMedia(mediaParams, (err) => !isTelegramVoiceMessagesForbiddenError(err));
         } catch (voiceErr) {
-          if (isVoiceMessagesForbidden(voiceErr)) {
+          if (isTelegramVoiceMessagesForbiddenError(voiceErr)) {
             const fallbackText = resolveVoiceFallbackText(params.reply);
             if (!fallbackText || !fallbackText.trim()) {
               throw voiceErr;
