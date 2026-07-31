@@ -321,6 +321,20 @@ struct IOSGatewayChatTransportTests {
         } catch {}
     }
 
+    @Test func `outbox route lease is indeterminate when its gateway route is unavailable`() async {
+        let transport = IOSGatewayChatTransport(
+            gateway: GatewayNodeSession(),
+            outboxGatewayID: "gw-test")
+
+        let result = await transport.acquireOutboxRouteLease()
+
+        guard case let .unavailable(reason) = result else {
+            Issue.record("Expected an unavailable outbox route lease")
+            return
+        }
+        #expect(reason == nil)
+    }
+
     @Test func `maps session message event to session message`() {
         let payload = AnyCodable([
             "sessionKey": AnyCodable("agent:main:main"),
