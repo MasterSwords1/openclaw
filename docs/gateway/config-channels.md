@@ -470,9 +470,13 @@ WhatsApp runs through the gateway's web channel (Baileys Web). It starts automat
       unfurlMedia: false,
       textChunkLimit: 4000,
       streaming: {
-        mode: "partial", // off | partial | block | progress
+        mode: "progress", // off | partial | block | progress (default: progress)
         chunkMode: "length", // length | newline
         nativeTransport: true, // use Slack native streaming API when mode=partial
+        progress: {
+          nativeTaskCards: true, // semantic update_plan cards; default: true
+          toolProgress: false, // raw tool rows stay hidden by default
+        },
       },
       mediaMaxMb: 20,
       execApprovals: {
@@ -516,7 +520,7 @@ WhatsApp runs through the gateway's web channel (Baileys Web). It starts automat
 - `configWrites: false` blocks Slack-initiated config writes.
 - Optional `channels.slack.defaultAccount` overrides default account selection when it matches a configured account id.
 - `dm.groupEnabled` and `dm.groupChannels` only filter Slack group DMs (MPDMs) the app is already a member of. They cannot make the app see an existing group DM it never joined; convert the group DM to a private channel and invite the app, or have the app open a new MPDM with `conversations.open`. See [Group DMs (MPDMs) and bots](/channels/slack#group-dms-mpdms-and-bots).
-- `channels.slack.streaming.mode` is the canonical Slack stream mode key (default `"partial"`). `channels.slack.streaming.nativeTransport` controls Slack's native streaming transport (default `true`). Legacy `streamMode`, boolean `streaming`, `chunkMode`, `blockStreaming`, `blockStreamingCoalesce`, and `nativeStreaming` values are no longer read at runtime; run `openclaw doctor --fix` to migrate persisted config to `streaming.{mode,chunkMode,block.enabled,block.coalesce,nativeTransport}`.
+- `channels.slack.streaming.mode` is the canonical Slack stream mode key (default `"progress"`). When streaming is unset, structured `update_plan` steps use Slack-native task cards and update in place; runs without a structured plan do not create checklist rows, and raw tool progress stays hidden. Existing explicit `mode: "progress"` configs keep the portable renderer and released tool-progress default unless `streaming.progress.nativeTaskCards: true` is set. Explicit `streaming.progress.toolProgress: true` always selects the portable tool-progress draft. `channels.slack.streaming.nativeTransport` controls Slack's native streaming transport (default `true`). Legacy `streamMode`, boolean `streaming`, `chunkMode`, `blockStreaming`, `blockStreamingCoalesce`, and `nativeStreaming` values are no longer read at runtime; run `openclaw doctor --fix` to migrate persisted config to `streaming.{mode,chunkMode,block.enabled,block.coalesce,nativeTransport}`.
 - `unfurlLinks` and `unfurlMedia` pass Slack's `chat.postMessage` link and media unfurl booleans through for bot replies. `unfurlLinks` defaults to `false` so outbound bot links do not expand inline unless enabled; `unfurlMedia` is omitted unless configured. Set either value at `channels.slack.accounts.<accountId>` to override the top-level value for one account.
 - Use `user:<id>` (DM) or `channel:<id>` for delivery targets.
 

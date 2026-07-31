@@ -177,14 +177,14 @@ instead of being overwritten in one editable draft.
 
 ### Channel mapping
 
-Discord and Telegram default to `progress` when `streaming` is unset; Slack,
-Mattermost, and MS Teams default to `partial`.
+Discord, Slack, and Telegram default to `progress` when `streaming` is unset;
+Mattermost and MS Teams default to `partial`.
 
 | Channel    | `off` | `partial` | `block` | `progress`                        |
 | ---------- | ----- | --------- | ------- | --------------------------------- |
 | Telegram   | Yes   | Yes       | Yes     | editable progress draft (default) |
 | Discord    | Yes   | Yes       | Yes     | editable progress draft (default) |
-| Slack      | Yes   | Yes       | Yes     | Yes                               |
+| Slack      | Yes   | Yes       | Yes     | semantic task card (default)      |
 | Mattermost | Yes   | Yes       | Yes     | Yes                               |
 | MS Teams   | Yes   | Yes       | Yes     | native progress stream            |
 

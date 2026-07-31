@@ -1427,9 +1427,9 @@ The default scope (`"group-mentions"`) does not fire ack reactions in direct mes
 `channels.slack.streaming` controls live preview behavior:
 
 - `off`: disable live preview streaming.
-- `partial` (default): replace preview text with the latest partial output.
+- `partial`: replace preview text with the latest partial output.
 - `block`: append chunked preview updates.
-- `progress`: show progress status text while generating, then send final text.
+- `progress` (default): show structured progress while generating, then send final text. When streaming is unset, structured plan steps use a native task card.
 - `streaming.preview.toolProgress`: when draft preview is active, route tool/progress updates into the same edited preview message (default: `true`). Set `false` to keep separate tool/progress messages.
 - `streaming.preview.commandText` / `streaming.progress.commandText`: set to `status` to keep compact tool-progress lines while hiding raw command/exec text (default: `raw`).
 
@@ -1453,7 +1453,9 @@ Hide raw command/exec text while keeping compact progress lines:
 
 `channels.slack.streaming.nativeTransport` controls Slack native text streaming when `channels.slack.streaming.mode` is `partial` (default: `true`).
 
-Slack native progress task cards are opt-in for progress mode. Set `channels.slack.streaming.progress.nativeTaskCards` to `true` with `channels.slack.streaming.mode="progress"` to send a Slack-native plan/task card while work is running, then update the same task card at completion. Without this flag, progress mode keeps the portable draft-preview behavior.
+When Slack streaming is unset, native progress task cards are the default representation for structured `update_plan` steps. OpenClaw gives each ordered step a stable Slack task identity and updates its `pending`, `in_progress`, `complete`, or `error` state in place. Raw tool calls, command details, reasoning snapshots, and the message-delivery tool never become native checklist rows. A fast request without a structured plan, such as a greeting, produces only the final answer.
+
+Existing configurations that explicitly set `streaming.mode: "progress"` keep the released portable draft and tool-progress behavior unless they opt into `streaming.progress.nativeTaskCards: true`. Set `streaming.progress.toolProgress: true` to explicitly use the portable edited draft with tool progress; it takes precedence over native cards. Set `streaming.progress.nativeTaskCards: false` to keep the portable plan fallback without changing the mode. Native task cards currently populate titles and states only: the shared plan event does not yet carry genuine structured task details, output, or source links, so OpenClaw leaves those optional Slack fields absent instead of inferring them from tool data.
 
 - A reply thread must be available for native text streaming and Slack assistant thread status to appear. Thread selection still follows `replyToMode`.
 - Channel, group-chat, and top-level DM roots can still use the normal draft preview when native streaming is unavailable or no reply thread exists.
@@ -1478,7 +1480,7 @@ Use draft preview instead of Slack native text streaming:
 }
 ```
 
-Opt in to Slack native progress task cards:
+Use the portable progress draft instead of native task cards:
 
 ```json5
 {
@@ -1487,7 +1489,7 @@ Opt in to Slack native progress task cards:
       streaming: {
         mode: "progress",
         progress: {
-          nativeTaskCards: true,
+          nativeTaskCards: false,
           render: "rich",
         },
       },

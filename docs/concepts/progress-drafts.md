@@ -22,11 +22,12 @@ Working...
 ```
 
 <Note>
-  Discord and Telegram default to `streaming.mode: "progress"`, so progress
-  drafts show up there without any config. Set `mode: "partial"` on either to
-  stream answer text instead. Every other channel defaults to `partial` or
-  `off`; see [Streaming and chunking](/concepts/streaming#channel-mapping) for
-  the full per-channel default table.
+  Discord, Slack, and Telegram default to `streaming.mode: "progress"`, so
+  progress appears there without any config. Slack uses semantic native task
+  cards only when the run emits structured plan steps; unplanned requests stay
+  final-only. Set `mode: "partial"` to stream answer text instead. Other
+  channels default to `partial` or `off`; see [Streaming and
+  chunking](/concepts/streaming#channel-mapping) for the full per-channel table.
 </Note>
 
 ## Quick start
@@ -164,6 +165,12 @@ plans, approvals, command output, patch summaries, and similar agent activity.
 They are enabled by default (`progress.toolProgress`, default `true`) and stay
 visible underneath the status headline. Set `progress.toolProgress: false` to
 keep the headline alone.
+
+Slack is the exception when streaming is unset: raw tool progress defaults to
+`false` so the default native task card remains semantic. Existing explicit
+`mode: "progress"` configs keep the released portable tool-progress behavior.
+Set Slack `progress.toolProgress: true` to require the portable edited draft
+with explicit tool rows.
 
 Tools can also emit typed progress while a single call is still running. That
 is how a slow fetch or search updates the visible draft before the tool
@@ -362,10 +369,15 @@ Tune the per-line budget:
 }
 ```
 
-### Rich rendering (Slack)
+### Slack semantic task cards and rich fallback
 
-Slack can render progress lines as structured Block Kit fields instead of
-plain text:
+When Slack streaming is unset, it defaults to native task cards for structured
+`update_plan` steps. The same stable tasks update in place as plan states
+change. Unplanned requests do not synthesize tool calls into checklist rows;
+fast greetings remain final-answer-only. Existing explicit `mode: "progress"`
+configs stay on the portable renderer unless `nativeTaskCards: true` is set.
+Set `nativeTaskCards: false` to require the shared portable plan in one edited
+Block Kit draft instead:
 
 ```json5
 {
@@ -374,6 +386,7 @@ plain text:
       streaming: {
         mode: "progress",
         progress: {
+          nativeTaskCards: false,
           render: "rich",
         },
       },
@@ -382,9 +395,10 @@ plain text:
 }
 ```
 
-Rich rendering always sends the same plain-text body alongside the Block Kit
-fields, so clients that cannot render the richer shape still show the compact
-progress text.
+Rich fallback rendering always sends the same plain-text body alongside the
+Block Kit fields. Slack tool rows default off; an explicit `toolProgress: true`
+uses this portable draft because native task cards contain semantic plan steps
+only.
 
 ### Hide tool/task lines
 
@@ -411,14 +425,14 @@ the final answer, except for the label if one is configured.
 
 ## Channel behavior
 
-| Channel         | Progress transport                     | Notes                                                                                                                                                     |
-| --------------- | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Discord         | Send one message, then edit it.        | Defaults to `progress` mode; the final answer carries a `-#` activity receipt and the status draft is deleted after the answer lands.                     |
-| Matrix          | Send one event, then edit it.          | Account-level streaming config controls account-level drafts.                                                                                             |
-| Microsoft Teams | Native Teams stream in personal chats. | `streaming.mode: "block"` maps to Teams block delivery instead.                                                                                           |
-| Slack           | Native stream or editable draft post.  | Needs a reply thread target; top-level DMs without one still get draft preview posts and edits.                                                           |
-| Telegram        | Send one message, then edit it.        | If a message lands between the progress draft and the answer, the draft reposts below it (post-new-then-delete-old) instead of scroll-jumping the client. |
-| Mattermost      | Editable draft post.                   | `block` mode rotates between completed text and tool-activity posts; other modes fold tool activity into the same draft-style post.                       |
+| Channel         | Progress transport                              | Notes                                                                                                                                                                    |
+| --------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Discord         | Send one message, then edit it.                 | Defaults to `progress` mode; the final answer carries a `-#` activity receipt and the status draft is deleted after the answer lands.                                    |
+| Matrix          | Send one event, then edit it.                   | Account-level streaming config controls account-level drafts.                                                                                                            |
+| Microsoft Teams | Native Teams stream in personal chats.          | `streaming.mode: "block"` maps to Teams block delivery instead.                                                                                                          |
+| Slack           | Native task-card stream or editable draft post. | Defaults to `progress`; structured plan steps update in place, while requests without a plan stay final-only. A missing native thread target uses the editable fallback. |
+| Telegram        | Send one message, then edit it.                 | If a message lands between the progress draft and the answer, the draft reposts below it (post-new-then-delete-old) instead of scroll-jumping the client.                |
+| Mattermost      | Editable draft post.                            | `block` mode rotates between completed text and tool-activity posts; other modes fold tool activity into the same draft-style post.                                      |
 
 Channels without safe edit support fall back to typing indicators or
 final-only delivery. See [Streaming and chunking](/concepts/streaming) for the
