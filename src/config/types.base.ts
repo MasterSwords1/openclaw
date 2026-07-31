@@ -296,7 +296,7 @@ export type DiagnosticsOtelConfig = {
   protocol?: "http/protobuf" | "grpc";
   headers?: Record<string, string>;
   serviceName?: string;
-  /** Prefix added to OpenClaw-owned metric names. */
+  /** Replacement prefix for OpenClaw-owned metric names. Defaults to "openclaw.". */
   metricNamePrefix?: string;
   traces?: boolean;
   metrics?: boolean;

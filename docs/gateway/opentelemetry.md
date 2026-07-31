@@ -104,8 +104,9 @@ stdout, or `both` for both.
 }
 ```
 
-`metricNamePrefix` is added only to OpenClaw-owned `openclaw.*` metrics. For
-example, `"acme."` exports `openclaw.tokens` as
+`metricNamePrefix` replaces the default `openclaw.` prefix only on
+OpenClaw-owned metrics. For example, `"acme."` exports `openclaw.tokens` as
+`acme.tokens`. Set it to `"acme.openclaw."` if you want
 `acme.openclaw.tokens`. Standard semantic-convention metrics such as
 `gen_ai.client.token.usage` and `gen_ai.client.operation.duration` keep their
 original names. Leave the option unset to preserve every current metric name.

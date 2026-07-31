@@ -6,11 +6,18 @@ import {
   GEN_AI_TOKEN_USAGE_BUCKETS,
 } from "./service-constants.js";
 
-export function createDiagnosticsMetrics(meter: Meter, metricNamePrefix = "") {
+const DEFAULT_METRIC_NAME_PREFIX = "openclaw.";
+
+export function createDiagnosticsMetrics(
+  meter: Meter,
+  metricNamePrefix = DEFAULT_METRIC_NAME_PREFIX,
+) {
+  const resolveMetricName = (name: `openclaw.${string}`) =>
+    `${metricNamePrefix}${name.slice(DEFAULT_METRIC_NAME_PREFIX.length)}`;
   const createCounter = (name: `openclaw.${string}`, options?: MetricOptions) =>
-    meter.createCounter(`${metricNamePrefix}${name}`, options);
+    meter.createCounter(resolveMetricName(name), options);
   const createHistogram = (name: `openclaw.${string}`, options?: MetricOptions) =>
-    meter.createHistogram(`${metricNamePrefix}${name}`, options);
+    meter.createHistogram(resolveMetricName(name), options);
 
   const tokensCounter = createCounter("openclaw.tokens", {
     unit: "1",
