@@ -1,4 +1,5 @@
 import { ErrorCodes, errorShape } from "../../../packages/gateway-protocol/src/index.js";
+import { resolveGatewayAgentRunApprovalHost } from "../../agents/agent-run-approval.gateway.js";
 import type { AgentRunTerminalOutcome } from "../../agents/agent-run-terminal-outcome.js";
 import { consumeExecApprovalFollowupRuntimeHandoff } from "../../agents/bash-tools.exec-approval-followup-state.js";
 import { runAgentHarnessBeforeMessageWriteHook } from "../../agents/harness/hook-helpers.js";
@@ -98,6 +99,7 @@ export function startAgentRunExecution(params: {
   restoredCronContinuation?: RestoredCronContinuation;
   canUseInternalRuntimeHandoff: boolean;
   execApprovalFollowupApprovalId?: string;
+  approvalReviewerDeviceId?: string;
   client: GatewayRequestHandlerOptions["client"];
   context: GatewayRequestHandlerOptions["context"];
   respond: GatewayRequestHandlerOptions["respond"];
@@ -312,6 +314,11 @@ export function startAgentRunExecution(params: {
 
       dispatchAgentRunFromGateway({
         ingressOpts: {
+          approvalHost: resolveGatewayAgentRunApprovalHost({
+            approvalHostMode: params.request.approvalHostMode,
+            inheritedApprovalHost: params.client?.internal?.agentRunApprovalHost,
+            approvalReviewerDeviceId: params.approvalReviewerDeviceId,
+          }),
           message,
           images: params.images,
           imageOrder: params.imageOrder,

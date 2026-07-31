@@ -762,6 +762,48 @@ describe("gateway tool defaults", () => {
     expect(call.deviceIdentity).toEqual(mocks.deviceIdentity);
   });
 
+  it("marks local plugin approval cancellation calls as approval runtime calls", async () => {
+    mocks.callGateway.mockResolvedValueOnce({ ok: true, cancelled: 1 });
+
+    await callGatewayTool("plugin.approval.cancel", {}, { id: "plugin:approval-id" });
+
+    const call = capturedGatewayCall();
+    expect(call.method).toBe("plugin.approval.cancel");
+    expect(call.scopes).toEqual(["operator.approvals"]);
+    expect(call.approvalRuntimeToken).toEqual(expect.any(String));
+    expect(call.deviceIdentity).toEqual(mocks.deviceIdentity);
+  });
+
+  it("forwards signal abort cleanup hooks to callGateway", async () => {
+    mocks.callGateway.mockResolvedValueOnce({ id: "plugin:approval-id" });
+    const signal = new AbortController().signal;
+    const onSignalAbort = vi.fn();
+
+    await callGatewayTool(
+      "plugin.approval.request",
+      {},
+      { title: "approve", description: "test" },
+      { signal, onSignalAbort },
+    );
+
+    const call = capturedGatewayCall();
+    expect(call.signal).toBe(signal);
+    expect(call.onSignalAbort).toBe(onSignalAbort);
+  });
+
+  it("forwards a stable caller instance id", async () => {
+    mocks.callGateway.mockResolvedValueOnce({ id: "plugin:approval-id" });
+
+    await callGatewayTool(
+      "plugin.approval.request",
+      {},
+      { title: "approve", description: "test" },
+      { instanceId: "approval-runtime-1" },
+    );
+
+    expect(capturedGatewayCall().instanceId).toBe("approval-runtime-1");
+  });
+
   it("marks local approval resolve calls as approval runtime calls", async () => {
     mocks.callGateway.mockResolvedValueOnce({ ok: true });
 

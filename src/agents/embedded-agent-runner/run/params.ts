@@ -29,6 +29,7 @@ import type {
   SkillWorkshopProposalMutationBudget,
   SkillWorkshopRunOptions,
 } from "../../../skills/workshop/types.js";
+import type { AgentRunApprovalHost } from "../../agent-run-approval.js";
 import type { ExecElevatedDefaults, ExecToolDefaults } from "../../bash-tools.exec-types.js";
 import type { BootstrapContextRunKind } from "../../bootstrap-mode.js";
 import type { AgentStreamParams, ClientToolDefinition } from "../../command/shared-types.js";
@@ -71,6 +72,8 @@ export type CurrentInboundPromptContext = {
 };
 
 export type RunEmbeddedAgentParams = {
+  /** Operator approval capabilities owned by the adapter that launched this run. */
+  approvalHost?: AgentRunApprovalHost;
   /** Caller-owned in-memory transcript for ephemeral helper runs. */
   sessionManager?: SessionManager;
   sessionId: string;

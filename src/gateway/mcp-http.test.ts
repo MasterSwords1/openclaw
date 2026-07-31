@@ -2,6 +2,13 @@
 // JSON-RPC surface, including hook filtering and context propagation.
 import { request } from "node:http";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  getOrCreateSessionMcpRuntime,
+  retireSessionMcpRuntime,
+} from "../agents/agent-bundle-mcp-tools.js";
+import type { SessionMcpRuntime } from "../agents/agent-bundle-mcp-types.js";
+import { gatewayAgentRunApprovalHost } from "../agents/agent-run-approval.gateway.js";
+import type { AgentRunApprovalHost } from "../agents/agent-run-approval.js";
 import type { AnyAgentTool } from "../agents/tools/common.js";
 import { getFreePortBlockWithPermissionFallback } from "../test-utils/ports.js";
 import { buildMcpToolSchema } from "./mcp-http.schema.js";
@@ -106,7 +113,7 @@ type BeforeToolCallHookInput = {
     sessionKey?: string;
     sessionId?: string;
     runId?: string;
-    approvalReviewerDeviceId?: string;
+    approvalHost?: AgentRunApprovalHost;
     channelId?: string;
     turnSourceChannel?: string;
     turnSourceTo?: string;
@@ -1276,6 +1283,11 @@ describe("mcp loopback server", () => {
 
   it("binds a CLI grant's complete context and ignores spoofed scope headers", async () => {
     const { port, runtime } = await startLoopbackServerForTest();
+    const approvalHost: AgentRunApprovalHost = {
+      plugin: {
+        request: vi.fn(async () => ({ outcome: "unavailable" as const, reason: "test" })),
+      },
+    };
     const grant = mintMcpLoopbackClientGrant({
       context: {
         sessionKey: "agent:main:discord:channel:bound",
@@ -1321,6 +1333,7 @@ describe("mcp loopback server", () => {
         spawnedBy: "agent:main:discord:channel:parent",
       },
       runtimeOwnerToken: runtime.ownerToken,
+      approvalHost,
     });
     expect(
       activateMcpLoopbackClientGrantCapture({
@@ -1411,7 +1424,7 @@ describe("mcp loopback server", () => {
       sessionKey: "agent:main:discord:channel:bound",
       sessionId: "session-bound",
       runId: "run-bound",
-      approvalReviewerDeviceId: "bound-reviewer",
+      approvalHost,
       channelId: "discord:bound",
       turnSourceChannel: "discord",
       turnSourceTo: "discord:bound",
@@ -1419,6 +1432,62 @@ describe("mcp loopback server", () => {
       turnSourceThreadId: "bound-thread",
     });
     expect(getBeforeToolCallHookInput(0).ctx).toHaveProperty("loopDetection");
+  });
+
+  it("routes exact runtime capture through the active CLI grant", async () => {
+    let capturedRuntime: SessionMcpRuntime | undefined;
+    const captureSessionRuntime = vi.fn();
+    const execute = vi.fn(async () => {
+      capturedRuntime = await getOrCreateSessionMcpRuntime({
+        sessionId: "session-captured",
+        workspaceDir: "/workspace",
+        cfg: { mcp: {} },
+      });
+      return { content: [{ type: "text", text: "captured" }] };
+    });
+    mockScopedTools([
+      makeMockTool({
+        name: "capture_runtime",
+        execute,
+      }),
+    ]);
+    const { runtime } = await startLoopbackServerForTest();
+    const grant = mintMcpLoopbackClientGrant({
+      context: {
+        sessionKey: "agent:main:captured",
+        sessionId: "session-captured",
+        senderIsOwner: true,
+      },
+      runtimeOwnerToken: runtime.ownerToken,
+      captureSessionMcpRuntime: captureSessionRuntime,
+    });
+    const captureKey = "capture-runtime-owner";
+    expect(
+      activateMcpLoopbackClientGrantCapture({
+        token: grant.token,
+        runtimeOwnerToken: runtime.ownerToken,
+        captureKey,
+      }),
+    ).toBe(true);
+
+    try {
+      const response = await sendLoopbackToolCall({
+        token: grant.token,
+        name: "capture_runtime",
+        headers: { "x-openclaw-cli-capture-key": captureKey },
+      });
+
+      expect(response.status).toBe(200);
+      expectMcpResultText(await readMcpPayload(response), "captured");
+      expect(execute).toHaveBeenCalledTimes(1);
+      expect(capturedRuntime).toBeDefined();
+      expect(captureSessionRuntime).toHaveBeenCalledWith(capturedRuntime);
+    } finally {
+      await retireSessionMcpRuntime({
+        sessionId: "session-captured",
+        reason: "test-end",
+      });
+    }
   });
 
   it("revalidates a CLI grant after async preparation before tool execution", async () => {
@@ -1430,13 +1499,19 @@ describe("mcp loopback server", () => {
     const preparationStarted = new Promise<void>((resolve) => {
       markPreparationStarted = resolve;
     });
+    let preparationSignal: AbortSignal | undefined;
     const execute = vi.fn(async () => ({
       content: [{ type: "text", text: "should not execute" }],
+    }));
+    const requestApproval = vi.fn(async () => ({
+      outcome: "unavailable" as const,
+      reason: "should not request approval",
     }));
     mockScopedTools([
       makeMockTool({
         name: "exec",
-        prepareBeforeToolCallParams: async (args) => {
+        prepareBeforeToolCallParams: async (args, context) => {
+          preparationSignal = (context as { signal?: AbortSignal }).signal;
           markPreparationStarted?.();
           await preparationGate;
           return args;
@@ -1452,6 +1527,7 @@ describe("mcp loopback server", () => {
         nodeExecAllowed: true,
       },
       runtimeOwnerToken: runtime.ownerToken,
+      approvalHost: { plugin: { request: requestApproval } },
     });
     const captureKey = "capture-revoked-during-prepare";
     expect(
@@ -1475,6 +1551,7 @@ describe("mcp loopback server", () => {
         captureKey,
       }),
     ).toBe(true);
+    expect(preparationSignal?.aborted).toBe(true);
     releasePreparation?.();
 
     const response = await responsePromise;
@@ -1484,7 +1561,74 @@ describe("mcp loopback server", () => {
     expect(payload.result?.content).toEqual([
       { type: "text", text: "Tool call authorization expired" },
     ]);
+    expect(runBeforeToolCallHookMock).not.toHaveBeenCalled();
+    expect(requestApproval).not.toHaveBeenCalled();
     expect(execute).not.toHaveBeenCalled();
+  });
+
+  it("withholds successful tool output when a CLI grant is revoked during execution", async () => {
+    let releaseExecution: (() => void) | undefined;
+    let markExecutionStarted: (() => void) | undefined;
+    const executionGate = new Promise<void>((resolve) => {
+      releaseExecution = resolve;
+    });
+    const executionStarted = new Promise<void>((resolve) => {
+      markExecutionStarted = resolve;
+    });
+    let executionSignal: AbortSignal | undefined;
+    const execute = vi.fn(async (_toolCallId, _args, signal) => {
+      executionSignal = signal;
+      markExecutionStarted?.();
+      await executionGate;
+      return { content: [{ type: "text", text: "sensitive result" }] };
+    });
+    mockScopedTools([
+      makeMockTool({
+        name: "slow_secret",
+        execute,
+      }),
+    ]);
+    const { runtime } = await startLoopbackServerForTest();
+    const grant = mintMcpLoopbackClientGrant({
+      context: {
+        sessionKey: "agent:main:main",
+        senderIsOwner: true,
+      },
+      runtimeOwnerToken: runtime.ownerToken,
+    });
+    const captureKey = "capture-revoked-during-execution";
+    expect(
+      activateMcpLoopbackClientGrantCapture({
+        token: grant.token,
+        runtimeOwnerToken: runtime.ownerToken,
+        captureKey,
+      }),
+    ).toBe(true);
+
+    const responsePromise = sendLoopbackToolCall({
+      token: grant.token,
+      name: "slow_secret",
+      headers: { "x-openclaw-cli-capture-key": captureKey },
+    });
+    await executionStarted;
+    expect(
+      deactivateMcpLoopbackClientGrantCapture({
+        token: grant.token,
+        runtimeOwnerToken: runtime.ownerToken,
+        captureKey,
+      }),
+    ).toBe(true);
+    expect(executionSignal?.aborted).toBe(true);
+    releaseExecution?.();
+
+    const response = await responsePromise;
+    const payload = await readMcpPayload(response);
+    expect(response.status).toBe(200);
+    expect(payload.result?.isError).toBe(true);
+    expect(payload.result?.content).toEqual([
+      { type: "text", text: "Tool call authorization expired" },
+    ]);
+    expect(execute).toHaveBeenCalledOnce();
   });
 
   it("rejects revoked and prior-runtime CLI grants", async () => {
@@ -2045,6 +2189,7 @@ describe("mcp loopback server", () => {
 
     expect(cronExecute).toHaveBeenCalledTimes(1);
     expect(getBeforeToolCallHookInput(0).params).toEqual(args);
+    expect(getBeforeToolCallHookInput(0).ctx?.approvalHost).toBe(gatewayAgentRunApprovalHost);
     expect(cronExecute.mock.calls[0]?.[1]).toEqual(args);
     expectMcpResultText(payload, "CRON_EXECUTED");
   });

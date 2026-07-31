@@ -11,7 +11,7 @@ export type LocalAgentTurnHandle<TAdapterState, TResult> = {
   cancel: (reason?: unknown) => boolean;
 };
 
-export type LocalAgentTurnStart<TAdapterState, TResult> = {
+type LocalAgentTurnStart<TAdapterState, TResult> = {
   runId: string;
   sessionKey: string;
   agentId?: string;

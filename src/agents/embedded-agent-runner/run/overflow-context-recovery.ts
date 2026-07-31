@@ -216,6 +216,7 @@ export async function recoverEmbeddedRunOverflow(input: {
       const sessionBeforeCompaction = input.getActiveSession();
       const overflowCompactionRuntimeContext = {
         ...buildEmbeddedCompactionRuntimeContext({
+          approvalHost: runParams.approvalHost,
           sessionKey: runParams.sessionKey,
           messageChannel: runParams.messageChannel,
           messageProvider: runParams.messageProvider,

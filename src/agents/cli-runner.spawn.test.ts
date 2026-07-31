@@ -27,6 +27,7 @@ import {
 } from "../logging/diagnostic-run-activity.js";
 import type { getProcessSupervisor } from "../process/supervisor/index.js";
 import type { RunExit } from "../process/supervisor/types.js";
+import { gatewayAgentRunApprovalHost } from "./agent-run-approval.gateway.js";
 import {
   registerExecApprovalRequestForHostOrThrow,
   resolveRegisteredExecApprovalDecision,
@@ -38,7 +39,7 @@ import {
 import {
   buildClaudeControlRequestEvents,
   buildClaudeLiveBackend,
-  buildClaudeLiveRunContext,
+  buildClaudeLiveRunContext as buildBaseClaudeLiveRunContext,
   buildPreparedCliRunContext,
   captureModelCallDiagnostics,
   createCancelableLiveRunLifecycle,
@@ -113,6 +114,12 @@ vi.mock("./tools/gateway.js", () => ({
 }));
 
 const mockCallGatewayTool = vi.mocked(callGatewayTool);
+
+function buildClaudeLiveRunContext(overrides: PreparedCliRunContextOverrides = {}) {
+  const context = buildBaseClaudeLiveRunContext(overrides);
+  context.params.approvalHost = gatewayAgentRunApprovalHost;
+  return context;
+}
 
 type ProcessSupervisor = ReturnType<typeof getProcessSupervisor>;
 type SupervisorSpawnFn = ProcessSupervisor["spawn"];

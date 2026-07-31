@@ -1,3 +1,4 @@
+import type { ChannelRuntimeSurface } from "openclaw/plugin-sdk/channel-contract";
 import type { OpenClawConfig } from "openclaw/plugin-sdk/config-contracts";
 import type { DiscordAccountConfig } from "openclaw/plugin-sdk/config-contracts";
 // Discord plugin module implements manager behavior.
@@ -288,6 +289,7 @@ export class DiscordVoiceManager {
       discordConfig: DiscordAccountConfig;
       accountId: string;
       runtime: RuntimeEnv;
+      agentRuntime: NonNullable<ChannelRuntimeSurface["agent"]>;
       botUserId?: string;
     },
   ) {
@@ -1738,6 +1740,7 @@ export class DiscordVoiceManager {
       cfg: this.params.cfg,
       discordConfig: this.params.discordConfig,
       runtime: this.params.runtime,
+      agentRuntime: this.params.agentRuntime,
       context,
       toolsAllow,
       admissionAllowFrom: this.admissionAllowFrom,
@@ -1773,6 +1776,7 @@ export class DiscordVoiceManager {
       discordConfig: this.params.discordConfig,
       admissionAllowFrom: this.admissionAllowFrom,
       runtime: this.params.runtime,
+      agentRuntime: this.params.agentRuntime,
       speakerContext: this.speakerContext,
       resolveIngressContext: () =>
         this.resolveDiscordVoiceIngressContext(params.entry, params.userId),

@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { expectDefined } from "@openclaw/normalization-core";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { gatewayAgentRunApprovalHost } from "../../agents/agent-run-approval.gateway.js";
 import { testing as cliBackendsTesting } from "../../agents/cli-backends.test-support.js";
 import type { OpenClawConfig } from "../../config/config.js";
 import type { SessionEntry } from "../../config/sessions.js";
@@ -230,9 +231,13 @@ describe("getReplyFromConfig fast test bootstrap", () => {
       session: { store: path.join(home, "sessions.json") },
     } as OpenClawConfig);
 
-    await expect(getReplyFromConfig(buildGetReplyCtx(), undefined, cfg)).resolves.toEqual({
-      text: "ok",
-    });
+    await expect(
+      getReplyFromConfig(
+        buildGetReplyCtx({ ApprovalReviewerDeviceId: "device-reviewer" }),
+        undefined,
+        cfg,
+      ),
+    ).resolves.toEqual({ text: "ok" });
     expect(vi.mocked(loadConfigMock)).not.toHaveBeenCalled();
     expect(mocks.ensureAgentWorkspace).not.toHaveBeenCalled();
     expect(mocks.initSessionState).not.toHaveBeenCalled();
@@ -240,6 +245,8 @@ describe("getReplyFromConfig fast test bootstrap", () => {
     expect(vi.mocked(runPreparedReplyMock)).toHaveBeenCalledOnce();
     const preparedReplyParams = requirePreparedReplyParams();
     expect(preparedReplyParams.cfg).toBe(cfg);
+    expect(preparedReplyParams.approvalHost).toBeDefined();
+    expect(preparedReplyParams.approvalHost).not.toBe(gatewayAgentRunApprovalHost);
   });
 
   it("still merges partial config overrides against getRuntimeConfig()", async () => {
@@ -721,6 +728,7 @@ describe("getReplyFromConfig fast test bootstrap", () => {
     await expect(
       getReplyFromConfig(
         buildGetReplyCtx({
+          ApprovalReviewerDeviceId: "device-reviewer",
           Body: "/goal start /status",
           BodyForAgent: "/goal start /status",
           RawBody: "/goal start /status",
@@ -749,6 +757,13 @@ describe("getReplyFromConfig fast test bootstrap", () => {
         ?.objective,
     ).toBe("/status");
     const preparedReplyParams = requirePreparedReplyParams();
+    const inlineApprovalHosts = mocks.handleInlineActions.mock.calls.map(
+      ([params]) => (params as { approvalHost?: unknown }).approvalHost,
+    );
+    expect(inlineApprovalHosts).toEqual([
+      preparedReplyParams.approvalHost,
+      preparedReplyParams.approvalHost,
+    ]);
     expect(preparedReplyParams.command.commandBodyNormalized).toBe(continuationPrompt);
     expect(preparedReplyParams.sessionCtx.BodyForAgent).toBe(continuationPrompt);
     expect(mocks.handleInlineActions).toHaveBeenCalledTimes(2);

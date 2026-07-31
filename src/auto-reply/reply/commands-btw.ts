@@ -117,6 +117,7 @@ export const handleBtwCommand: CommandHandler = async (params, allowTextCommands
         blockReplyChunking: params.blockReplyChunking,
         resolvedBlockStreamingBreak: params.resolvedBlockStreamingBreak,
         opts: { ...params.opts, runId },
+        approvalHost: params.approvalHost,
         isNewSession: false,
         ...(params.command.channel ? { messageChannel: params.command.channel } : {}),
         ...(params.command.channel ? { messageProvider: params.command.channel } : {}),

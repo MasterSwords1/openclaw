@@ -100,18 +100,18 @@ export function createSessionMcpRuntimeManagerInstall(
       }).fingerprint;
     const existing = store.runtimesBySessionId.get(params.runtimeKey);
     if (existing) {
-      if (
-        !matchesStaticReuse({
-          workspaceDir: params.workspaceDir,
-          agentDir: params.agentDir,
-          configFingerprint: nextFingerprint,
-          candidate: existing,
-        })
-      ) {
-        store.runtimesBySessionId.delete(params.runtimeKey);
-        store.idleTtlMsBySessionId.delete(params.runtimeKey);
-        store.connectionMetaByRuntimeKey.delete(params.runtimeKey);
-        await existing.dispose();
+      const canReuse = matchesStaticReuse({
+        workspaceDir: params.workspaceDir,
+        agentDir: params.agentDir,
+        configFingerprint: nextFingerprint,
+        candidate: existing,
+      });
+      if (lifecycle.isRuntimeRetiring(existing) || !canReuse) {
+        // Static config changes can rotate credentials. Revoke a mismatched
+        // runtime immediately; only an otherwise reusable retirement may drain leases.
+        await lifecycle.retireRuntimeForReplacement(params.runtimeKey, existing, {
+          preserveActiveLeases: canReuse,
+        });
       } else {
         reconcileReusableRetirement(params.sessionId, existing);
         existing.markUsed();
@@ -210,6 +210,7 @@ export function createSessionMcpRuntimeManagerInstall(
     const meta = store.connectionMetaByRuntimeKey.get(params.runtimeKey);
     if (
       existing &&
+      !lifecycle.isRuntimeRetiring(existing) &&
       meta?.connectionHash === connectionHash &&
       matchesStaticReuse({
         workspaceDir: params.workspaceDir,
@@ -228,10 +229,21 @@ export function createSessionMcpRuntimeManagerInstall(
       return existing;
     }
     if (existing) {
-      store.runtimesBySessionId.delete(params.runtimeKey);
-      store.idleTtlMsBySessionId.delete(params.runtimeKey);
-      store.connectionMetaByRuntimeKey.delete(params.runtimeKey);
-      await existing.dispose();
+      if (lifecycle.isRuntimeRetiring(existing)) {
+        // Credential changes revoke the old authenticated connection immediately,
+        // including when an earlier exact retirement is waiting on a lease.
+        await lifecycle.retireRuntimeForReplacement(params.runtimeKey, existing, {
+          preserveActiveLeases: false,
+          alreadyExclusiveRuntimeKey: params.runtimeKey,
+        });
+      } else {
+        // Credential rotation is an auth boundary: the old connection must not
+        // stay usable merely because a caller still holds a lease.
+        store.runtimesBySessionId.delete(params.runtimeKey);
+        store.idleTtlMsBySessionId.delete(params.runtimeKey);
+        store.connectionMetaByRuntimeKey.delete(params.runtimeKey);
+        await existing.dispose();
+      }
     }
     const runtime = await getOrCreateRuntimeEntry({
       runtimeKey: params.runtimeKey,

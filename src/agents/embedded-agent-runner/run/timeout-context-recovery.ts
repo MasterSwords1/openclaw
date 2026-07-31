@@ -113,6 +113,7 @@ export async function recoverEmbeddedRunTimeout(input: {
     const runParams = input.runParams;
     const timeoutCompactionRuntimeContext = {
       ...buildEmbeddedCompactionRuntimeContext({
+        approvalHost: runParams.approvalHost,
         sessionKey: runParams.sessionKey,
         messageChannel: runParams.messageChannel,
         messageProvider: runParams.messageProvider,

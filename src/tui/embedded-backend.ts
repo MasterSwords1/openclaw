@@ -2,6 +2,7 @@
 import { randomUUID } from "node:crypto";
 import type { SessionsPatchResult } from "../../packages/gateway-protocol/src/index.js";
 import { agentCommandFromIngress } from "../agents/agent-command.js";
+import type { AgentRunApprovalHost } from "../agents/agent-run-approval.js";
 import { listAgentEntries } from "../agents/agent-scope-config.js";
 import {
   resolveAgentDir,
@@ -88,11 +89,7 @@ import {
 import { projectSessionsPatchEntry } from "../gateway/sessions-patch.js";
 import type { AgentEventPayload } from "../infra/agent-events.js";
 import { setEmbeddedMode } from "../infra/embedded-mode.js";
-import {
-  clearEmbeddedPluginApprovalBroker,
-  EmbeddedPluginApprovalBroker,
-  setEmbeddedPluginApprovalBroker,
-} from "../infra/embedded-plugin-approval-broker.js";
+import { EmbeddedPluginApprovalBroker } from "../infra/embedded-plugin-approval-broker.js";
 import { logInfo, logWarn } from "../logger.js";
 import { agentSessionKeysMatchByRequestKey, normalizeAgentId } from "../routing/session-key.js";
 import { defaultRuntime } from "../runtime.js";
@@ -375,6 +372,7 @@ export class EmbeddedTuiBackend implements TuiBackend {
   private seq = 0;
   private readonly pendingLifecycleErrors = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly pluginApprovalBroker = new EmbeddedPluginApprovalBroker();
+  private readonly approvalHost: AgentRunApprovalHost = { plugin: this.pluginApprovalBroker };
   private unsubscribePluginApprovals?: () => void;
   // Resolves once the one-time session-key migration has run; store methods await it.
   private ready: Promise<void> = Promise.resolve();
@@ -392,7 +390,6 @@ export class EmbeddedTuiBackend implements TuiBackend {
     this.previousRuntimeError = defaultRuntime.error;
     defaultRuntime.log = silentRuntime.log;
     defaultRuntime.error = silentRuntime.error;
-    setEmbeddedPluginApprovalBroker(this.pluginApprovalBroker);
     this.unsubscribePluginApprovals = this.pluginApprovalBroker.subscribe((event) => {
       this.emit(event.event, event.payload);
     });
@@ -412,7 +409,6 @@ export class EmbeddedTuiBackend implements TuiBackend {
   }
 
   async stop() {
-    clearEmbeddedPluginApprovalBroker(this.pluginApprovalBroker);
     this.unsubscribePluginApprovals?.();
     this.unsubscribePluginApprovals = undefined;
     const maintenancePromises: Promise<void>[] = [];
@@ -879,6 +875,7 @@ export class EmbeddedTuiBackend implements TuiBackend {
         abortSignal: params.signal,
         ...(timeoutSeconds !== undefined ? { timeoutOverrideSeconds: Number(timeoutSeconds) } : {}),
       },
+      approvalHost: this.approvalHost,
       isNewSession: false,
       messageChannel: INTERNAL_MESSAGE_CHANNEL,
       messageProvider: INTERNAL_MESSAGE_CHANNEL,
@@ -1558,6 +1555,7 @@ export class EmbeddedTuiBackend implements TuiBackend {
           },
           timeout: timeoutSecondsFromMs(params.timeoutMs),
           runId: params.runId,
+          approvalHost: this.approvalHost,
           abortSignal: params.signal,
           allowModelOverride: false,
         },

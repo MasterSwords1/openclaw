@@ -296,6 +296,7 @@ export async function executePreparedReplyRun(state: PreparedReplyRunAdmission) 
   const replyPolicyChannel =
     (replyRoute.channel as OriginatingChannelType | undefined) ??
     (messageProvider as OriginatingChannelType | undefined);
+  const approvalReviewerDeviceId = normalizeOptionalString(ctx.ApprovalReviewerDeviceId);
   const followupRun = {
     prompt: queuedBody,
     transcriptPrompt: transcriptCommandBody,
@@ -354,7 +355,8 @@ export async function executePreparedReplyRun(state: PreparedReplyRunAdmission) 
       senderIsOwner: command.senderIsOwner,
       traceAuthorized:
         command.senderIsOwner || (ctx.GatewayClientScopes ?? []).includes("operator.admin"),
-      approvalReviewerDeviceId: normalizeOptionalString(ctx.ApprovalReviewerDeviceId),
+      approvalHost: params.approvalHost,
+      approvalReviewerDeviceId,
       sessionFile: preparedSessionState.sessionFile,
       workspaceDir,
       cwd: normalizeOptionalString(state.sessionEntry?.spawnedCwd),

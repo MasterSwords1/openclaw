@@ -113,13 +113,28 @@ export async function publishAppliedApprovalResolution(params: {
       : params.record.kind === "plugin"
         ? "plugin.approval.resolved"
         : "openclaw.approval.resolved";
-  const event = {
+  const eventBase = {
     id: params.record.id,
     decision,
     resolvedBy,
     ts,
     request: params.liveRecord.request,
-  } as ExecApprovalResolved | PluginApprovalResolved | SystemAgentApprovalResolved;
+  };
+  const event =
+    params.record.kind === "plugin" &&
+    params.record.status === "cancelled" &&
+    (params.record.terminalReason === "run-aborted" ||
+      params.record.terminalReason === "gateway-restart")
+      ? ({
+          ...eventBase,
+          // The kind-specific handler resolves the durable record and live
+          // manager record together; only their shared generic publisher
+          // erases the plugin payload relation.
+          request: params.liveRecord.request as PluginApprovalRequestPayload,
+          status: "cancelled",
+          terminalReason: params.record.terminalReason,
+        } satisfies PluginApprovalResolved)
+      : (eventBase as ExecApprovalResolved | PluginApprovalResolved | SystemAgentApprovalResolved);
   await runSideEffect({
     context: params.context,
     approvalKind: params.record.kind,

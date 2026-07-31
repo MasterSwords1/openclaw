@@ -16,6 +16,7 @@ import type {
   UserTurnInput,
   UserTurnTranscriptRecorder,
 } from "../../sessions/user-turn-transcript.types.js";
+import type { AgentRunApprovalHost } from "../agent-run-approval.js";
 import type { ExecElevatedDefaults } from "../bash-tools.exec-types.js";
 import type { BootstrapContextRunKind } from "../bootstrap-mode.js";
 import type { CliSessionBindingFacts } from "../cli-runner/types.js";
@@ -54,6 +55,8 @@ export type AgentRunContext = {
 
 /** Full trusted option surface for running an agent command. */
 export type AgentCommandOpts = {
+  /** Operator approval capabilities owned by the adapter that launched this run. */
+  approvalHost?: AgentRunApprovalHost;
   message: string;
   /** User-visible transcript body; defaults to message and excludes runtime-only context. */
   transcriptMessage?: string;

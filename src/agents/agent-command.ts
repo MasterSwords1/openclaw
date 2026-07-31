@@ -29,6 +29,7 @@ import {
   shouldPersistRestartRecoveryCleanup,
   shouldPersistRestartRecoveryContextClaim,
 } from "./agent-command-restart-recovery.js";
+import { noAgentRunApprovalHost } from "./agent-run-approval.js";
 import { resolveAgentRuntimeConfig } from "./agent-runtime-config.js";
 import { runAcpAgentCommand } from "./command/acp-execution.js";
 import {
@@ -561,6 +562,7 @@ export async function agentCommand(
           mode: "reject_uncoordinated",
           opts: {
             ...opts,
+            approvalHost: opts.approvalHost ?? noAgentRunApprovalHost,
             lifecycleGeneration,
             // agentCommand is the trusted-operator entrypoint used by CLI/local flows.
             // Ingress callers must opt into owner identity explicitly via
@@ -597,6 +599,7 @@ async function agentCommandFromIngressInternal(
       mode: "claim",
       opts: {
         ...opts,
+        approvalHost: opts.approvalHost ?? noAgentRunApprovalHost,
         lifecycleGeneration,
         senderIsOwner: opts.senderIsOwner === true,
       },

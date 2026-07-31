@@ -356,6 +356,7 @@ export function buildEmbeddedCompactionRuntimeContext(
       scopeKey: processScopeKey,
     });
   return {
+    approvalHost: params.approvalHost,
     sessionKey: params.sessionKey ?? undefined,
     messageChannel: params.messageChannel ?? undefined,
     messageProvider: params.messageProvider ?? undefined,
