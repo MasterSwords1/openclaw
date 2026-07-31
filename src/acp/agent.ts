@@ -97,6 +97,13 @@ import { ACP_AGENT_INFO } from "./types.js";
 const MAX_PROMPT_BYTES = 2 * 1024 * 1024;
 const SESSION_CREATE_RATE_LIMIT_DEFAULT_MAX_REQUESTS = 120;
 const SESSION_CREATE_RATE_LIMIT_DEFAULT_WINDOW_MS = 60_000;
+const ACP_MODEL_AUTH_METHOD = {
+  id: "openclaw-model-setup",
+  name: "Configure OpenClaw model",
+  description: "Authenticate a model provider and choose the OpenClaw model defaults.",
+  type: "terminal" as const,
+  args: ["--configure-model"],
+};
 
 const silentRuntime: RuntimeEnv = {
   log: () => {},
@@ -317,7 +324,7 @@ export class AcpAgent implements Agent {
     return this.localAgentHost.list().length;
   }
 
-  async initialize(_params: InitializeRequest): Promise<InitializeResponse> {
+  async initialize(params: InitializeRequest): Promise<InitializeResponse> {
     const { PROTOCOL_VERSION } = await import("@agentclientprotocol/sdk");
     return {
       protocolVersion: PROTOCOL_VERSION,
@@ -339,7 +346,7 @@ export class AcpAgent implements Agent {
         },
       },
       agentInfo: ACP_AGENT_INFO,
-      authMethods: [],
+      authMethods: params.clientCapabilities?.auth?.terminal ? [ACP_MODEL_AUTH_METHOD] : [],
     };
   }
 

@@ -6,7 +6,7 @@ Docs: https://docs.openclaw.ai
 
 ### Changes
 
-- **Self-contained ACP runtime:** run inbound `openclaw acp` sessions directly through the process-local agent host, canonical session storage, and ACP permission requests, removing the external Gateway dependency and keeping inherited host environment available to local tools.
+- **Self-contained ACP runtime:** run inbound `openclaw acp` sessions directly through the process-local agent host, canonical session storage, and ACP permission requests; advertise capability-gated terminal model setup and a machine-readable embedded-host contract; remove the external Gateway dependency; and keep inherited host environment available to local tools.
 - **Control UI first-run setup:** continue verified model setup into Custodian, explain that the web app is ready without a channel, and offer an optional dismissible path to Channels.
 - **Fish Audio speech:** add hosted S2.1 synthesis with streaming, voice notes, voice discovery, and telephony, plus local Fish S2 Pro reference-voice streaming in native macOS Talk. Thanks @Conan-Scott for the earlier community-plugin implementation.
 - **Control UI cloud workspace conflicts:** surface staged-ref guidance, bounded conflicted paths, structured transcript events, and sidebar attention for cloud worker results that kept local versions.

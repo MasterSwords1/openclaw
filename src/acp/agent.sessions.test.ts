@@ -145,6 +145,37 @@ function updateTypes(updates: Array<{ update: SessionUpdate }>): string[] {
 }
 
 describe("AcpAgent process-local sessions", () => {
+  it("advertises model-only terminal authentication to capable clients", async () => {
+    const { agent } = createHarness();
+
+    await expect(
+      agent.initialize({
+        protocolVersion: 1,
+        clientCapabilities: { auth: { terminal: true } },
+      }),
+    ).resolves.toMatchObject({
+      authMethods: [
+        {
+          id: "openclaw-model-setup",
+          name: "Configure OpenClaw model",
+          type: "terminal",
+          args: ["--configure-model"],
+        },
+      ],
+    });
+  });
+
+  it("omits terminal authentication when the client cannot launch it", async () => {
+    const { agent } = createHarness();
+
+    await expect(
+      agent.initialize({
+        protocolVersion: 1,
+        clientCapabilities: { auth: { terminal: false } },
+      }),
+    ).resolves.toMatchObject({ authMethods: [] });
+  });
+
   it("creates a routed local session and records its initial metadata for replay", async () => {
     const sessionRuntime = createRuntime({
       resolveSessionKey: vi.fn(async () => "agent:main:work"),

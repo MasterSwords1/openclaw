@@ -6,12 +6,11 @@ import {
   type ChildProcessWithoutNullStreams,
 } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
-import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
-import { type RawData, WebSocketServer } from "ws";
+import { ACP_RUNTIME_INFO } from "../acp/runtime-info.js";
 
 const execFileAsync = promisify(execFile);
 const CHILD_PROCESS_TIMEOUT_MS = 30_000;
@@ -63,11 +62,12 @@ function waitForJsonLine(child: ChildProcessWithoutNullStreams, id: number) {
     const finish = (response: Record<string, unknown>) => {
       clearTimeout(timeout);
       child.off("exit", onExit);
+      child.stdout.off("data", onData);
       resolve(response);
     };
 
     child.once("exit", onExit);
-    child.stdout.on("data", (chunk: Buffer) => {
+    const onData = (chunk: Buffer) => {
       stdout += chunk.toString();
       const lines = stdout.split("\n");
       stdout = lines.pop() ?? "";
@@ -81,24 +81,42 @@ function waitForJsonLine(child: ChildProcessWithoutNullStreams, id: number) {
           return;
         }
       }
-    });
+    };
+    child.stdout.on("data", onData);
   });
 }
 
-function rawDataToText(data: RawData): string {
-  if (Array.isArray(data)) {
-    return Buffer.concat(data).toString("utf8");
-  }
-  if (data instanceof ArrayBuffer) {
-    return Buffer.from(new Uint8Array(data)).toString("utf8");
-  }
-  return Buffer.from(data).toString("utf8");
+function requestJsonLine(
+  child: ChildProcessWithoutNullStreams,
+  request: { id: number; method: string; params: Record<string, unknown> },
+) {
+  const response = waitForJsonLine(child, request.id);
+  child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", ...request })}\n`);
+  return response;
 }
 
 describe("ACP CLI process exit", () => {
+  it("flushes the runtime contract to piped stdout before exiting", async () => {
+    const result = await execFileAsync(
+      process.execPath,
+      ["--import", "tsx", "src/entry.ts", "acp", "info"],
+      {
+        cwd: path.resolve("."),
+        encoding: "utf8",
+        env: createAcpProcessEnv(),
+        killSignal: "SIGKILL",
+        timeout: CHILD_PROCESS_TIMEOUT_MS,
+      },
+    );
+
+    expect(result.stderr).toBe("");
+    expect(result.stdout).toBe(`${JSON.stringify(ACP_RUNTIME_INFO)}\n`);
+  });
+
   it.each([
     { args: ["acp", "--help"], usage: "Usage: openclaw acp [options] [command]" },
     { args: ["acp", "client", "--help"], usage: "Usage: openclaw acp client [options]" },
+    { args: ["acp", "info", "--help"], usage: "Usage: openclaw acp info [options]" },
   ])(
     "exits promptly after $args",
     async ({ args, usage }) => {
@@ -150,79 +168,16 @@ describe("ACP CLI process exit", () => {
     expect(result.stderr).toBe("");
   });
 
-  it("processes an initialize frame buffered before Gateway hello", async () => {
+  it("processes an initialize frame written immediately after spawn", async () => {
     const stateDir = mkdtempSync(path.join(tmpdir(), "openclaw-acp-exit-"));
-    const server = createServer();
-    const wss = new WebSocketServer({ server });
     let child: ChildProcessWithoutNullStreams | undefined;
 
     try {
-      wss.on("connection", (socket) => {
-        socket.send(
-          JSON.stringify({
-            type: "event",
-            event: "connect.challenge",
-            seq: 1,
-            payload: { nonce: "acp-process-test" },
-          }),
-        );
-        socket.on("message", (data) => {
-          const frame = JSON.parse(rawDataToText(data)) as { id: string; method: string };
-          if (frame.method !== "connect") {
-            return;
-          }
-          socket.send(
-            JSON.stringify({
-              type: "res",
-              id: frame.id,
-              ok: true,
-              payload: {
-                type: "hello-ok",
-                protocol: 4,
-                server: { version: "acp-process-test", connId: "acp-process-test" },
-                features: { methods: [], events: [] },
-                snapshot: {
-                  presence: [],
-                  health: {},
-                  stateVersion: { presence: 1, health: 1 },
-                  uptimeMs: 1,
-                },
-                auth: { role: "operator", scopes: ["operator.admin"] },
-                policy: {
-                  maxPayload: 512 * 1024,
-                  maxBufferedBytes: 1024 * 1024,
-                  tickIntervalMs: 1000,
-                },
-              },
-            }),
-          );
-        });
+      child = spawn(process.execPath, ["--import", "tsx", "src/entry.ts", "acp"], {
+        cwd: path.resolve("."),
+        env: createAcpProcessEnv(stateDir),
+        stdio: ["pipe", "pipe", "pipe"],
       });
-      await new Promise<void>((resolve) => {
-        server.listen(0, "127.0.0.1", resolve);
-      });
-      const address = server.address();
-      if (!address || typeof address === "string") {
-        throw new Error("ACP process test Gateway did not get a TCP address");
-      }
-
-      child = spawn(
-        process.execPath,
-        [
-          "--import",
-          "tsx",
-          "src/entry.ts",
-          "acp",
-          "--require-existing",
-          "--url",
-          `ws://127.0.0.1:${address.port}`,
-        ],
-        {
-          cwd: path.resolve("."),
-          env: createAcpProcessEnv(stateDir),
-          stdio: ["pipe", "pipe", "pipe"],
-        },
-      );
       let stderr = "";
       child.stderr.on("data", (chunk: Buffer) => {
         stderr += chunk.toString();
@@ -230,8 +185,8 @@ describe("ACP CLI process exit", () => {
       const exitPromise = waitForExit(child);
       const responsePromise = waitForJsonLine(child, INITIALIZE_FRAME.id);
 
-      // Write before the Gateway handshake completes. Startup monitoring must
-      // retain this frame for the eventual AgentSideConnection reader.
+      // The direct stdio runtime must retain frames written while its local
+      // config and state stores are still initializing.
       child.stdin.write(`${JSON.stringify(INITIALIZE_FRAME)}\n`);
       const response = await responsePromise;
       expect(response).toMatchObject({
@@ -246,16 +201,68 @@ describe("ACP CLI process exit", () => {
       expect(stderr).toBe("");
     } finally {
       child?.kill("SIGKILL");
-      for (const socket of wss.clients) {
-        socket.terminate();
-      }
-      await new Promise<void>((resolve) => {
-        wss.close(() => resolve());
-      });
-      await new Promise<void>((resolve, reject) => {
-        server.close((error) => (error ? reject(error) : resolve()));
-      });
       rmSync(stateDir, { force: true, recursive: true });
     }
   }, 40_000);
+
+  it("runs concurrent stdio agents against one local state directory", async () => {
+    const stateDir = mkdtempSync(path.join(tmpdir(), "openclaw-acp-concurrent-"));
+    const children = Array.from({ length: 2 }, () =>
+      spawn(process.execPath, ["--import", "tsx", "src/entry.ts", "acp"], {
+        cwd: path.resolve("."),
+        env: createAcpProcessEnv(stateDir),
+        stdio: ["pipe", "pipe", "pipe"],
+      }),
+    );
+    const stderr = ["", ""];
+    children.forEach((child, index) => {
+      child.stderr.on("data", (chunk: Buffer) => {
+        stderr[index] += chunk.toString();
+      });
+    });
+
+    try {
+      const initialized = await Promise.all(
+        children.map((child, index) =>
+          requestJsonLine(child, {
+            id: index + 1,
+            method: "initialize",
+            params: INITIALIZE_FRAME.params,
+          }),
+        ),
+      );
+      for (const response of initialized) {
+        expect(response).toMatchObject({
+          result: { protocolVersion: INITIALIZE_FRAME.params.protocolVersion },
+        });
+      }
+
+      const sessions = await Promise.all(
+        children.map((child, index) =>
+          requestJsonLine(child, {
+            id: index + 10,
+            method: "session/new",
+            params: { cwd: stateDir, mcpServers: [] },
+          }),
+        ),
+      );
+      const sessionIds = sessions.map((response) => {
+        const result = response.result as { sessionId?: unknown } | undefined;
+        expect(typeof result?.sessionId).toBe("string");
+        return String(result?.sessionId);
+      });
+      expect(new Set(sessionIds).size).toBe(sessionIds.length);
+
+      const exits = children.map(waitForExit);
+      children.forEach((child) => child.stdin.end());
+      await expect(Promise.all(exits)).resolves.toEqual([
+        { code: 0, signal: null },
+        { code: 0, signal: null },
+      ]);
+      expect(stderr).toEqual(["", ""]);
+    } finally {
+      children.forEach((child) => child.kill("SIGKILL"));
+      rmSync(stateDir, { force: true, recursive: true });
+    }
+  }, 60_000);
 });

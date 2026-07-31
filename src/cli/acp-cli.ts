@@ -1,7 +1,8 @@
-// Commander registration for ACP bridge and interactive ACP client commands.
+// Commander registration for the self-contained ACP agent and interactive client.
 import type { Command } from "commander";
 import { formatDocsLink } from "../../packages/terminal-core/src/links.js";
 import { theme } from "../../packages/terminal-core/src/theme.js";
+import { ACP_RUNTIME_INFO } from "../acp/runtime-info.js";
 import { normalizeAcpProvenanceMode } from "../acp/types.js";
 import { formatErrorMessage } from "../infra/errors.js";
 import { defaultRuntime } from "../runtime.js";
@@ -17,6 +18,7 @@ export function registerAcpCli(program: Command) {
     .option("--reset-session", "Reset the session key before first use", false)
     .option("--no-prefix-cwd", "Do not prefix prompts with the working directory")
     .option("--provenance <mode>", "ACP provenance mode: off, meta, or meta+receipt")
+    .option("--configure-model", "Configure model authentication and exit", false)
     .option("-v, --verbose", "Verbose logging to stderr", false)
     .addHelpText(
       "after",
@@ -24,6 +26,11 @@ export function registerAcpCli(program: Command) {
     )
     .action(async (opts) => {
       try {
+        if (opts.configureModel) {
+          const { configureCommandFromSectionsArg } = await import("../commands/configure.js");
+          await configureCommandFromSectionsArg(["model"], defaultRuntime);
+          return;
+        }
         const provenanceMode = normalizeAcpProvenanceMode(opts.provenance as string | undefined);
         if (opts.provenance && !provenanceMode) {
           throw new Error('Invalid --provenance. Use "off", "meta", or "meta+receipt".');
@@ -48,8 +55,15 @@ export function registerAcpCli(program: Command) {
     });
 
   acp
+    .command("info")
+    .description("Print the ACP runtime contract as JSON")
+    .action(() => {
+      defaultRuntime.writeJson(ACP_RUNTIME_INFO, 0);
+    });
+
+  acp
     .command("client")
-    .description("Run an interactive ACP client against the local ACP bridge")
+    .description("Run an interactive ACP client against the local ACP agent")
     .option("--cwd <dir>", "Working directory for the ACP session")
     .option("--server <command>", "ACP server command (default: openclaw)")
     .option("--server-args <args...>", "Extra arguments for the ACP server")

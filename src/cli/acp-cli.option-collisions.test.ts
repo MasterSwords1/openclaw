@@ -1,6 +1,7 @@
 // ACP CLI option tests cover the self-contained agent and interactive client boundaries.
 import { Command } from "commander";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ACP_RUNTIME_INFO } from "../acp/runtime-info.js";
 import { runRegisteredCli } from "../test-utils/command-runner.js";
 import { registerAcpCli } from "./acp-cli.js";
 
@@ -19,6 +20,7 @@ type AcpServerOptions = {
 };
 
 const mocks = vi.hoisted(() => ({
+  configureCommandFromSectionsArg: vi.fn(async (_sections: string[], _runtime: unknown) => {}),
   runAcpClientInteractive: vi.fn(async (_opts: AcpClientOptions) => {}),
   serveAcp: vi.fn(async (_opts: AcpServerOptions, _deps?: { ownStateDatabase?: boolean }) => {}),
   defaultRuntime: {
@@ -30,7 +32,13 @@ const mocks = vi.hoisted(() => ({
   },
 }));
 
-const { runAcpClientInteractive, serveAcp, defaultRuntime } = mocks;
+const { configureCommandFromSectionsArg, runAcpClientInteractive, serveAcp, defaultRuntime } =
+  mocks;
+
+vi.mock("../commands/configure.js", () => ({
+  configureCommandFromSectionsArg: (sections: string[], runtime: unknown) =>
+    mocks.configureCommandFromSectionsArg(sections, runtime),
+}));
 
 vi.mock("../acp/client.js", () => ({
   runAcpClientInteractive: (opts: AcpClientOptions) => mocks.runAcpClientInteractive(opts),
@@ -66,6 +74,7 @@ describe("acp cli options", () => {
   }
 
   beforeEach(() => {
+    configureCommandFromSectionsArg.mockClear();
     runAcpClientInteractive.mockClear();
     serveAcp.mockClear();
     defaultRuntime.log.mockClear();
@@ -120,6 +129,20 @@ describe("acp cli options", () => {
     expect(serveAcp).toHaveBeenCalledTimes(1);
     const serverOptions = requireFirstMockArg(serveAcp) as AcpServerOptions;
     expect(serverOptions.prefixCwd).toBe(true);
+  });
+
+  it("reports the self-contained runtime contract without starting the agent", async () => {
+    await parseAcp(["info"]);
+
+    expect(defaultRuntime.writeJson).toHaveBeenCalledWith(ACP_RUNTIME_INFO, 0);
+    expect(serveAcp).not.toHaveBeenCalled();
+  });
+
+  it("runs the canonical model setup flow for terminal authentication", async () => {
+    await parseAcp(["--configure-model"]);
+
+    expect(configureCommandFromSectionsArg).toHaveBeenCalledWith(["model"], defaultRuntime);
+    expect(serveAcp).not.toHaveBeenCalled();
   });
 
   it("rejects invalid provenance without starting the agent", async () => {
