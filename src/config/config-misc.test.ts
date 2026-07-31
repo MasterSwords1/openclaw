@@ -483,6 +483,20 @@ describe("diagnostics.otel.captureContent", () => {
   });
 });
 
+describe("diagnostics.otel.metricNamePrefix", () => {
+  it("accepts strings and rejects other types", () => {
+    const valid = OpenClawSchema.safeParse({
+      diagnostics: { otel: { metricNamePrefix: "acme." } },
+    });
+    const invalid = OpenClawSchema.safeParse({
+      diagnostics: { otel: { metricNamePrefix: 42 } },
+    });
+
+    expect(valid.success).toBe(true);
+    expect(invalid.success).toBe(false);
+  });
+});
+
 describe("ui.seamColor", () => {
   it("accepts hex colors", () => {
     const res = validateConfigObject({ ui: { seamColor: "#FF4500" } });

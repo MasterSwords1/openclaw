@@ -90,6 +90,7 @@ stdout, or `both` for both.
       logsEndpoint: "http://otel-collector:4318/v1/logs",
       protocol: "http/protobuf", // grpc disables OTLP export
       serviceName: "openclaw-gateway", // unset falls back to OTEL_SERVICE_NAME, then "openclaw"
+      metricNamePrefix: "acme.", // optional; include the separator
       headers: { "x-collector-token": "..." },
       traces: true,
       metrics: true,
@@ -102,6 +103,12 @@ stdout, or `both` for both.
   },
 }
 ```
+
+`metricNamePrefix` is added only to OpenClaw-owned `openclaw.*` metrics. For
+example, `"acme."` exports `openclaw.tokens` as
+`acme.openclaw.tokens`. Standard semantic-convention metrics such as
+`gen_ai.client.token.usage` and `gen_ai.client.operation.duration` keep their
+original names. Leave the option unset to preserve every current metric name.
 
 ### Environment variables
 

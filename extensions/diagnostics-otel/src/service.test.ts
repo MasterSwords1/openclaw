@@ -705,6 +705,29 @@ describe("diagnostics-otel service", () => {
     }
   });
 
+  test.each([
+    { metricNamePrefix: undefined, expectedPrefix: "" },
+    { metricNamePrefix: "acme.", expectedPrefix: "acme." },
+  ])(
+    "creates OpenClaw metrics with the configured name prefix $metricNamePrefix",
+    async ({ metricNamePrefix, expectedPrefix }) => {
+      await startOtelService({
+        metrics: true,
+        configure: (ctx) => {
+          if (metricNamePrefix !== undefined) {
+            ctx.config.diagnostics!.otel!.metricNamePrefix = metricNamePrefix;
+          }
+        },
+      });
+
+      expect(telemetryState.counters.has(`${expectedPrefix}openclaw.tokens`)).toBe(true);
+      expect(telemetryState.histograms.has(`${expectedPrefix}openclaw.run.duration_ms`)).toBe(true);
+      expect(telemetryState.histograms.has("gen_ai.client.token.usage")).toBe(true);
+      expect(telemetryState.histograms.has("gen_ai.client.operation.duration")).toBe(true);
+      expect(telemetryState.counters.has("openclaw.tokens")).toBe(metricNamePrefix === undefined);
+    },
+  );
+
   test("records message-flow metrics and spans", async () => {
     await startOtelService({ traces: true, metrics: true, logs: true });
 
