@@ -5,9 +5,10 @@ import {
 } from "@openclaw/gateway-protocol/frame-guards";
 import { RetrySupervisor, sleepWithAbort } from "@openclaw/retry";
 import { GatewayEventListeners } from "./event-listeners.js";
-import type { GatewayPendingRequest } from "./pending-request.js";
+import { type GatewayPendingRequest, GatewayProtocolRequestError } from "./pending-request.js";
 import { clearGatewayConnectTimeout, startGatewayConnectTimeout } from "./timeouts.js";
 
+export { GatewayProtocolRequestError } from "./pending-request.js";
 export type GatewayProtocolSocket = {
   isOpen: () => boolean;
   send: (data: string) => void;
@@ -84,7 +85,7 @@ type GatewayProtocolClientOptions<TPlan> = {
   createSocket: (handlers: GatewayProtocolSocketHandlers) => GatewayProtocolSocket;
   createRequestId: () => string;
   createRequestError?: (error: Partial<ErrorShape>) => GatewayProtocolRequestError;
-  createRequestTimeoutError?: (method: string, timeoutMs: number) => Error;
+  createRequestTimeoutError?: (method: string, timeoutMs: number, requestSent: boolean) => Error;
   createRequestAbortError?: (method: string) => Error;
   buildConnectPlan: (params: {
     nonce: string | null;
@@ -123,24 +124,6 @@ type GatewayProtocolClientOptions<TPlan> = {
   shouldRetrySocketFactoryError?: (error: Error) => boolean;
   rethrowSocketFactoryError?: (error: Error) => boolean;
 };
-export class GatewayProtocolRequestError extends Error {
-  readonly code: string;
-  readonly gatewayCode: string;
-  readonly details?: unknown;
-  readonly retryable: boolean;
-  readonly retryAfterMs?: number;
-
-  constructor(error: Partial<ErrorShape>) {
-    super(error.message ?? "request failed");
-    this.name = "GatewayProtocolRequestError";
-    this.code = error.code ?? "UNAVAILABLE";
-    this.gatewayCode = this.code;
-    this.details = error.details;
-    this.retryable = error.retryable === true;
-    this.retryAfterMs = error.retryAfterMs;
-  }
-}
-
 type ConnectTimingState = {
   generation: number;
   startedAtMs: number;
@@ -242,6 +225,7 @@ export class GatewayProtocolClient<TPlan> {
       options?.timeoutMs === null ? undefined : (options?.timeoutMs ?? this.opts.requestTimeoutMs);
     return new Promise<T>((resolve, reject) => {
       let timeout: ReturnType<typeof setTimeout> | undefined;
+      let requestSent = false;
       const pending: GatewayPendingRequest = {
         resolve: (value) => resolve(value as T),
         reject,
@@ -279,11 +263,14 @@ export class GatewayProtocolClient<TPlan> {
       pending.cleanup = cleanup;
       if (timeoutMs !== undefined && timeoutMs >= 0) {
         timeout = setTimeout(() => {
+          if (this.pending.get(id) !== pending) {
+            return;
+          }
           this.pending.delete(id);
           options?.signal?.removeEventListener("abort", onAbort);
           this.finishRequestTiming(id, pending, false, "CLIENT_TIMEOUT");
           reject(
-            this.opts.createRequestTimeoutError?.(method, timeoutMs) ??
+            this.opts.createRequestTimeoutError?.(method, timeoutMs, requestSent) ??
               new Error(`gateway request timed out after ${timeoutMs}ms: ${method}`),
           );
         }, timeoutMs);
@@ -293,6 +280,7 @@ export class GatewayProtocolClient<TPlan> {
       this.pending.set(id, pending);
       try {
         socket.send(JSON.stringify({ type: "req", id, method, params }));
+        requestSent = true;
         this.invoke("sent", () => options?.onSent?.());
       } catch (error) {
         this.pending.delete(id);
