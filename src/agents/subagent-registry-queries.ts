@@ -143,7 +143,7 @@ export function buildSubagentRunReadIndexFromRuns<T extends SubagentRunReadRecor
     rememberLatestRunEntry(inMemoryDisplayByChildSessionKey, childSessionKey, entry);
   }
 
-  for (const entry of runs.values()) {
+  for (const [, entry] of runs.entries()) {
     const childSessionKey = entry.childSessionKey.trim();
     const controllerSessionKey = resolveControllerSessionKey(entry);
     if (controllerSessionKey) {
