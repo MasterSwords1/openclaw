@@ -154,6 +154,42 @@ describe("subagent registry sqlite store", () => {
     });
   });
 
+  it("keeps the complete payload authoritative over stale derived state columns", async () => {
+    await withTempStateEnv(async () => {
+      const run = createRun({
+        requesterSettleWake: {
+          status: "dispatching",
+          attemptCount: 2,
+          batchRunIds: ["run-one"],
+        },
+      });
+      saveSubagentRegistryToSqlite(new Map([[run.runId, run]]));
+
+      const { db } = openOpenClawStateDatabase();
+      executeSqliteQuerySync(
+        db,
+        getNodeSqliteKysely<SubagentRegistryDatabase>(db)
+          .updateTable("subagent_runs")
+          .set({
+            frozen_result_text: "stale typed completion",
+            pending_final_delivery_last_error: "stale typed delivery",
+            requester_settle_wake_status: "pending",
+            requester_settle_wake_attempt_count: 99,
+            outcome_json: JSON.stringify({ status: "timeout" }),
+          })
+          .where("run_id", "=", run.runId),
+      );
+
+      closeOpenClawStateDatabaseForTest();
+      const restored = loadSubagentRegistryFromSqlite().get(run.runId);
+      expect(restored?.completion?.resultText).toBe("done");
+      expect(restored?.delivery?.lastError).toBe("retry later");
+      expect(restored?.requesterSettleWake).toEqual(run.requesterSettleWake);
+      expect(restored?.outcome?.status).toBe("ok");
+      expect(loadSubagentSessionListRunsFromSqlite().get(run.runId)?.outcome?.status).toBe("ok");
+    });
+  });
+
   it("loads a canonical lightweight session-list projection", async () => {
     await withTempStateEnv(async () => {
       const run = createRun({
