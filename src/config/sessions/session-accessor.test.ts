@@ -26,6 +26,7 @@ import {
   appendTranscriptMessage,
   applySessionEntryLifecycleMutation,
   commitReplySessionInitialization,
+  countSessionEntryRowsReadOnly,
   createSessionEntryWithTranscript,
   deleteSessionEntryLifecycle,
   findTranscriptEvent,
@@ -225,6 +226,7 @@ describe("session accessor seam", () => {
 
     expect(readSqliteSessionEntryCount(database)).toBe(1);
     expect(readSqliteSessionEntryKeys(database)).toEqual(["agent:main:logical-entry"]);
+    expect(countSessionEntryRowsReadOnly({ agentId: "main", storePath })).toBe(2);
   });
 
   it("retains legacy createdBy actor projections across rewrites", async () => {

@@ -4,18 +4,16 @@ import { resetGatewayWorkAdmission } from "../process/gateway-work-admission.js"
 const mocks = vi.hoisted(() => ({
   events: [] as string[],
   sessionEntryCounts: new Map<string, number>(),
+  countSessionEntryRowsReadOnly: vi.fn((options: { agentId: string }) => {
+    mocks.events.push(`sessions.count.${options.agentId}`);
+    return mocks.sessionEntryCounts.get(options.agentId) ?? 0;
+  }),
   loadCombinedSessionStoreForGateway: vi.fn((_cfg: unknown, options: { agentId: string }) => {
     mocks.events.push(`sessions.load.${options.agentId}`);
-    const entryCount = mocks.sessionEntryCounts.get(options.agentId) ?? 0;
     return {
       durableStorePath: `/state/${options.agentId}.sqlite`,
       storePath: `/state/${options.agentId}.sqlite`,
-      store: Object.fromEntries(
-        Array.from({ length: entryCount }, (_, index) => [
-          `agent:${options.agentId}:fixture-${index}`,
-          { sessionId: `session-${index}`, updatedAt: index },
-        ]),
-      ),
+      store: {},
     };
   }),
   listSessionsFromStoreAsync: vi.fn(async (params: { opts: { agentId: string } }) => {
@@ -35,6 +33,11 @@ vi.mock("../config/sessions/combined-store-gateway.js", () => ({
   loadCombinedSessionStoreForGateway: mocks.loadCombinedSessionStoreForGateway,
 }));
 
+vi.mock("../config/sessions/session-accessor.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../config/sessions/session-accessor.js")>()),
+  countSessionEntryRowsReadOnly: mocks.countSessionEntryRowsReadOnly,
+}));
+
 vi.mock("./session-utils-list.js", () => ({
   listSessionsFromStoreAsync: mocks.listSessionsFromStoreAsync,
 }));
@@ -52,6 +55,7 @@ const { scheduleGatewayHandlerPrewarm } = await import("./server-startup-handler
 beforeEach(() => {
   mocks.events.length = 0;
   mocks.sessionEntryCounts.clear();
+  mocks.countSessionEntryRowsReadOnly.mockClear();
   mocks.loadCombinedSessionStoreForGateway.mockClear();
   mocks.listSessionsFromStoreAsync.mockClear();
   mocks.listManagedPlugins.mockClear();
@@ -79,6 +83,8 @@ describe("scheduleGatewayHandlerPrewarm", () => {
     await vi.runAllTimersAsync();
 
     expect(mocks.events).toEqual([
+      "sessions.count.main",
+      "sessions.count.research",
       "sessions.load.main",
       "sessions.rows.main",
       "sessions.load.research",
@@ -167,13 +173,7 @@ describe("scheduleGatewayHandlerPrewarm", () => {
     });
     await vi.runAllTimersAsync();
 
-    expect(mocks.events).toEqual([
-      "sessions.load.main",
-      "sessions.rows.main",
-      "sessions.load.research",
-      "sessions.rows.research",
-      "plugins",
-    ]);
+    expect(mocks.events).toEqual(["sessions.count.main", "plugins"]);
     expect(mocks.prewarmSessionCatalogList).not.toHaveBeenCalled();
   });
 
