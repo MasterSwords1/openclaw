@@ -10,6 +10,7 @@ import type { Locator, Page } from "playwright";
 import type { ViteDevServer } from "vite";
 import { PROTOCOL_VERSION } from "../../../packages/gateway-protocol/src/version.js";
 import { CONTROL_UI_BOOTSTRAP_CONFIG_PATH } from "../../../src/gateway/control-ui-contract.js";
+import { controlUiLocaleModulesPlugin } from "../../config/control-ui-locales.ts";
 import {
   controlUiBrowserOnlySharedModuleAliases,
   resolveExternalPackageAliasesForVite,
@@ -334,7 +335,7 @@ export async function startControlUiE2eServer(
       ],
     },
     publicDir: path.join(uiRoot, "public"),
-    plugins: [controlUiBrowserOnlySharedModuleAliases()],
+    plugins: [controlUiLocaleModulesPlugin(), controlUiBrowserOnlySharedModuleAliases()],
     resolve: {
       alias: [
         { find: "json5", replacement: json5EsmPath },
