@@ -408,18 +408,73 @@ describe("Matrix durable delivery plans", () => {
     await expect(loadMatrixDeliveryPlan(target)).resolves.toBeNull();
   });
 
+  it("physically sweeps expired plans while retaining live pending plans", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+      installDeliveryPlanTestRuntime({ getOutboundDeliveryQueueStatus: async () => "pending" });
+      const liveIdentity = { ...identity, queueId: "queue-long" };
+      await persistMatrixDeliveryPlan({
+        ...target,
+        events: plannedEvents(identity, [
+          { receiptKind: "text", content: { msgtype: "m.text", body: "expired" } },
+        ]),
+      });
+      const livePlan = await persistMatrixDeliveryPlan({
+        ...target,
+        identity: liveIdentity,
+        events: plannedEvents(liveIdentity, [
+          { receiptKind: "text", content: { msgtype: "m.text", body: "live" } },
+        ]),
+      });
+      const store = createDeliveryPlanTestStore();
+      const storedPlans = await store.entries();
+      const expiredEntry = storedPlans.find(
+        (entry) => (entry.metadata as { queueId?: string }).queueId === identity.queueId,
+      );
+      if (!expiredEntry) {
+        throw new Error("expected the expiring Matrix delivery plan");
+      }
+      const storedExpiredPlan = await store.lookup(expiredEntry.key);
+      if (!storedExpiredPlan) {
+        throw new Error("expected the stored expiring Matrix delivery plan");
+      }
+      await store.register(expiredEntry.key, storedExpiredPlan.bytes, storedExpiredPlan.metadata, {
+        ttlMs: 1,
+      });
+
+      vi.advanceTimersByTime(2);
+      await expect(store.entries()).resolves.toHaveLength(1);
+      await expect(ensureMatrixDeliveryPlanGarbageCollection({ force: true })).resolves.toEqual({
+        deleted: 1,
+        retained: 1,
+        invalid: 0,
+      });
+      await expect(store.delete(expiredEntry.key)).resolves.toBe(false);
+      await expect(loadMatrixDeliveryPlan({ ...target, identity: liveIdentity })).resolves.toEqual(
+        livePlan,
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("keeps a successful initial prune latched after terminal cleanup", async () => {
     const baseStore = createDeliveryPlanTestStore();
+    const deleteExpired = vi.fn(async () => await baseStore.deleteExpired());
     const entries = vi.fn(async () => await baseStore.entries());
     installDeliveryPlanTestRuntime({
-      openBlobStore: () => ({ ...baseStore, entries }) as never,
+      openBlobStore: () => ({ ...baseStore, deleteExpired, entries }) as never,
     });
 
     await ensureMatrixDeliveryPlanGarbageCollection();
+    expect(deleteExpired).toHaveBeenCalledTimes(1);
     expect(entries).toHaveBeenCalledTimes(1);
     await cleanupMatrixDeliveryPlans({ queueId: "queue-none" });
+    expect(deleteExpired).toHaveBeenCalledTimes(2);
     expect(entries).toHaveBeenCalledTimes(2);
     await ensureMatrixDeliveryPlanGarbageCollection();
+    expect(deleteExpired).toHaveBeenCalledTimes(2);
     expect(entries).toHaveBeenCalledTimes(2);
   });
 });

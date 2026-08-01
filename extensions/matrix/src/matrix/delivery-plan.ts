@@ -525,6 +525,7 @@ export async function cleanupMatrixDeliveryPlans(ctx: {
   const runtimeState = getMatrixRuntime().state;
   const store = createDeliveryPlanStore();
   try {
+    await store.deleteExpired();
     const keys = (await store.entries())
       .filter((entry) =>
         entry.key.startsWith(
@@ -555,6 +556,7 @@ async function pruneMatrixTerminalDeliveryPlans(): Promise<MatrixDeliveryPlanPru
     throw new Error("Matrix durable delivery cleanup requires queue status support");
   }
   const store = createDeliveryPlanStore();
+  const expired = await store.deleteExpired();
   const entries = await store.entries();
   const statusByQueue = new Map<string, "pending" | "terminal" | "absent">();
   const deletions: string[] = [];
@@ -581,7 +583,7 @@ async function pruneMatrixTerminalDeliveryPlans(): Promise<MatrixDeliveryPlanPru
     }
   }
   await Promise.all(deletions.map(async (key) => await store.delete(key)));
-  return { deleted: deletions.length, retained, invalid };
+  return { deleted: expired.length + deletions.length, retained, invalid };
 }
 
 const initialPlanPrunes = new WeakMap<object, Promise<MatrixDeliveryPlanPruneResult>>();
