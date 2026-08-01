@@ -293,7 +293,7 @@ export function countSqliteSessionEntryRowsReadOnly(scope: SessionEntryListScope
         .selectFrom("session_nodes")
         .select((expression) => expression.fn.countAll<number | bigint>().as("count")),
     );
-    return normalizeSqliteNumber(row?.count ?? null) ?? 0;
+    return row ? normalizeSqliteNumber(row.count) : 0;
   }, toDatabaseOptions(resolved));
   return result.found ? result.value : 0;
 }
