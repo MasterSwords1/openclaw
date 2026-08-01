@@ -895,4 +895,35 @@ describe("image-generation runtime", () => {
       'No image-generation model configured. Set agents.defaults.mediaModels.image.primary to a provider/model like "vision-one/paint-v1". If you want a specific provider, also configure that provider\'s auth/API key first (vision-one: VISION_ONE_API_KEY; vision-two: VISION_TWO_API_KEY).',
     );
   });
+
+  it("fails generate mode when inputImages are passed but provider generate capability does not support reference images", async () => {
+    const provider: ImageGenerationProvider = {
+      id: "image-plugin",
+      capabilities: {
+        generate: {},
+        edit: { enabled: false },
+      },
+      async generateImage() {
+        return {
+          images: [],
+        };
+      },
+    };
+    providers = [provider];
+
+    await expect(
+      runGenerateImage({
+        cfg: {
+          agents: {
+            defaults: {
+              imageGenerationModel: { primary: "image-plugin/img-v1" },
+            },
+          },
+        },
+        prompt: "draw a cat",
+        inputImages: [{ buffer: Buffer.from("ref"), mimeType: "image/png" }],
+        mode: "generate",
+      }),
+    ).rejects.toThrow("image-plugin/img-v1 supports at most 0 reference images, 1 requested");
+  });
 });

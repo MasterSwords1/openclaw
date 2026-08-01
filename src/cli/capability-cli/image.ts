@@ -104,6 +104,7 @@ async function runImageGenerate(params: {
         : undefined,
     timeoutMs: params.timeoutMs,
     inputImages,
+    mode: params.capability === "image.edit" ? "edit" : "generate",
   });
   const outputs = await Promise.all(
     result.images.map(async (image, index) => {
@@ -331,12 +332,15 @@ export function registerImageCapabilityCommands(capability: Command): void {
     image
       .command("generate")
       .description("Generate images")
+      .option("--file <path>", "Input file", collectOption, [])
       .requiredOption("--prompt <text>", "Prompt text"),
   ).action(async (opts) => {
     await runCommandWithRuntime(defaultRuntime, async () => {
+      const files = Array.isArray(opts.file) ? (opts.file as string[]) : [String(opts.file)];
       const result = await runImageGenerate({
         capability: "image.generate",
         prompt: String(opts.prompt),
+        file: files,
         ...resolveImageGenerationOptions(opts),
       });
       emitJsonOrText(defaultRuntime, Boolean(opts.json), result, formatEnvelopeForText);

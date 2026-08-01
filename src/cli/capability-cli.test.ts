@@ -1942,6 +1942,53 @@ describe("capability cli", () => {
     expect(inputImages[0]?.mimeType).toBe("image/png");
   });
 
+  it("forwards file inputs for image generate", async () => {
+    const pngBase64 =
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+yf7kAAAAASUVORK5CYII=";
+    mocks.generateImage.mockResolvedValue({
+      provider: "openai",
+      model: "gpt-image-2",
+      attempts: [],
+      images: [
+        {
+          buffer: Buffer.from(pngBase64, "base64"),
+          mimeType: "image/png",
+          fileName: "provider-output.png",
+        },
+      ],
+    });
+
+    const tempInput = path.join(os.tmpdir(), `openclaw-image-gen-input-${Date.now()}.png`);
+    const tempOutput = path.join(os.tmpdir(), `openclaw-image-gen-output-${Date.now()}.png`);
+    await fs.writeFile(tempInput, Buffer.from(pngBase64, "base64"));
+    await fs.rm(tempOutput, { force: true });
+
+    await runCap(
+      "capability",
+      "image",
+      "generate",
+      "--file",
+      tempInput,
+      "--prompt",
+      "generate conditioned on reference logo",
+      "--model",
+      "openai/gpt-image-2",
+      "--output",
+      tempOutput,
+      "--json",
+    );
+
+    const call = firstImageGenerationCall();
+    const inputImages = call?.inputImages as Array<Record<string, unknown>>;
+    expect(call?.prompt).toBe("generate conditioned on reference logo");
+    expect(inputImages).toHaveLength(1);
+    expect(inputImages[0]?.fileName).toBe(path.basename(tempInput));
+    expect(inputImages[0]?.mimeType).toBe("image/png");
+
+    await fs.rm(tempInput, { force: true });
+    await fs.rm(tempOutput, { force: true });
+  });
+
   it("reports the expanded image.edit flags in capability inspect", async () => {
     await runCap("capability", "inspect", "--name", "image.edit", "--json");
 

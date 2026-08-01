@@ -170,17 +170,17 @@ export function createOpenAiCompatibleImageGenerationProvider(
     capabilities: options.capabilities,
     async generateImage(req): Promise<ImageGenerationResult> {
       const inputImages = req.inputImages ?? [];
-      // Reference images switch the request to edit mode; providers can still
-      // disable edits or cap reference count through capabilities.
-      const mode: OpenAiCompatibleImageRequestMode = inputImages.length > 0 ? "edit" : "generate";
-      const maxInputImages = options.capabilities.edit.maxInputImages;
+      const mode: OpenAiCompatibleImageRequestMode =
+        req.mode ?? (inputImages.length > 0 ? "edit" : "generate");
+      const modeCaps = mode === "edit" ? options.capabilities.edit : options.capabilities.generate;
+      const maxInputImages = modeCaps.maxInputImages;
       if (mode === "edit" && !options.capabilities.edit.enabled) {
         throw new Error(`${options.label} image editing is not supported.`);
       }
-      if (mode === "edit" && maxInputImages !== undefined && inputImages.length > maxInputImages) {
+      if (maxInputImages !== undefined && inputImages.length > maxInputImages) {
         throw new Error(
           options.tooManyInputImagesError ??
-            `${options.label} image editing supports up to ${maxInputImages} reference image${
+            `${options.label} image ${mode} supports up to ${maxInputImages} reference image${
               maxInputImages === 1 ? "" : "s"
             }.`,
         );

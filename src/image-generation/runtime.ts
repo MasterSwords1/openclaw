@@ -99,10 +99,12 @@ export async function generateImage(
       continue;
     }
 
+    const mode = params.mode ?? (params.inputImages?.length ? "edit" : "generate");
     const inputImageCount = params.inputImages?.length ?? 0;
     const maxInputImages = resolveImageGenerationMaxInputImages({
       provider,
       model: candidate.model,
+      mode,
     });
     if (maxInputImages !== undefined && inputImageCount > maxInputImages) {
       const error = `${candidate.provider}/${candidate.model} supports at most ${maxInputImages} reference image${maxInputImages === 1 ? "" : "s"}, ${inputImageCount} requested`;
@@ -112,7 +114,9 @@ export async function generateImage(
         error,
       });
       lastError = new Error(error);
-      logger.warn(`image-generation candidate skipped: ${error}`);
+      logger.warn(
+        `image-generation candidate failed: ${candidate.provider}/${candidate.model}: ${error}`,
+      );
       continue;
     }
 
@@ -123,9 +127,8 @@ export async function generateImage(
       });
       const modelResolutions =
         provider.capabilities.geometry?.resolutionsByModel?.[candidate.model];
-      const modeCapabilities = params.inputImages?.length
-        ? provider.capabilities.edit
-        : provider.capabilities.generate;
+      const modeCapabilities =
+        mode === "edit" ? provider.capabilities.edit : provider.capabilities.generate;
       const inferredResolution =
         modeCapabilities.supportsResolution === false || modelResolutions?.length === 0
           ? undefined
@@ -140,6 +143,7 @@ export async function generateImage(
         outputFormat: params.outputFormat,
         background: params.background,
         inputImages: params.inputImages,
+        mode,
       });
       // Providers receive only supported overrides. Ignored/normalized values
       // are returned to callers so user-facing replies can explain adjustments.
@@ -158,6 +162,7 @@ export async function generateImage(
         outputFormat: sanitized.outputFormat,
         background: sanitized.background,
         inputImages: params.inputImages,
+        mode,
         ...(timeoutMs !== undefined ? { timeoutMs } : {}),
         providerOptions: params.providerOptions,
         ssrfPolicy: params.ssrfPolicy,
