@@ -116,7 +116,7 @@ function rowToSubagentRunRecord(row: SubagentRunSqliteRow): SubagentRunRecord | 
   if (payload.requesterOrigin) {
     payload.requesterOrigin = normalizeDeliveryContext(payload.requesterOrigin);
   }
-  if (row.expects_completion_message === 0) {
+  if (payload.expectsCompletionMessage === false) {
     payload.delivery.status = "not_required";
   }
   const record = normalizeSubagentRunState(payload);
