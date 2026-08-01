@@ -1303,6 +1303,10 @@ describe("deliverSubagentAnnouncement completion delivery", () => {
       completionDirectOrigin: slackThreadOrigin,
       directOrigin: slackThreadOrigin,
       sourceSessionKey: "agent:main:subagent:child",
+      internalEvents: taskCompletionEvents({
+        childSessionKey: "agent:main:subagent:child",
+        childSessionId: "child-session-local",
+      }),
       requesterIsSubagent: false,
       expectsCompletionMessage: true,
       bestEffortDeliver: true,
@@ -1324,7 +1328,13 @@ describe("deliverSubagentAnnouncement completion delivery", () => {
       allowSyntheticCronRunContinuation: false,
       expectFinal: true,
       forceSyntheticClient: true,
-      delegatedToolPolicyHandoff: true,
+      delegatedToolPolicyHandoff: {
+        sourceSessionKey: "agent:main:subagent:child",
+        sourceSessionId: "child-session-local",
+        targetSessionKey: "agent:main:slack:channel:C123:thread:171.222",
+        targetSessionId: "requester-session-local",
+        idempotencyKey: "announce-local-dispatch",
+      },
       timeoutMs: 120_000,
     });
   });

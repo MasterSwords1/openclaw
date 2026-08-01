@@ -71,6 +71,7 @@ import { resolveAvailableAgentHarnessPolicy } from "../harness/selection.js";
 import { resolveCliRuntimeExecutionProvider } from "../model-runtime-aliases.js";
 import { isCliProvider } from "../model-selection.js";
 import { resolveOpenAIRuntimeProvider } from "../openai-routing.js";
+import { hasVerifiedRequesterCompletionHandoff } from "../requester-tool-policy.js";
 import { resolveAgentRunSessionTarget, type AgentRunSessionTarget } from "../run-session-target.js";
 import { resolveAgentRunAbortLifecycleFields } from "../run-termination.js";
 import { buildAgentRuntimeAuthPlan } from "../runtime-plan/auth.js";
@@ -82,7 +83,10 @@ import {
   resolveSessionWriteLockTargetKey,
 } from "../session-write-lock.js";
 import { buildUsageWithNoCost } from "../stream-message-shared.js";
-import { isSubagentAnnounceCompletionHandoff } from "../subagent-announce-handoff.js";
+import {
+  isSubagentAnnounceCompletionHandoff,
+  isTrustedSubagentCompletionHandoffForRun,
+} from "../subagent-announce-handoff.js";
 import {
   buildClaudeCliFallbackContextPrelude,
   claudeCliSessionTranscriptHasContent,
@@ -555,7 +559,32 @@ export function runAgentAttempt(params: {
     inputProvenance: params.opts.inputProvenance,
     internalEvents: params.opts.internalEvents,
   });
-  const disableTools = params.opts.modelRun === true || isSubagentAnnounceHandoff;
+  const exactSubagentAnnounceHandoff =
+    isSubagentAnnounceHandoff &&
+    isTrustedSubagentCompletionHandoffForRun({
+      handoff: params.opts.trustedInternalHandoff,
+      inputProvenance: params.opts.inputProvenance,
+      internalEvents: params.opts.internalEvents,
+      sessionKey: params.sessionKey,
+      sessionId: params.sessionId,
+      provider: params.providerOverride,
+      model: params.modelOverride,
+    });
+  const trustedSubagentAnnounceHandoff =
+    exactSubagentAnnounceHandoff &&
+    hasVerifiedRequesterCompletionHandoff({
+      config: params.cfg,
+      sessionKey: params.sessionKey,
+      inputProvenance: params.opts.inputProvenance,
+      trustedInternalHandoff: params.opts.trustedInternalHandoff,
+      sessionId: params.sessionId,
+      modelProvider: params.providerOverride,
+      modelId: params.modelOverride,
+    });
+  // Frozen child output remains tool-free unless the Gateway consumed the exact
+  // one-shot handoff for this session and model route.
+  const disableTools =
+    params.opts.modelRun === true || (isSubagentAnnounceHandoff && !trustedSubagentAnnounceHandoff);
   const claudeCliFallbackPrelude =
     !isRawModelRun &&
     params.isFallbackRetry &&
@@ -1031,7 +1060,9 @@ export function runAgentAttempt(params: {
     bootstrapContextRunKind: params.opts.bootstrapContextRunKind,
     toolsAllow: params.opts.toolsAllow,
     runtimePluginToolGrant: params.opts.runtimePluginToolGrant,
-    trustedInternalHandoff: params.opts.trustedInternalHandoff,
+    trustedInternalHandoff: trustedSubagentAnnounceHandoff
+      ? params.opts.trustedInternalHandoff
+      : undefined,
     scheduledToolPolicy: params.opts.scheduledToolPolicy,
     internalEvents: params.opts.internalEvents,
     inputProvenance: params.opts.inputProvenance,

@@ -44,6 +44,23 @@ describe("resolveRequesterToolPolicies", () => {
     };
   }
 
+  function completionHandoffFacts(sourceSessionKey: string, targetSessionKey: string) {
+    const targetSessionId = `${targetSessionKey}-session`;
+    return {
+      trustedInternalHandoff: {
+        kind: "subagent-completion" as const,
+        sourceSessionKey,
+        targetSessionKey,
+        targetSessionId,
+        provider: "openai",
+        model: "gpt-test",
+      },
+      sessionId: targetSessionId,
+      modelProvider: "openai",
+      modelId: "gpt-test",
+    };
+  }
+
   it("resolves exact sender policy for an external requester", () => {
     const result = resolveRequesterToolPolicies({
       config: config(),
@@ -299,7 +316,7 @@ describe("resolveRequesterToolPolicies", () => {
       config: config(),
       agentId: "main",
       sessionKey: requesterSessionKey,
-      trustedInternalHandoff: true,
+      ...completionHandoffFacts(childSessionKey, requesterSessionKey),
       inputProvenance: {
         kind: "inter_session",
         sourceSessionKey: childSessionKey,
@@ -321,7 +338,7 @@ describe("resolveRequesterToolPolicies", () => {
       resolveRequesterToolPolicies({
         agentId: "ops",
         sessionKey: "agent:ops:main",
-        trustedInternalHandoff: true,
+        ...completionHandoffFacts("agent:ops:subagent:child", "agent:ops:main"),
         inputProvenance: {
           kind: "inter_session",
           sourceSessionKey: "agent:ops:subagent:child",
@@ -349,7 +366,7 @@ describe("resolveRequesterToolPolicies", () => {
       config: config(),
       agentId: "main",
       sessionKey: completionOwnerSessionKey,
-      trustedInternalHandoff: true,
+      ...completionHandoffFacts(childSessionKey, completionOwnerSessionKey),
       inputProvenance: {
         kind: "inter_session",
         sourceSessionKey: childSessionKey,
@@ -366,7 +383,7 @@ describe("resolveRequesterToolPolicies", () => {
       config: config(),
       agentId: "main",
       sessionKey: controllerSessionKey,
-      trustedInternalHandoff: true,
+      ...completionHandoffFacts(childSessionKey, completionOwnerSessionKey),
       inputProvenance: {
         kind: "inter_session",
         sourceSessionKey: childSessionKey,
@@ -402,7 +419,7 @@ describe("resolveRequesterToolPolicies", () => {
       config: config(),
       agentId: "main",
       sessionKey: requesterSessionKey,
-      trustedInternalHandoff: true,
+      ...completionHandoffFacts(leafSessionKey, requesterSessionKey),
       inputProvenance: {
         kind: "inter_session",
         sourceSessionKey: leafSessionKey,
@@ -440,14 +457,14 @@ describe("resolveRequesterToolPolicies", () => {
       config: config(),
       agentId: "main",
       sessionKey: "agent:main:discord:direct:bob",
-      trustedInternalHandoff: true,
+      ...completionHandoffFacts(childSessionKey, "agent:main:discord:direct:alice"),
       inputProvenance: provenance,
     });
     const mismatchedCompletionOwner = resolveRequesterToolPolicies({
       config: config(),
       agentId: "main",
       sessionKey: "agent:main:main",
-      trustedInternalHandoff: true,
+      ...completionHandoffFacts(childSessionKey, "agent:main:discord:direct:alice"),
       inputProvenance: provenance,
     });
 
@@ -476,7 +493,7 @@ describe("resolveRequesterToolPolicies", () => {
       config: config(),
       agentId: "main",
       sessionKey: requesterSessionKey,
-      trustedInternalHandoff: true,
+      ...completionHandoffFacts(childSessionKey, requesterSessionKey),
       inputProvenance: {
         kind: "inter_session",
         sourceSessionKey: childSessionKey,

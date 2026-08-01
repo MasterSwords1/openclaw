@@ -3,7 +3,6 @@
  * Sender-dependent policy resolves once at trusted ingress; verified descendants
  * consume the persisted effective parent projection instead of guessing identity.
  */
-import { normalizeOptionalLowercaseString } from "@openclaw/normalization-core/string-coerce";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import type { InputProvenance } from "../sessions/input-provenance.js";
 import { normalizeInputProvenance } from "../sessions/input-provenance.js";
@@ -14,6 +13,10 @@ import {
 } from "./agent-tools.policy.js";
 import type { SandboxToolPolicy } from "./sandbox/types.js";
 import { resolveSenderToolPolicy } from "./sender-tool-policy.js";
+import {
+  isTrustedSubagentCompletionHandoffForRun,
+  type TrustedSubagentCompletionHandoff,
+} from "./subagent-announce-handoff.js";
 import {
   isSubagentEnvelopeSession,
   resolvePersistedSubagentToolPolicyEnvelope,
@@ -58,7 +61,10 @@ type RequesterToolPolicyParams = {
   senderUsername?: string | null;
   senderE164?: string | null;
   inputProvenance?: InputProvenance;
-  trustedInternalHandoff?: boolean;
+  trustedInternalHandoff?: TrustedSubagentCompletionHandoff;
+  sessionId?: string;
+  modelProvider?: string;
+  modelId?: string;
   senderPolicyMode?: SenderPolicyMode;
   /** Group session selected by a trusted scheduled authority envelope. */
   groupPolicySessionKey?: string;
@@ -109,13 +115,16 @@ function resolveDelegatedPolicy(
       };
     }
   }
-  if (!params.trustedInternalHandoff) {
-    return { delegated: false };
-  }
   if (
-    provenance?.kind !== "inter_session" ||
-    normalizeOptionalLowercaseString(provenance.sourceTool) !== "subagent_announce" ||
-    !provenance.sourceSessionKey ||
+    !isTrustedSubagentCompletionHandoffForRun({
+      handoff: params.trustedInternalHandoff,
+      inputProvenance: provenance,
+      sessionKey: params.sessionKey,
+      sessionId: params.sessionId,
+      provider: params.modelProvider,
+      model: params.modelId,
+    }) ||
+    !provenance?.sourceSessionKey ||
     !params.sessionKey
   ) {
     return { delegated: false };
@@ -151,6 +160,23 @@ function resolveDelegatedPolicy(
     currentSessionKey = parentSessionKey;
   }
   return { delegated: false };
+}
+
+/** Confirms that an exact consumed completion capability also owns persisted requester lineage. */
+export function hasVerifiedRequesterCompletionHandoff(
+  params: Pick<
+    RequesterToolPolicyParams,
+    | "config"
+    | "sessionKey"
+    | "inputProvenance"
+    | "trustedInternalHandoff"
+    | "sessionId"
+    | "modelProvider"
+    | "modelId"
+  >,
+): boolean {
+  const delegatedPolicy = resolveDelegatedPolicy(params, undefined);
+  return delegatedPolicy.delegated && delegatedPolicy.source === "completion-handoff";
 }
 
 /** Resolve sender/group policy or a verified inherited projection, never both. */

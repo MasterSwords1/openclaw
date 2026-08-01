@@ -25,7 +25,6 @@ import { stringifyRouteThreadId } from "../plugin-sdk/channel-route.js";
 import { defaultRuntime } from "../runtime.js";
 import {
   isAgentMediatedCompletionSourceTool,
-  normalizeInputProvenance,
   shouldPreserveUserFacingSessionStateForInputProvenance,
 } from "../sessions/input-provenance.js";
 import { deriveSessionChatTypeFromKey } from "../sessions/session-chat-type-shared.js";
@@ -64,7 +63,10 @@ import type { EmbeddedAgentQueueMessageOptions } from "./embedded-agent-runner/r
 import type { EmbeddedAgentQueueMessageOutcome } from "./embedded-agent-runner/runs.js";
 import { mediaUrlsFromGeneratedAttachments } from "./generated-attachments.js";
 import { wakeSessionForGeneratedMediaDirectDelivery } from "./generated-media-direct-delivery-wake.js";
-import { hasGeneratedMediaCompletionEvent } from "./internal-event-contract.js";
+import {
+  AGENT_INTERNAL_EVENT_TYPE_TASK_COMPLETION,
+  hasGeneratedMediaCompletionEvent,
+} from "./internal-event-contract.js";
 import { formatAgentInternalEventsForPrompt, type AgentInternalEvent } from "./internal-events.js";
 import { isSessionWriteLockAcquireError } from "./session-write-lock-error.js";
 import {
@@ -87,6 +89,7 @@ import {
   runSubagentAnnounceDispatch,
   type SubagentAnnounceDeliveryResult,
 } from "./subagent-announce-dispatch.js";
+import type { SubagentCompletionToolHandoffRegistration } from "./subagent-announce-handoff.js";
 import {
   inferDeliveryTargetChatType,
   resolveCompletionDeliveryOrigins,
@@ -153,11 +156,11 @@ async function resolveQueueEmbeddedAgentMessageOutcome(
 async function runAnnounceAgentCall(params: {
   agentParams: Record<string, unknown>;
   cronRunContinuation?: boolean;
+  delegatedToolPolicyHandoff?: SubagentCompletionToolHandoffRegistration;
   expectFinal?: boolean;
   timeoutMs?: number;
 }): Promise<unknown> {
   let accepted = false;
-  const inputProvenance = normalizeInputProvenance(params.agentParams.inputProvenance);
   try {
     return await subagentAnnounceDeliveryDeps.dispatchGatewayMethodInProcess(
       "agent",
@@ -170,10 +173,7 @@ async function runAnnounceAgentCall(params: {
           shouldPreserveUserFacingSessionStateForInputProvenance(
             params.agentParams.inputProvenance,
           ),
-        delegatedToolPolicyHandoff:
-          inputProvenance?.kind === "inter_session" &&
-          inputProvenance.sourceTool === "subagent_announce" &&
-          Boolean(inputProvenance.sourceSessionKey),
+        delegatedToolPolicyHandoff: params.delegatedToolPolicyHandoff,
         onAccepted: () => {
           accepted = true;
         },
@@ -1114,6 +1114,15 @@ async function sendSubagentAnnounceDirectly(params: {
       normalizeOptionalLowercaseString(params.sourceTool) ??
       (params.expectsCompletionMessage ? "subagent_announce" : "");
     const isSubagentCompletion = sourceToolId === "subagent_announce";
+    const subagentCompletionEvents = params.internalEvents?.filter(
+      (event) =>
+        event.type === AGENT_INTERNAL_EVENT_TYPE_TASK_COMPLETION && event.source === "subagent",
+    );
+    const trustedCompletionEvent =
+      subagentCompletionEvents?.length === 1 &&
+      subagentCompletionEvents[0]?.childSessionKey === params.sourceSessionKey
+        ? subagentCompletionEvents[0]
+        : undefined;
     const agentMediatedCompletion = requiresAgentMediatedCompletionDelivery({
       expectsCompletionMessage: params.expectsCompletionMessage,
       sourceTool: sourceToolId,
@@ -1388,6 +1397,21 @@ async function sendSubagentAnnounceDirectly(params: {
           return await runAnnounceAgentCall({
             agentParams,
             cronRunContinuation: cronContinuation !== undefined,
+            delegatedToolPolicyHandoff:
+              isSubagentCompletion &&
+              trustedCompletionEvent &&
+              params.sourceSessionKey &&
+              requesterActivity.sessionId
+                ? {
+                    sourceSessionKey: params.sourceSessionKey,
+                    ...(trustedCompletionEvent.childSessionId
+                      ? { sourceSessionId: trustedCompletionEvent.childSessionId }
+                      : {}),
+                    targetSessionKey: canonicalRequesterSessionKey,
+                    targetSessionId: requesterActivity.sessionId,
+                    idempotencyKey: params.directIdempotencyKey,
+                  }
+                : undefined,
             expectFinal: true,
             timeoutMs: announceTimeoutMs,
           });
