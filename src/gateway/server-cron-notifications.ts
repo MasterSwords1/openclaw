@@ -1,9 +1,6 @@
 // Gateway cron notification delivery.
 // Sends announce and webhook notifications for cron completion/failure events.
-import {
-  normalizeOptionalLowercaseString,
-  normalizeOptionalString,
-} from "@openclaw/normalization-core/string-coerce";
+import { normalizeOptionalString } from "@openclaw/normalization-core/string-coerce";
 import { resolveUserTimezone } from "../agents/date-time.js";
 import type { CliDeps } from "../cli/deps.types.js";
 import type { CronFailureDestinationConfig } from "../config/types.cron.js";
@@ -18,7 +15,11 @@ import {
 import type { CronEvent } from "../cron/service.js";
 import { resolveCronDeliverySessionKey } from "../cron/session-target.js";
 import type { CronJob, CronMessageChannel } from "../cron/types.js";
-import { normalizeHttpWebhookUrl } from "../cron/webhook-url.js";
+import {
+  isCronWebhookTokenDestinationAllowed,
+  normalizeHttpWebhookUrl,
+  resolveCronWebhookTargets,
+} from "../cron/webhook-url.js";
 import { formatErrorMessage } from "../infra/errors.js";
 import { formatZonedTimestamp } from "../infra/format-time/format-datetime.js";
 import { withTimeout } from "../infra/fs-safe.js";
@@ -38,16 +39,12 @@ type CronAgentResolver = (requested?: string | null) => {
   cfg: OpenClawConfig;
 };
 
-type CronWebhookTarget = {
-  url: string;
-  source: "delivery" | "completionDestination";
-};
-
 type CronFailureAlertParams = {
   deps: CliDeps;
   logger: CronLogger;
   resolveCronAgent: CronAgentResolver;
   webhookToken?: unknown;
+  webhookTokenDestinations?: ReadonlySet<string>;
   job: CronJob;
   text: string;
   runAtMs?: number;
@@ -127,42 +124,15 @@ function redactCommandCronEventForExternalDelivery(evt: CronEvent, job?: CronJob
   return redacted;
 }
 
-/** Resolves direct webhook delivery and completion-destination webhooks. */
-function resolveCronWebhookTargets(params: {
-  delivery?: {
-    mode?: string;
-    to?: string;
-    completionDestination?: { mode?: string; to?: string };
-  };
-}): CronWebhookTarget[] {
-  const targets: CronWebhookTarget[] = [];
-  const mode = normalizeOptionalLowercaseString(params.delivery?.mode);
-  if (mode === "webhook") {
-    const url = normalizeHttpWebhookUrl(params.delivery?.to);
-    if (url) {
-      targets.push({ url, source: "delivery" });
-    }
-  }
-
-  const completionMode = normalizeOptionalLowercaseString(
-    params.delivery?.completionDestination?.mode,
-  );
-  if (mode === "announce" && completionMode === "webhook") {
-    const url = normalizeHttpWebhookUrl(params.delivery?.completionDestination?.to);
-    if (url && targets.every((target) => target.url !== url)) {
-      targets.push({ url, source: "completionDestination" });
-    }
-  }
-
-  return targets;
-}
-
-function buildCronWebhookHeaders(webhookToken?: string): Record<string, string> {
+function buildCronWebhookHeaders(params: {
+  webhookToken?: string;
+  includeAuthorization: boolean;
+}): Record<string, string> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
-  if (webhookToken) {
-    headers.Authorization = `Bearer ${webhookToken}`;
+  if (params.webhookToken && params.includeAuthorization) {
+    headers.Authorization = `Bearer ${params.webhookToken}`;
   }
   return headers;
 }
@@ -219,6 +189,7 @@ function buildCronFinishedWebhookPayload(evt: CronEvent) {
 async function postCronWebhook(params: {
   webhookUrl: string;
   webhookToken?: string;
+  webhookTokenDestinations?: ReadonlySet<string>;
   payload: unknown;
   logContext: Record<string, unknown>;
   blockedLog: string;
@@ -229,12 +200,32 @@ async function postCronWebhook(params: {
   const deadlineAtMs = Date.now() + CRON_WEBHOOK_TIMEOUT_MS;
   try {
     assertSecretOwnerAvailable("capability", "cron-webhook");
+    const includeAuthorization =
+      Boolean(params.webhookToken) &&
+      isCronWebhookTokenDestinationAllowed(
+        params.webhookUrl,
+        params.webhookTokenDestinations ?? new Set(),
+      );
+    if (params.webhookToken && !includeAuthorization) {
+      params.logger.warn(
+        {
+          ...params.logContext,
+          webhookUrl: redactWebhookUrl(params.webhookUrl),
+        },
+        "cron: webhook bearer token withheld for unapproved destination",
+      );
+    }
     const result = await fetchWithSsrFGuard({
       url: params.webhookUrl,
       timeoutMs: CRON_WEBHOOK_TIMEOUT_MS,
+      auditContext: "cron-webhook",
+      ...(includeAuthorization ? { requireHttps: true, maxRedirects: 0 } : {}),
       init: {
         method: "POST",
-        headers: buildCronWebhookHeaders(params.webhookToken),
+        headers: buildCronWebhookHeaders({
+          webhookToken: params.webhookToken,
+          includeAuthorization,
+        }),
         body: JSON.stringify(params.payload),
         signal: abortController.signal,
       },
@@ -323,6 +314,7 @@ async function sendGatewayCronFailureAlertUnderAdmission(
       await postCronWebhook({
         webhookUrl,
         webhookToken,
+        webhookTokenDestinations: params.webhookTokenDestinations,
         payload: {
           jobId: params.job.id,
           jobName: params.job.name,
@@ -383,6 +375,7 @@ export function dispatchGatewayCronFinishedNotifications(params: {
   logger: CronLogger;
   resolveCronAgent: CronAgentResolver;
   webhookToken?: unknown;
+  webhookTokenDestinations?: ReadonlySet<string>;
   globalFailureDestination?: CronFailureDestinationConfig;
 }): void {
   const webhookToken = normalizeOptionalString(params.webhookToken);
@@ -442,6 +435,7 @@ export function dispatchGatewayCronFinishedNotifications(params: {
           postCronWebhook({
             webhookUrl: webhookTarget.url,
             webhookToken,
+            webhookTokenDestinations: params.webhookTokenDestinations,
             payload,
             logContext: { jobId: params.evt.jobId, source: webhookTarget.source },
             blockedLog: "cron: webhook delivery blocked by SSRF guard",
@@ -459,6 +453,7 @@ export function dispatchGatewayCronFinishedNotifications(params: {
     logger: params.logger,
     resolveCronAgent: params.resolveCronAgent,
     webhookToken,
+    webhookTokenDestinations: params.webhookTokenDestinations,
     globalFailureDestination: params.globalFailureDestination,
   });
 }
@@ -470,6 +465,7 @@ function dispatchCronFailureDestinationNotifications(params: {
   logger: CronLogger;
   resolveCronAgent: CronAgentResolver;
   webhookToken?: string;
+  webhookTokenDestinations?: ReadonlySet<string>;
   globalFailureDestination?: CronFailureDestinationConfig;
 }): void {
   if (params.evt.status !== "error" || !params.job || params.job.delivery?.bestEffort === true) {
@@ -494,6 +490,7 @@ function dispatchCronFailureDestinationNotifications(params: {
             postCronWebhook({
               webhookUrl,
               webhookToken: params.webhookToken,
+              webhookTokenDestinations: params.webhookTokenDestinations,
               payload: failurePayload,
               logContext: { jobId: params.evt.jobId },
               blockedLog: "cron: failure destination webhook blocked by SSRF guard",

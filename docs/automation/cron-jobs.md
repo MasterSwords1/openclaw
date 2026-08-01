@@ -743,14 +743,20 @@ Use the latest-generation, best-tier model available from your provider for untr
       enabled: false,
     },
     webhookToken: "replace-with-dedicated-webhook-token",
+    webhookTokenDestinations: ["https://hooks.example.com/cron"],
     sessionRetention: "24h",
   },
 }
 ```
 
-`webhookToken` is sent as `Authorization: Bearer <token>` on automation webhook POSTs.
-Webhook URLs must not include embedded username/password credentials; use
-`webhookToken` when the receiver supports bearer authentication.
+`webhookToken` is sent as `Authorization: Bearer <token>` only when the webhook URL
+exactly matches an HTTPS URL in `webhookTokenDestinations`. Matching includes the
+scheme, host, port, path, and query. Authenticated webhook requests do not follow
+redirects. The exact global `cron.failureAlert.to` URL is approved automatically when
+its mode is `webhook`.
+
+Webhook URLs must not include embedded username/password credentials. Unapproved
+destinations still receive the webhook without the shared bearer token.
 
 Automation jobs, run history, and quarantined malformed jobs live in the shared SQLite state database. Use the CLI or Gateway API to change jobs; `cron.store` is retired.
 

@@ -1704,6 +1704,11 @@ describe("gateway server cron", () => {
     await writeCronConfig({
       cron: {
         webhookToken: "cron-webhook-token",
+        webhookTokenDestinations: [
+          "https://example.invalid/cron-finished",
+          "https://example.invalid/completion-destination",
+          "https://example.invalid/failure-destination",
+        ],
       },
     });
 
@@ -1809,6 +1814,7 @@ describe("gateway server cron", () => {
       await failureDestFinished;
       const failureDestCall = getWebhookCall(0);
       expect(failureDestCall.url).toBe("https://example.invalid/failure-destination");
+      expect(failureDestCall.init.headers?.Authorization).toBe("Bearer cron-webhook-token");
       const failureDestBody = failureDestCall.body;
       expect(failureDestBody.message).toBe(
         'Automation "failure destination webhook" failed: unknown error',
@@ -1867,6 +1873,10 @@ describe("gateway server cron", () => {
     await writeCronConfig({
       cron: {
         webhookToken: "cron-webhook-token",
+        webhookTokenDestinations: [
+          "https://example.invalid/failed-direct",
+          "https://example.invalid/failed-completion",
+        ],
       },
     });
 

@@ -7,8 +7,15 @@ import { listReadOnlyChannelPluginsForConfig } from "../../../channels/plugins/r
 import { formatCliCommand } from "../../../cli/command-format.js";
 import { resolveAgentModelPrimaryValue } from "../../../config/model-input.js";
 import type { OpenClawConfig } from "../../../config/types.openclaw.js";
-import { resolveCronDeliveryPlan } from "../../../cron/delivery-plan.js";
+import { resolveCronDeliveryPlan, resolveFailureDestination } from "../../../cron/delivery-plan.js";
+import { resolveFailureAlertForConfig } from "../../../cron/service/failure-alerts.js";
 import type { CronJob } from "../../../cron/types.js";
+import {
+  isCronWebhookTokenDestinationAllowed,
+  normalizeHttpWebhookUrl,
+  resolveCronWebhookTargets,
+  resolveCronWebhookTokenDestinations,
+} from "../../../cron/webhook-url.js";
 import { runExec } from "../../../process/exec.js";
 
 type CrontabReader = () => Promise<{ stdout?: unknown; stderr?: unknown }>;
@@ -17,6 +24,7 @@ const LEGACY_WHATSAPP_HEALTH_SCRIPT_RE =
   /(?:^|\s)(?:"[^"]*ensure-whatsapp\.sh"|'[^']*ensure-whatsapp\.sh'|[^\s#;|&]*ensure-whatsapp\.sh)\b/u;
 const CRON_MODEL_OVERRIDE_EXAMPLE_LIMIT = 3;
 const CRON_DELIVERY_TARGET_ADVISORY_EXAMPLE_LIMIT = 3;
+const CRON_WEBHOOK_TOKEN_ADVISORY_EXAMPLE_LIMIT = 3;
 const CRONTAB_READ_TIMEOUT_MS = 5_000;
 
 function pluralize(count: number, noun: string) {
@@ -233,6 +241,81 @@ export function noteCronDeliveryTargetAdvisory(params: {
   if (advisory) {
     note(advisory, "Cron");
   }
+}
+
+function redactCronWebhookDestination(url: string): string {
+  try {
+    const parsed = new URL(url);
+    return `${parsed.origin}${parsed.pathname}`;
+  } catch {
+    return "<invalid-webhook-url>";
+  }
+}
+
+function listEffectiveCronWebhookUrls(job: CronJob, cfg: OpenClawConfig): string[] {
+  const urls = new Set(
+    resolveCronWebhookTargets({ delivery: job.delivery }).map((target) => target.url),
+  );
+  const failureDestination = resolveFailureDestination(job, cfg.cron?.failureAlert);
+  if (failureDestination?.mode === "webhook") {
+    const url = normalizeHttpWebhookUrl(failureDestination.to);
+    if (url) {
+      urls.add(url);
+    }
+  }
+  const failureAlert = resolveFailureAlertForConfig({
+    job,
+    globalConfig: cfg.cron?.failureAlert,
+  });
+  if (failureAlert?.mode === "webhook") {
+    const url = normalizeHttpWebhookUrl(failureAlert.to);
+    if (url) {
+      urls.add(url);
+    }
+  }
+  return [...urls];
+}
+
+/** Warn when enabled jobs use webhook URLs that cannot receive the configured bearer token. */
+export function noteCronWebhookTokenDestinationsAdvisory(params: {
+  cfg: OpenClawConfig;
+  jobs: Array<Record<string, unknown>>;
+}): void {
+  if (params.cfg.cron?.webhookToken === undefined) {
+    return;
+  }
+  const approved = resolveCronWebhookTokenDestinations(params.cfg.cron);
+  const examples: string[] = [];
+  let unapprovedCount = 0;
+  for (const rawJob of params.jobs) {
+    if (rawJob.enabled === false) {
+      continue;
+    }
+    const job = rawJob as unknown as CronJob;
+    for (const url of listEffectiveCronWebhookUrls(job, params.cfg)) {
+      if (isCronWebhookTokenDestinationAllowed(url, approved)) {
+        continue;
+      }
+      unapprovedCount += 1;
+      if (examples.length < CRON_WEBHOOK_TOKEN_ADVISORY_EXAMPLE_LIMIT) {
+        const id = normalizeOptionalString(rawJob.id) ?? normalizeOptionalString(rawJob.name);
+        examples.push(`${id ?? "<unnamed>"} -> ${redactCronWebhookDestination(url)}`);
+      }
+    }
+  }
+  if (unapprovedCount === 0) {
+    return;
+  }
+  note(
+    [
+      "Automation webhook bearer token is withheld from unapproved destinations.",
+      `- ${pluralize(unapprovedCount, "webhook route")} will continue without Authorization until its exact HTTPS URL is listed in \`cron.webhookTokenDestinations\`.`,
+      "- `cron.failureAlert.to` is approved automatically only when the global failure-alert mode is `webhook`.",
+      `- Examples: ${examples.join(", ")}`,
+      `Review stored targets with ${formatCliCommand("openclaw automations list")} and add only receiver URLs that should receive the shared token.`,
+    ].join("\n"),
+    "Cron",
+  );
 }
 
 async function readUserCrontab(): Promise<{ stdout: string; stderr?: string }> {

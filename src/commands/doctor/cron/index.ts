@@ -22,7 +22,11 @@ import {
   formatUnresolvedShellPromptAdvisory,
 } from "./repair-plan.js";
 import { normalizeStoredCronJobs } from "./store-migration.js";
-import { noteCronDeliveryTargetAdvisory, noteCronModelOverrides } from "./warnings.js";
+import {
+  noteCronDeliveryTargetAdvisory,
+  noteCronModelOverrides,
+  noteCronWebhookTokenDestinationsAdvisory,
+} from "./warnings.js";
 
 export {
   collectLegacyWhatsAppCrontabHealthWarning,
@@ -382,6 +386,7 @@ export async function maybeRepairLegacyCronStore(params: {
   }
   noteCronModelOverrides({ cfg: params.cfg, jobs: rawJobs });
   noteCronDeliveryTargetAdvisory({ cfg: params.cfg, jobs: rawJobs });
+  noteCronWebhookTokenDestinationsAdvisory({ cfg: params.cfg, jobs: rawJobs });
 
   const inFlightCount = countInFlightCronJobs(rawJobs);
   if (inFlightCount > 0) {

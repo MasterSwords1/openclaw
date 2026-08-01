@@ -1,6 +1,7 @@
 import { normalizeStringifiedOptionalString } from "@openclaw/normalization-core/string-coerce";
 import { z } from "zod";
 import { parseDurationMs } from "../cli/parse-duration.js";
+import { normalizeCronWebhookTokenDestination } from "../cron/webhook-url.js";
 import { SilentReplyPolicyConfigSchema } from "./zod-schema.agent-defaults.js";
 import { ToolsSchema } from "./zod-schema.agent-runtime.js";
 import { AgentsSchema, BindingsSchema, BroadcastSchema } from "./zod-schema.agents.js";
@@ -309,6 +310,18 @@ export const OpenClawSchemaShape = {
         })
         .optional(),
       webhookToken: SecretInputSchema.optional().register(sensitive),
+      webhookTokenDestinations: z
+        .array(
+          z.string().superRefine((value, ctx) => {
+            if (!normalizeCronWebhookTokenDestination(value)) {
+              ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: "must be an exact HTTPS URL without credentials, wildcards, or fragments",
+              });
+            }
+          }),
+        )
+        .optional(),
       sessionRetention: z.union([z.string(), z.literal(false)]).optional(),
       failureAlert: z
         .strictObject({

@@ -995,6 +995,38 @@ describe("cron webhook schema", () => {
 
     expect(res.success).toBe(true);
   });
+
+  it("accepts exact HTTPS webhook token destinations", () => {
+    const res = OpenClawSchema.safeParse({
+      cron: {
+        webhookTokenDestinations: [
+          "https://hooks.example.com/cron",
+          "https://hooks.example.com/cron?tenant=ops",
+        ],
+      },
+    });
+
+    expect(res.success).toBe(true);
+  });
+
+  const credentialDestination = new URL("https://hooks.example.com/cron");
+  credentialDestination.username = "user";
+  credentialDestination.password = "password";
+
+  it.each([
+    "http://hooks.example.com/cron",
+    credentialDestination.href,
+    "https://*.example.com/cron",
+    "https://hooks.example.com/cron#fragment",
+  ])("rejects unsafe webhook token destination %s", (destination) => {
+    const res = OpenClawSchema.safeParse({
+      cron: {
+        webhookTokenDestinations: [destination],
+      },
+    });
+
+    expect(res.success).toBe(false);
+  });
 });
 
 describe("broadcast", () => {

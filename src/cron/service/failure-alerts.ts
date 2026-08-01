@@ -2,6 +2,7 @@
 import { normalizeOptionalLowercaseString } from "@openclaw/normalization-core/string-coerce";
 import { truncateUtf16Safe } from "@openclaw/normalization-core/utf16-slice";
 import type { FailoverReason } from "../../agents/embedded-agent-helpers/types.js";
+import type { CronFailureAlertConfig } from "../../config/types.cron.js";
 import { resolveTargetPrefixedChannel } from "../../infra/outbound/channel-target-prefix.js";
 import type { CronFailureNotificationDelivery, CronJob, CronMessageChannel } from "../types.js";
 import type { CronServiceState } from "./state.js";
@@ -77,7 +78,18 @@ export function resolveFailureAlert(
   state: CronServiceState,
   job: CronJob,
 ): ResolvedFailureAlert | null {
-  const globalConfig = state.deps.cronConfig?.failureAlert;
+  return resolveFailureAlertForConfig({
+    job,
+    globalConfig: state.deps.cronConfig?.failureAlert,
+  });
+}
+
+/** Resolves effective failure-alert policy without requiring a running cron service. */
+export function resolveFailureAlertForConfig(params: {
+  job: CronJob;
+  globalConfig?: CronFailureAlertConfig;
+}): ResolvedFailureAlert | null {
+  const { job, globalConfig } = params;
   const jobConfig = job.failureAlert === false ? undefined : job.failureAlert;
 
   if (job.failureAlert === false) {

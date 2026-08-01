@@ -4,6 +4,7 @@ import {
   collectLegacyWhatsAppCrontabHealthWarning,
   noteCronDeliveryTargetAdvisory,
   noteCronModelOverrides,
+  noteCronWebhookTokenDestinationsAdvisory,
 } from "./warnings.js";
 
 const mocks = vi.hoisted(() => ({
@@ -184,6 +185,116 @@ describe("collectCronDeliveryTargetAdvisory", () => {
     });
     expect(advisory).toContain("Nightly digest -> ghost");
     expect(advisory).toContain("<unnamed> -> ghost");
+  });
+});
+
+describe("noteCronWebhookTokenDestinationsAdvisory", () => {
+  it("warns when a token has no approved HTTPS destination", () => {
+    noteCronWebhookTokenDestinationsAdvisory({
+      cfg: { cron: { webhookToken: "fixture-token" } },
+      jobs: [
+        job({
+          delivery: {
+            mode: "webhook",
+            to: "https://hooks.example.com/cron?token=redacted",
+          },
+        }),
+      ],
+    });
+
+    expect(mocks.note).toHaveBeenCalledWith(
+      expect.stringContaining("1 webhook route will continue without Authorization"),
+      "Cron",
+    );
+    expect(mocks.note.mock.calls[0]?.[0]).toContain("https://hooks.example.com/cron");
+    expect(mocks.note.mock.calls[0]?.[0]).not.toContain("token=redacted");
+    expect(JSON.stringify(mocks.note.mock.calls)).not.toContain("fixture-token");
+  });
+
+  it("accepts an explicit approved destination", () => {
+    noteCronWebhookTokenDestinationsAdvisory({
+      cfg: {
+        cron: {
+          webhookToken: "fixture-token",
+          webhookTokenDestinations: ["https://hooks.example.com/cron"],
+        },
+      },
+      jobs: [
+        job({
+          delivery: { mode: "webhook", to: "https://hooks.example.com/cron" },
+        }),
+      ],
+    });
+
+    expect(mocks.note).not.toHaveBeenCalled();
+  });
+
+  it("accepts the exact global failure webhook destination", () => {
+    noteCronWebhookTokenDestinationsAdvisory({
+      cfg: {
+        cron: {
+          webhookToken: "fixture-token",
+          failureAlert: {
+            mode: "webhook",
+            to: "https://hooks.example.com/failure",
+          },
+        },
+      },
+      jobs: [
+        job({
+          failureAlert: {
+            mode: "webhook",
+            to: "https://hooks.example.com/failure",
+          },
+        }),
+      ],
+    });
+
+    expect(mocks.note).not.toHaveBeenCalled();
+  });
+
+  it("covers direct, completion, failure-destination, and threshold-alert routes", () => {
+    noteCronWebhookTokenDestinationsAdvisory({
+      cfg: { cron: { webhookToken: "fixture-token" } },
+      jobs: [
+        job({
+          id: "direct",
+          delivery: { mode: "webhook", to: "https://hooks.example.com/direct" },
+        }),
+        job({
+          id: "completion",
+          delivery: {
+            mode: "announce",
+            completionDestination: {
+              mode: "webhook",
+              to: "https://hooks.example.com/completion",
+            },
+          },
+        }),
+        job({
+          id: "failure-destination",
+          delivery: {
+            mode: "none",
+            failureDestination: {
+              mode: "webhook",
+              to: "https://hooks.example.com/failure-destination",
+            },
+          },
+        }),
+        job({
+          id: "threshold-alert",
+          failureAlert: {
+            mode: "webhook",
+            to: "https://hooks.example.com/threshold-alert",
+          },
+        }),
+      ],
+    });
+
+    expect(mocks.note.mock.calls[0]?.[0]).toContain(
+      "4 webhook routes will continue without Authorization",
+    );
+    expect(mocks.note.mock.calls[0]?.[0]).not.toContain("threshold-alert ->");
   });
 });
 

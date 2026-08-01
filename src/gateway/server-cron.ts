@@ -49,6 +49,7 @@ import type {
   CronRunErrorClassification,
   CronTriggerFailureCode,
 } from "../cron/types.js";
+import { resolveCronWebhookTokenDestinations } from "../cron/webhook-url.js";
 import { formatErrorMessage } from "../infra/errors.js";
 import { resolveMainScopedEventSessionKey } from "../infra/event-session-routing.js";
 import { runHeartbeatOnce } from "../infra/heartbeat-runner.js";
@@ -278,6 +279,7 @@ export function buildGatewayCronService(params: {
   const env = params.env ?? process.env;
   const storePath = resolveCronJobsStorePathFromConfig(params.cfg, env);
   const cronEnabled = env.OPENCLAW_SKIP_CRON !== "1" && params.cfg.cron?.enabled !== false;
+  const webhookTokenDestinations = resolveCronWebhookTokenDestinations(params.cfg.cron);
 
   const findAgentEntry = (cfg: OpenClawConfig, agentId: string) =>
     listAgentEntries(cfg).find((entry) => normalizeAgentId(entry.id) === agentId);
@@ -993,6 +995,7 @@ export function buildGatewayCronService(params: {
         logger: cronLogger,
         resolveCronAgent,
         webhookToken: params.cfg.cron?.webhookToken,
+        webhookTokenDestinations,
         job,
         text,
         runAtMs,
@@ -1094,6 +1097,7 @@ export function buildGatewayCronService(params: {
           logger: cronLogger,
           resolveCronAgent,
           webhookToken: params.cfg.cron?.webhookToken,
+          webhookTokenDestinations,
           globalFailureDestination: params.cfg.cron?.failureAlert,
         });
       }
