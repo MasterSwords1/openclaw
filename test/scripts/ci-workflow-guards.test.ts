@@ -17,6 +17,7 @@ import path from "node:path";
 import { expectDefined } from "@openclaw/normalization-core";
 import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
+import { resolveDistRuntimeArtifactWorkspaceImport } from "../../scripts/lib/workspace-bootstrap-smoke.mjs";
 import { NATIVE_I18N_LOCALES } from "../../scripts/native-app-i18n.ts";
 import { SUPPORTED_LOCALES } from "../../ui/src/i18n/lib/registry.ts";
 
@@ -4618,15 +4619,73 @@ printf '%s\n' "\${CURL_SUCCESS_IP:-203.0.113.7}"
     expect(restoreStep.with.path).toContain("packages/*/dist/");
     expect(saveStep.with.path).toContain("packages/*/dist/");
     expect(restoreStep.with.key).toContain("dist-build-v3-");
-    expect(
-      buildArtifactSteps.find((step: WorkflowStep) => step.name === "Pack built runtime artifacts")
-        .run,
-    ).toContain("packages/*/dist");
+    const packStep = buildArtifactSteps.find(
+      (step: WorkflowStep) => step.name === "Pack built runtime artifacts",
+    );
+    const uploadStep = buildArtifactSteps.find(
+      (step: WorkflowStep) => step.name === "Upload built runtime artifacts",
+    );
+    expect(packStep.env.COMPATIBILITY_TARGET).toBe(
+      "${{ needs.preflight.outputs.compatibility_target }}",
+    );
+    expect(packStep.run).toContain("[[ -f scripts/dist-runtime-build-artifact.mjs ]]");
+    expect(packStep.run).toContain(
+      'node scripts/dist-runtime-build-artifact.mjs "$RUNNER_TEMP/dist-runtime-build.tar.zst"',
+    );
+    expect(packStep.run).toContain('[[ "$COMPATIBILITY_TARGET" == "true" ]]');
+    expect(packStep.run).toContain("predates the runtime artifact manifest");
+    expect(packStep.run).toContain(
+      'tar --posix -cf "$RUNNER_TEMP/dist-runtime-build.tar.zst" --use-compress-program zstdmt dist dist-runtime packages/*/dist',
+    );
+    expect(packStep.run).toContain(
+      "Current CI target is missing scripts/dist-runtime-build-artifact.mjs",
+    );
+    expect(uploadStep.with.path).toBe("${{ runner.temp }}/dist-runtime-build.tar.zst");
+    const artifactBuilder = readFileSync("scripts/lib/workspace-bootstrap-smoke.mjs", "utf8");
+    for (const requiredPath of [
+      '"openclaw.mjs"',
+      '"package.json"',
+      '"docs/reference/templates"',
+      '"src/agents/templates"',
+      '"dist"',
+      '"dist-runtime"',
+      "TSDOWN_PACKAGE_OUTPUT_ROOTS",
+      '"packages/plugin-sdk/dist"',
+      "DIST_RUNTIME_ARTIFACT_WORKSPACE_PACKAGE_NAMES",
+    ]) {
+      expect(artifactBuilder).toContain(requiredPath);
+    }
+    expect(artifactBuilder).toContain("runInstalledWorkspaceBootstrapSmoke");
+    expect(artifactBuilder).toContain('"acp", "--help"');
+    expect(artifactBuilder).toContain("/readyz");
+    expect(artifactBuilder).toContain("dist-runtime/extensions/");
     expect(restoreStep.with.path).toContain("extensions/*/src/host/**/.bundle.hash");
     expect(restoreStep.with.path).toContain("extensions/*/src/host/**/*.bundle.js");
     expect(buildArtifactSteps.map((step: WorkflowStep) => step.name)).not.toContain(
       "Cache dist build",
     );
+  });
+
+  it("fails closed when an extracted workspace package is absent", () => {
+    const artifactRoot = mkdtempSync(path.join(tmpdir(), "openclaw-runtime-artifact-"));
+    try {
+      expect(() =>
+        resolveDistRuntimeArtifactWorkspaceImport({
+          artifactRoot,
+          specifier: "@openclaw/ai",
+          workspacePackageNames: new Set(["@openclaw/ai"]),
+        }),
+      ).toThrow("artifact workspace package is unavailable: @openclaw/ai");
+      expect(
+        resolveDistRuntimeArtifactWorkspaceImport({
+          artifactRoot,
+          specifier: "@openclaw/fs-safe",
+          workspacePackageNames: new Set(["@openclaw/ai"]),
+        }),
+      ).toBeUndefined();
+    } finally {
+      rmSync(artifactRoot, { force: true, recursive: true });
+    }
   });
 
   it("keeps the AI runtime in Testbox build artifact caches", () => {
