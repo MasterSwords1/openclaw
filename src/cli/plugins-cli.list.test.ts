@@ -93,7 +93,9 @@ describe("plugins cli list", () => {
     await runPluginsCommand(["plugins", "doctor"]);
 
     expect(buildPluginDiagnosticsReport).toHaveBeenCalledWith({ config: {}, effectiveOnly: true });
-    expect(runtimeLogs).toContain("No plugin issues detected.");
+    expect(runtimeLogs).toContain(
+      'Static plugin checks passed. Direct operators to "openclaw health" for active runtime quarantine/fallback status.',
+    );
   });
 
   it("reports stale plugin config in doctor output without claiming full plugin health", async () => {
@@ -145,7 +147,9 @@ describe("plugins cli list", () => {
     expect(output).toContain(
       "No plugin install-tree issues detected; configuration warnings remain.",
     );
-    expect(output).not.toContain("No plugin issues detected.");
+    expect(output).not.toContain(
+      'Static plugin checks passed. Direct operators to "openclaw health" for active runtime quarantine/fallback status.',
+    );
   });
 
   it("reports missing configured Codex runtime plugin in doctor output", async () => {
@@ -191,7 +195,9 @@ describe("plugins cli list", () => {
     expect(output).toContain(
       "No plugin install-tree issues detected; configuration warnings remain.",
     );
-    expect(output).not.toContain("No plugin issues detected.");
+    expect(output).not.toContain(
+      'Static plugin checks passed. Direct operators to "openclaw health" for active runtime quarantine/fallback status.',
+    );
   });
 
   it("reports missing configured ACPX runtime plugin in doctor output", async () => {
@@ -213,7 +219,9 @@ describe("plugins cli list", () => {
     expect(output).toContain('Configured runtime "acpx" requires the ACPX Runtime plugin');
     expect(output).toContain("openclaw doctor --fix");
     expect(output).toContain("openclaw plugins install @openclaw/acpx");
-    expect(output).not.toContain("No plugin issues detected.");
+    expect(output).not.toContain(
+      'Static plugin checks passed. Direct operators to "openclaw health" for active runtime quarantine/fallback status.',
+    );
   });
 
   it("reports blocked configured ACPX runtime with ACP-specific guidance", async () => {
@@ -241,7 +249,9 @@ describe("plugins cli list", () => {
     expect(output).toContain("disable ACP/acpx in acp config");
     expect(output).not.toContain('runtime policy to "openclaw"');
     expect(output).not.toContain("openclaw plugins install @openclaw/acpx");
-    expect(output).not.toContain("No plugin issues detected.");
+    expect(output).not.toContain(
+      'Static plugin checks passed. Direct operators to "openclaw health" for active runtime quarantine/fallback status.',
+    );
   });
 
   it("reports disabled configured ACPX runtime with ACP-specific guidance", async () => {
@@ -264,7 +274,9 @@ describe("plugins cli list", () => {
     expect(output).toContain("disable ACP/acpx in acp config");
     expect(output).not.toContain('runtime policy to "openclaw"');
     expect(output).not.toContain("openclaw plugins install @openclaw/acpx");
-    expect(output).not.toContain("No plugin issues detected.");
+    expect(output).not.toContain(
+      'Static plugin checks passed. Direct operators to "openclaw health" for active runtime quarantine/fallback status.',
+    );
   });
 
   it("does not report implicit OpenAI Codex preference as configured runtime", async () => {
@@ -285,7 +297,9 @@ describe("plugins cli list", () => {
 
     const output = runtimeLogs.join("\n");
     expect(output).not.toContain('Configured runtime "codex"');
-    expect(output).toContain("No plugin issues detected.");
+    expect(output).toContain(
+      'Static plugin checks passed. Direct operators to "openclaw health" for active runtime quarantine/fallback status.',
+    );
   });
 
   it("does not report configured Codex runtime when the plugin is enabled", async () => {
@@ -308,7 +322,9 @@ describe("plugins cli list", () => {
 
     await runPluginsCommand(["plugins", "doctor"]);
 
-    expect(runtimeLogs).toContain("No plugin issues detected.");
+    expect(runtimeLogs).toContain(
+      'Static plugin checks passed. Direct operators to "openclaw health" for active runtime quarantine/fallback status.',
+    );
   });
 
   it("reports configured Codex runtime when the plugin record is disabled", async () => {
@@ -336,7 +352,9 @@ describe("plugins cli list", () => {
     expect(output).toContain('but "codex" is disabled');
     expect(output).toContain('Enable the "codex" plugin');
     expect(output).not.toContain("openclaw plugins install @openclaw/codex");
-    expect(output).not.toContain("No plugin issues detected.");
+    expect(output).not.toContain(
+      'Static plugin checks passed. Direct operators to "openclaw health" for active runtime quarantine/fallback status.',
+    );
   });
 
   it("reports blocked configured Codex runtime without install advice", async () => {
@@ -368,7 +386,9 @@ describe("plugins cli list", () => {
     expect(output).toContain('Remove "codex" from plugins.deny');
     expect(output).not.toContain('Run "openclaw doctor --fix" to install');
     expect(output).not.toContain("openclaw plugins install @openclaw/codex");
-    expect(output).not.toContain("No plugin issues detected.");
+    expect(output).not.toContain(
+      'Static plugin checks passed. Direct operators to "openclaw health" for active runtime quarantine/fallback status.',
+    );
   });
 
   it("reports disabled configured Codex runtime entry without install advice", async () => {
@@ -402,7 +422,9 @@ describe("plugins cli list", () => {
     expect(output).toContain("Set plugins.entries.codex.enabled=true");
     expect(output).not.toContain('Run "openclaw doctor --fix" to install');
     expect(output).not.toContain("openclaw plugins install @openclaw/codex");
-    expect(output).not.toContain("No plugin issues detected.");
+    expect(output).not.toContain(
+      'Static plugin checks passed. Direct operators to "openclaw health" for active runtime quarantine/fallback status.',
+    );
   });
 
   it("reports config-selected plugin source shadowing in doctor output", async () => {
@@ -462,7 +484,9 @@ describe("plugins cli list", () => {
 
     await runPluginsCommand(["plugins", "doctor"]);
 
-    expect(runtimeLogs).toContain("No plugin issues detected.");
+    expect(runtimeLogs).toContain(
+      'Static plugin checks passed. Direct operators to "openclaw health" for active runtime quarantine/fallback status.',
+    );
   });
 
   it("reports persisted plugin registry state without refreshing", async () => {
