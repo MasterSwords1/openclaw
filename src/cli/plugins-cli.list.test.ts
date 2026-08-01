@@ -94,7 +94,7 @@ describe("plugins cli list", () => {
 
     expect(buildPluginDiagnosticsReport).toHaveBeenCalledWith({ config: {}, effectiveOnly: true });
     expect(runtimeLogs).toContain(
-      'Static plugin checks passed. Direct operators to "openclaw health" for active runtime quarantine/fallback status.',
+      'Static plugin checks passed. Run "openclaw health" to check active runtime quarantine/fallback status.',
     );
   });
 
@@ -148,7 +148,7 @@ describe("plugins cli list", () => {
       "No plugin install-tree issues detected; configuration warnings remain.",
     );
     expect(output).not.toContain(
-      'Static plugin checks passed. Direct operators to "openclaw health" for active runtime quarantine/fallback status.',
+      'Static plugin checks passed. Run "openclaw health" to check active runtime quarantine/fallback status.',
     );
   });
 
@@ -196,7 +196,7 @@ describe("plugins cli list", () => {
       "No plugin install-tree issues detected; configuration warnings remain.",
     );
     expect(output).not.toContain(
-      'Static plugin checks passed. Direct operators to "openclaw health" for active runtime quarantine/fallback status.',
+      'Static plugin checks passed. Run "openclaw health" to check active runtime quarantine/fallback status.',
     );
   });
 
@@ -220,7 +220,7 @@ describe("plugins cli list", () => {
     expect(output).toContain("openclaw doctor --fix");
     expect(output).toContain("openclaw plugins install @openclaw/acpx");
     expect(output).not.toContain(
-      'Static plugin checks passed. Direct operators to "openclaw health" for active runtime quarantine/fallback status.',
+      'Static plugin checks passed. Run "openclaw health" to check active runtime quarantine/fallback status.',
     );
   });
 
@@ -250,7 +250,7 @@ describe("plugins cli list", () => {
     expect(output).not.toContain('runtime policy to "openclaw"');
     expect(output).not.toContain("openclaw plugins install @openclaw/acpx");
     expect(output).not.toContain(
-      'Static plugin checks passed. Direct operators to "openclaw health" for active runtime quarantine/fallback status.',
+      'Static plugin checks passed. Run "openclaw health" to check active runtime quarantine/fallback status.',
     );
   });
 
@@ -275,7 +275,7 @@ describe("plugins cli list", () => {
     expect(output).not.toContain('runtime policy to "openclaw"');
     expect(output).not.toContain("openclaw plugins install @openclaw/acpx");
     expect(output).not.toContain(
-      'Static plugin checks passed. Direct operators to "openclaw health" for active runtime quarantine/fallback status.',
+      'Static plugin checks passed. Run "openclaw health" to check active runtime quarantine/fallback status.',
     );
   });
 
@@ -298,7 +298,7 @@ describe("plugins cli list", () => {
     const output = runtimeLogs.join("\n");
     expect(output).not.toContain('Configured runtime "codex"');
     expect(output).toContain(
-      'Static plugin checks passed. Direct operators to "openclaw health" for active runtime quarantine/fallback status.',
+      'Static plugin checks passed. Run "openclaw health" to check active runtime quarantine/fallback status.',
     );
   });
 
@@ -323,7 +323,7 @@ describe("plugins cli list", () => {
     await runPluginsCommand(["plugins", "doctor"]);
 
     expect(runtimeLogs).toContain(
-      'Static plugin checks passed. Direct operators to "openclaw health" for active runtime quarantine/fallback status.',
+      'Static plugin checks passed. Run "openclaw health" to check active runtime quarantine/fallback status.',
     );
   });
 
@@ -353,7 +353,7 @@ describe("plugins cli list", () => {
     expect(output).toContain('Enable the "codex" plugin');
     expect(output).not.toContain("openclaw plugins install @openclaw/codex");
     expect(output).not.toContain(
-      'Static plugin checks passed. Direct operators to "openclaw health" for active runtime quarantine/fallback status.',
+      'Static plugin checks passed. Run "openclaw health" to check active runtime quarantine/fallback status.',
     );
   });
 
@@ -387,7 +387,7 @@ describe("plugins cli list", () => {
     expect(output).not.toContain('Run "openclaw doctor --fix" to install');
     expect(output).not.toContain("openclaw plugins install @openclaw/codex");
     expect(output).not.toContain(
-      'Static plugin checks passed. Direct operators to "openclaw health" for active runtime quarantine/fallback status.',
+      'Static plugin checks passed. Run "openclaw health" to check active runtime quarantine/fallback status.',
     );
   });
 
@@ -423,7 +423,7 @@ describe("plugins cli list", () => {
     expect(output).not.toContain('Run "openclaw doctor --fix" to install');
     expect(output).not.toContain("openclaw plugins install @openclaw/codex");
     expect(output).not.toContain(
-      'Static plugin checks passed. Direct operators to "openclaw health" for active runtime quarantine/fallback status.',
+      'Static plugin checks passed. Run "openclaw health" to check active runtime quarantine/fallback status.',
     );
   });
 
@@ -485,7 +485,7 @@ describe("plugins cli list", () => {
     await runPluginsCommand(["plugins", "doctor"]);
 
     expect(runtimeLogs).toContain(
-      'Static plugin checks passed. Direct operators to "openclaw health" for active runtime quarantine/fallback status.',
+      'Static plugin checks passed. Run "openclaw health" to check active runtime quarantine/fallback status.',
     );
   });
 
