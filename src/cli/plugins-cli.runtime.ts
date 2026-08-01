@@ -397,7 +397,8 @@ export async function runPluginsDoctorCommand(): Promise<void> {
 
   if (!hasInstallTreeIssues && pluginConfigWarnings.length === 0) {
     defaultRuntime.log(
-      'Static plugin checks passed. Run "openclaw health" to check active runtime quarantine/fallback status.',
+      "Plugin discovery, module loading, compatibility, and configuration checks passed. " +
+        'Run "openclaw health" to check the running Gateway, including runtime quarantines and fallbacks.',
     );
     return;
   }
