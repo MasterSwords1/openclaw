@@ -11,27 +11,18 @@ export type PluginBlobEntry<TMetadata> = PluginBlobEntryInfo<TMetadata> & {
   bytes: Uint8Array;
 };
 
-export type PluginBlobRegisterOptions = {
-  ttlMs?: number;
-  /** Queue owner required for snapshot-excluded durable recovery rows. */
-  snapshotOwner?: {
-    kind: "delivery-queue";
-    id: string;
-  };
-};
-
 export type PluginBlobStore<TMetadata> = {
   register(
     key: string,
     bytes: Uint8Array,
     metadata: TMetadata,
-    opts?: PluginBlobRegisterOptions,
+    opts?: { ttlMs?: number },
   ): Promise<void>;
   registerIfAbsent(
     key: string,
     bytes: Uint8Array,
     metadata: TMetadata,
-    opts?: PluginBlobRegisterOptions,
+    opts?: { ttlMs?: number },
   ): Promise<boolean>;
   lookup(key: string): Promise<PluginBlobEntry<TMetadata> | undefined>;
   entries(): Promise<PluginBlobEntryInfo<TMetadata>[]>;
@@ -42,7 +33,6 @@ export type PluginBlobStore<TMetadata> = {
 };
 
 export type PluginBlobOverflowPolicy = "evict-oldest" | "reject-new";
-export type PluginBlobSnapshotPolicy = "restorable" | "exclude";
 
 export type OpenBlobStoreOptions = {
   namespace: string;
@@ -51,8 +41,6 @@ export type OpenBlobStoreOptions = {
   maxBytesPerNamespace: number;
   overflowPolicy?: PluginBlobOverflowPolicy;
   defaultTtlMs?: number;
-  /** Whether rows from this namespace may be included in restorable snapshots. */
-  snapshotPolicy?: PluginBlobSnapshotPolicy;
 };
 
 export type PluginBlobStoreErrorCode =

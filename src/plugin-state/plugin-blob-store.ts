@@ -2,7 +2,6 @@
 import { normalizeSqliteNumber } from "../infra/sqlite-number.js";
 import { closeOpenClawStateDatabaseForTest } from "../state/openclaw-state-db.js";
 import { resolveOpenClawStateSqlitePath } from "../state/openclaw-state-db.paths.js";
-import { resolvePluginBlobStorageNamespace } from "../state/openclaw-state-snapshot-policy.js";
 import {
   MAX_PLUGIN_BLOB_BYTES_PER_ENTRY,
   MAX_PLUGIN_BLOB_BYTES_PER_PLUGIN,
@@ -23,8 +22,6 @@ import type {
   PluginBlobEntry,
   PluginBlobEntryInfo,
   PluginBlobOverflowPolicy,
-  PluginBlobRegisterOptions,
-  PluginBlobSnapshotPolicy,
   PluginBlobStore,
   PluginBlobStoreOperation,
 } from "./plugin-blob-store.types.js";
@@ -50,7 +47,6 @@ type BlobStoreOptionSignature = {
   maxBytesPerNamespace: number;
   overflowPolicy: PluginBlobOverflowPolicy;
   defaultTtlMs?: number;
-  snapshotPolicy: PluginBlobSnapshotPolicy;
 };
 
 type PreparedBlob = {
@@ -58,12 +54,6 @@ type PreparedBlob = {
   bytes: Uint8Array;
   metadataJson: string;
   ttlMs?: number;
-};
-
-type SnapshotExcludedMetadataEnvelope = {
-  version: 1;
-  snapshotOwner: { kind: "delivery-queue"; id: string };
-  metadata: unknown;
 };
 
 const namespaceOptionSignatures = new Map<string, BlobStoreOptionSignature>();
@@ -128,16 +118,6 @@ function validateOverflowPolicy(value: unknown): PluginBlobOverflowPolicy {
   throw invalidInput("plugin blob overflowPolicy must be evict-oldest or reject-new", "open");
 }
 
-function validateSnapshotPolicy(value: unknown): PluginBlobSnapshotPolicy {
-  if (value === undefined || value === "restorable") {
-    return "restorable";
-  }
-  if (value === "exclude") {
-    return value;
-  }
-  throw invalidInput("plugin blob snapshotPolicy must be restorable or exclude", "open");
-}
-
 function validateTtl(
   value: number | undefined,
   operation: PluginBlobStoreOperation,
@@ -165,8 +145,7 @@ function assertConsistentOptions(
     existing.maxBytesPerEntry !== signature.maxBytesPerEntry ||
     existing.maxBytesPerNamespace !== signature.maxBytesPerNamespace ||
     existing.overflowPolicy !== signature.overflowPolicy ||
-    existing.defaultTtlMs !== signature.defaultTtlMs ||
-    existing.snapshotPolicy !== signature.snapshotPolicy
+    existing.defaultTtlMs !== signature.defaultTtlMs
   ) {
     // Namespace limits are a shared contract. Reopening with different limits
     // would make quota and eviction behavior depend on call order.
@@ -183,8 +162,7 @@ function prepareBlob(params: {
   metadata: unknown;
   maxBytesPerEntry: number;
   defaultTtlMs?: number;
-  snapshotPolicy: PluginBlobSnapshotPolicy;
-  opts?: PluginBlobRegisterOptions;
+  opts?: { ttlMs?: number };
 }): PreparedBlob {
   const key = validateKey(params.key, "register");
   if (!(params.bytes instanceof Uint8Array)) {
@@ -195,28 +173,8 @@ function prepareBlob(params: {
       `plugin blob entry exceeds the configured ${params.maxBytesPerEntry} byte limit`,
     );
   }
-  const snapshotOwner = params.opts?.snapshotOwner;
-  if (params.snapshotPolicy === "exclude" && !snapshotOwner) {
-    throw invalidInput("snapshot-excluded plugin blobs require a delivery-queue snapshotOwner");
-  }
-  if (params.snapshotPolicy === "restorable" && snapshotOwner) {
-    throw invalidInput("restorable plugin blobs cannot declare a snapshotOwner");
-  }
-  let storedMetadata: unknown = params.metadata;
-  if (snapshotOwner) {
-    const snapshotOwnerId =
-      typeof snapshotOwner.id === "string" ? snapshotOwner.id.trim() : undefined;
-    if (!snapshotOwnerId) {
-      throw invalidInput("plugin blob snapshotOwner id must be a non-empty string");
-    }
-    storedMetadata = {
-      version: 1,
-      snapshotOwner: { kind: snapshotOwner.kind, id: snapshotOwnerId },
-      metadata: params.metadata,
-    } satisfies SnapshotExcludedMetadataEnvelope;
-  }
   const metadataJson = serializePluginStoreJson({
-    value: storedMetadata,
+    value: params.metadata,
     label: "plugin blob metadata",
     errors: validationErrors("register"),
   });
@@ -233,27 +191,9 @@ function parseMetadata(
   raw: string,
   operation: PluginBlobStoreOperation,
   env?: NodeJS.ProcessEnv,
-  snapshotPolicy: PluginBlobSnapshotPolicy = "restorable",
 ): unknown {
   try {
-    const parsed = JSON.parse(raw) as unknown;
-    if (snapshotPolicy !== "exclude") {
-      return parsed;
-    }
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      throw new Error("snapshot metadata envelope is missing");
-    }
-    const envelope = parsed as Partial<SnapshotExcludedMetadataEnvelope>;
-    if (
-      envelope.version !== 1 ||
-      envelope.snapshotOwner?.kind !== "delivery-queue" ||
-      typeof envelope.snapshotOwner.id !== "string" ||
-      !envelope.snapshotOwner.id.trim() ||
-      !("metadata" in envelope)
-    ) {
-      throw new Error("snapshot metadata envelope is invalid");
-    }
-    return envelope.metadata;
+    return JSON.parse(raw) as unknown;
   } catch (error) {
     throw new PluginBlobStoreError("Plugin blob entry contains corrupt metadata JSON.", {
       code: "PLUGIN_BLOB_CORRUPT",
@@ -268,12 +208,11 @@ function storedInfoToEntryInfo<TMetadata>(
   row: PluginBlobStoredInfo,
   operation: PluginBlobStoreOperation,
   env?: NodeJS.ProcessEnv,
-  snapshotPolicy: PluginBlobSnapshotPolicy = "restorable",
 ): PluginBlobEntryInfo<TMetadata> {
   const expiresAt = normalizeSqliteNumber(row.expires_at);
   return {
     key: row.entry_key,
-    metadata: parseMetadata(row.metadata_json, operation, env, snapshotPolicy) as TMetadata,
+    metadata: parseMetadata(row.metadata_json, operation, env) as TMetadata,
     sizeBytes: Number(row.size_bytes),
     createdAt: normalizeSqliteNumber(row.created_at) ?? 0,
     ...(expiresAt != null ? { expiresAt } : {}),
@@ -283,10 +222,9 @@ function storedInfoToEntryInfo<TMetadata>(
 function storedEntryToEntry<TMetadata>(
   row: PluginBlobStoredEntry,
   env?: NodeJS.ProcessEnv,
-  snapshotPolicy: PluginBlobSnapshotPolicy = "restorable",
 ): PluginBlobEntry<TMetadata> {
   return {
-    ...storedInfoToEntryInfo<TMetadata>(row, "lookup", env, snapshotPolicy),
+    ...storedInfoToEntryInfo<TMetadata>(row, "lookup", env),
     bytes: Uint8Array.from(row.blob),
   };
 }
@@ -320,20 +258,17 @@ function createPluginBlobStoreInternal<TMetadata>(
   }
   const overflowPolicy = validateOverflowPolicy(options.overflowPolicy);
   const defaultTtlMs = validateTtl(options.defaultTtlMs, "open");
-  const snapshotPolicy = validateSnapshotPolicy(options.snapshotPolicy);
   assertConsistentOptions(pluginId, namespace, {
     maxEntries,
     maxBytesPerEntry,
     maxBytesPerNamespace,
     overflowPolicy,
     defaultTtlMs,
-    snapshotPolicy,
   });
-  const storageNamespace = resolvePluginBlobStorageNamespace({ namespace, snapshotPolicy });
 
   const writeParams = (blob: PreparedBlob) => ({
     pluginId,
-    namespace: storageNamespace,
+    namespace,
     key: blob.key,
     bytes: blob.bytes,
     metadataJson: blob.metadataJson,
@@ -352,7 +287,6 @@ function createPluginBlobStoreInternal<TMetadata>(
         metadata,
         maxBytesPerEntry,
         defaultTtlMs,
-        snapshotPolicy,
         opts,
       });
       pluginBlobRegister(writeParams(blob));
@@ -364,7 +298,6 @@ function createPluginBlobStoreInternal<TMetadata>(
         metadata,
         maxBytesPerEntry,
         defaultTtlMs,
-        snapshotPolicy,
         opts,
       });
       return pluginBlobRegisterIfAbsent(writeParams(blob));
@@ -372,23 +305,21 @@ function createPluginBlobStoreInternal<TMetadata>(
     async lookup(key) {
       const row = pluginBlobLookup({
         pluginId,
-        namespace: storageNamespace,
+        namespace,
         key: validateKey(key, "lookup"),
         ...(env ? { env } : {}),
       });
-      return row ? storedEntryToEntry<TMetadata>(row, env, snapshotPolicy) : undefined;
+      return row ? storedEntryToEntry<TMetadata>(row, env) : undefined;
     },
     async entries() {
-      return pluginBlobEntries({
-        pluginId,
-        namespace: storageNamespace,
-        ...(env ? { env } : {}),
-      }).map((row) => storedInfoToEntryInfo<TMetadata>(row, "entries", env, snapshotPolicy));
+      return pluginBlobEntries({ pluginId, namespace, ...(env ? { env } : {}) }).map((row) =>
+        storedInfoToEntryInfo<TMetadata>(row, "entries", env),
+      );
     },
     async delete(key) {
       return pluginBlobDelete({
         pluginId,
-        namespace: storageNamespace,
+        namespace,
         key: validateKey(key, "delete"),
         ...(env ? { env } : {}),
       });
@@ -396,31 +327,27 @@ function createPluginBlobStoreInternal<TMetadata>(
     async deleteExpiredKey(key) {
       const row = pluginBlobDeleteExpiredKey({
         pluginId,
-        namespace: storageNamespace,
+        namespace,
         key: validateKey(key, "sweep"),
         validateMetadataJson: (raw) => {
-          parseMetadata(raw, "sweep", env, snapshotPolicy);
+          parseMetadata(raw, "sweep", env);
         },
         ...(env ? { env } : {}),
       });
-      return row ? storedInfoToEntryInfo<TMetadata>(row, "sweep", env, snapshotPolicy) : undefined;
+      return row ? storedInfoToEntryInfo<TMetadata>(row, "sweep", env) : undefined;
     },
     async deleteExpired() {
       return pluginBlobDeleteExpired({
         pluginId,
-        namespace: storageNamespace,
+        namespace,
         validateMetadataJson: (raw) => {
-          parseMetadata(raw, "sweep", env, snapshotPolicy);
+          parseMetadata(raw, "sweep", env);
         },
         ...(env ? { env } : {}),
-      }).map((row) => storedInfoToEntryInfo<TMetadata>(row, "sweep", env, snapshotPolicy));
+      }).map((row) => storedInfoToEntryInfo<TMetadata>(row, "sweep", env));
     },
     async clear() {
-      pluginBlobClear({
-        pluginId,
-        namespace: storageNamespace,
-        ...(env ? { env } : {}),
-      });
+      pluginBlobClear({ pluginId, namespace, ...(env ? { env } : {}) });
     },
   };
 }

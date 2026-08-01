@@ -54,6 +54,22 @@ let target = {
 };
 
 let stateDir = "";
+const DELIVERY_PLAN_TTL_MS = 365 * 24 * 60 * 60 * 1000;
+
+function createDeliveryPlanTestStore() {
+  return createPluginBlobStoreForTests<unknown>(
+    "matrix",
+    {
+      namespace: "outbound-delivery-plans",
+      maxEntries: 10_000,
+      maxBytesPerEntry: 8 * 1024 * 1024,
+      maxBytesPerNamespace: 256 * 1024 * 1024,
+      overflowPolicy: "reject-new",
+      defaultTtlMs: DELIVERY_PLAN_TTL_MS,
+    },
+    { ...process.env, OPENCLAW_STATE_DIR: stateDir },
+  );
+}
 
 function installDeliveryPlanTestRuntime(
   options: Parameters<typeof installMatrixTestRuntime>[0] = {},
@@ -119,6 +135,8 @@ describe("Matrix durable delivery plans", () => {
     expect(first.events[0]?.content.body).toBe("first");
     expect(first.events[0]?.transactionId).toMatch(/^oc_[A-Za-z0-9_-]+$/u);
     await expect(loadMatrixDeliveryPlan(target)).resolves.toEqual(first);
+    const [stored] = await createDeliveryPlanTestStore().entries();
+    expect(stored?.expiresAt).toBeGreaterThan(Date.now() + DELIVERY_PLAN_TTL_MS - 5_000);
   });
 
   it("stores long exact plans without the keyed-state JSON value limit", async () => {
@@ -391,18 +409,7 @@ describe("Matrix durable delivery plans", () => {
   });
 
   it("keeps a successful initial prune latched after terminal cleanup", async () => {
-    const baseStore = createPluginBlobStoreForTests<unknown>(
-      "matrix",
-      {
-        namespace: "outbound-delivery-plans",
-        maxEntries: 10_000,
-        maxBytesPerEntry: 8 * 1024 * 1024,
-        maxBytesPerNamespace: 256 * 1024 * 1024,
-        overflowPolicy: "reject-new",
-        snapshotPolicy: "exclude",
-      },
-      { ...process.env, OPENCLAW_STATE_DIR: stateDir },
-    );
+    const baseStore = createDeliveryPlanTestStore();
     const entries = vi.fn(async () => await baseStore.entries());
     installDeliveryPlanTestRuntime({
       openBlobStore: () => ({ ...baseStore, entries }) as never,

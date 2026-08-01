@@ -1,7 +1,6 @@
 // Plugin blob store tests cover persistence, quotas, expiry, and copied bytes.
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { openOpenClawStateDatabase } from "../state/openclaw-state-db.js";
-import { PLUGIN_BLOB_SNAPSHOT_EXCLUDED_NAMESPACE_PREFIX } from "../state/openclaw-state-snapshot-policy.js";
 import { withOpenClawTestState } from "../test-utils/openclaw-test-state.js";
 import {
   createPluginBlobStoreForTests,
@@ -202,67 +201,6 @@ describe("plugin blob store", () => {
       expect(() =>
         createPluginBlobStore("diffs", options(state.env, { maxBytesPerEntry: 3 })),
       ).toThrow(/incompatible options/);
-      expect(() =>
-        createPluginBlobStore("diffs", options(state.env, { snapshotPolicy: "exclude" })),
-      ).toThrow(/incompatible options/);
-    });
-  });
-
-  it("keeps queue-owned excluded rows durable but downgrade-backup safe", async () => {
-    await withOpenClawTestState({ label: "plugin-blob-snapshot-excluded" }, async (state) => {
-      const store = createPluginBlobStore<{ owner: string }>(
-        "matrix",
-        options(state.env, { snapshotPolicy: "exclude" }),
-      );
-      await expect(
-        store.register("unowned", new Uint8Array([1]), { owner: "none" }),
-      ).rejects.toThrow(/snapshotOwner/);
-
-      const { db } = openOpenClawStateDatabase({ env: state.env });
-      db.prepare(
-        `INSERT INTO delivery_queue_entries
-          (queue_name, id, status, entry_json, enqueued_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-      ).run("outbound-prepared-v1", "queue-1", "pending", "{}", 1, 1);
-      await store.register(
-        "plan",
-        new Uint8Array([1, 2, 3]),
-        { owner: "queue-1" },
-        { snapshotOwner: { kind: "delivery-queue", id: "queue-1" } },
-      );
-      expect(
-        db
-          .prepare(
-            `SELECT namespace, expires_at,
-                    json_extract(metadata_json, '$.snapshotOwner.id') AS snapshot_owner
-             FROM plugin_blob_entries
-             WHERE plugin_id = ? AND entry_key = ?`,
-          )
-          .get("matrix", "plan"),
-      ).toEqual({
-        namespace: `${PLUGIN_BLOB_SNAPSHOT_EXCLUDED_NAMESPACE_PREFIX}artifacts`,
-        expires_at: null,
-        snapshot_owner: "queue-1",
-      });
-
-      // Simulate a current-version database created before this additive
-      // cleanup trigger existed. The next open must install it before proof.
-      db.exec("DROP TRIGGER trg_delivery_queue_snapshot_blob_cleanup");
-      resetPluginBlobStoreForTests();
-      const reopened = createPluginBlobStore<{ owner: string }>(
-        "matrix",
-        options(state.env, { snapshotPolicy: "exclude" }),
-      );
-      await expect(reopened.lookup("plan")).resolves.toMatchObject({
-        metadata: { owner: "queue-1" },
-        bytes: new Uint8Array([1, 2, 3]),
-      });
-
-      // v2026.7.1 sanitized backups by deleting queue rows from the copied DB.
-      // The persisted trigger makes that older operation remove queue-owned secrets too.
-      const { db: reopenedDb } = openOpenClawStateDatabase({ env: state.env });
-      reopenedDb.prepare("DELETE FROM delivery_queue_entries").run();
-      await expect(reopened.lookup("plan")).resolves.toBeUndefined();
     });
   });
 

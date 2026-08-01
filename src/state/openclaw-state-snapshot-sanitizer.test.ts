@@ -1,6 +1,5 @@
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { PLUGIN_BLOB_SNAPSHOT_EXCLUDED_NAMESPACE_PREFIX } from "./openclaw-state-snapshot-policy.js";
 import { sanitizeOpenClawGlobalStateSnapshot } from "./openclaw-state-snapshot-sanitizer.js";
 
 describe("OpenClaw state snapshot sanitizer", () => {
@@ -105,7 +104,7 @@ describe("OpenClaw state snapshot sanitizer", () => {
     expect(row.raw_json).not.toContain(secret);
   });
 
-  it("removes TTL and snapshot-excluded plugin blobs while retaining durable controls", () => {
+  it("removes live TTL plugin blobs while retaining durable controls", () => {
     database.exec(`
       CREATE TABLE plugin_blob_entries (
         plugin_id TEXT NOT NULL,
@@ -116,7 +115,7 @@ describe("OpenClaw state snapshot sanitizer", () => {
       INSERT INTO plugin_blob_entries VALUES
         ('plugin-a', 'documents', 'durable', NULL),
         ('plugin-a', 'cache', 'transient', 9999999999999),
-        ('matrix', '${PLUGIN_BLOB_SNAPSHOT_EXCLUDED_NAMESPACE_PREFIX}outbound-delivery-plans', 'plan', NULL);
+        ('matrix', 'outbound-delivery-plans', 'plan', 9999999999999);
     `);
 
     sanitizeOpenClawGlobalStateSnapshot(database);

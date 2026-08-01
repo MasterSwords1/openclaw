@@ -11,7 +11,6 @@ import { OPENCLAW_AGENT_SCHEMA_VERSION } from "../state/openclaw-agent-db.js";
 import { OPENCLAW_AGENT_SCHEMA_SQL } from "../state/openclaw-agent-schema.generated.js";
 import { OPENCLAW_STATE_SCHEMA_VERSION } from "../state/openclaw-state-db.js";
 import { OPENCLAW_STATE_SCHEMA_SQL } from "../state/openclaw-state-schema.generated.js";
-import { PLUGIN_BLOB_SNAPSHOT_EXCLUDED_NAMESPACE_PREFIX } from "../state/openclaw-state-snapshot-policy.js";
 import { hashSnapshotArtifact, readSnapshotManifest } from "./manifest.js";
 import {
   SNAPSHOT_MANIFEST_FILENAME,
@@ -64,7 +63,7 @@ import { createLocalSqliteSnapshotProvider } from "./local-repository.js";
 const tempDirs = useAutoCleanupTempDirTracker(afterEach);
 const TRANSIENT_PLUGIN_BLOB_MARKER = `transient-plugin-blob-${"sensitive".repeat(32)}`;
 const DURABLE_PLUGIN_BLOB_MARKER = "durable-plugin-blob-control";
-const SNAPSHOT_EXCLUDED_PLUGIN_BLOB_MARKER = `matrix-recovery-plan-${"sensitive".repeat(32)}`;
+const RECOVERY_PLAN_PLUGIN_BLOB_MARKER = `matrix-recovery-plan-${"sensitive".repeat(32)}`;
 const STATE_LEASE_MARKER = "snapshot-must-not-retain-active-lease";
 
 afterEach(() => {
@@ -180,12 +179,12 @@ function seedGlobalPluginBlobSnapshotFixtures(databasePath: string): void {
     );
     insertPluginBlob.run(
       "matrix",
-      `${PLUGIN_BLOB_SNAPSHOT_EXCLUDED_NAMESPACE_PREFIX}outbound-delivery-plans`,
+      "outbound-delivery-plans",
       "provider-plan",
       JSON.stringify({ kind: "recovery-plan" }),
-      Buffer.from(SNAPSHOT_EXCLUDED_PLUGIN_BLOB_MARKER),
+      Buffer.from(RECOVERY_PLAN_PLUGIN_BLOB_MARKER),
       1,
-      null,
+      Date.UTC(2099, 0, 1),
     );
   } finally {
     database.close();
@@ -1642,7 +1641,7 @@ describe("local SQLite snapshot repository", () => {
     const artifactBytes = await fs.readFile(artifactPath);
     expect(artifactBytes.includes("do-not-restore")).toBe(false);
     expect(artifactBytes.includes(TRANSIENT_PLUGIN_BLOB_MARKER)).toBe(false);
-    expect(artifactBytes.includes(SNAPSHOT_EXCLUDED_PLUGIN_BLOB_MARKER)).toBe(false);
+    expect(artifactBytes.includes(RECOVERY_PLAN_PLUGIN_BLOB_MARKER)).toBe(false);
     expect(artifactBytes.includes(DURABLE_PLUGIN_BLOB_MARKER)).toBe(true);
     expect(artifactBytes.includes(STATE_LEASE_MARKER)).toBe(false);
     const sqlite = requireNodeSqlite();

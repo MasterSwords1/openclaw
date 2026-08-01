@@ -17,6 +17,9 @@ const DELIVERY_PLAN_NAMESPACE = "outbound-delivery-plans";
 const DELIVERY_PLAN_MAX_ENTRIES = 10_000;
 const DELIVERY_PLAN_MAX_BYTES = 8 * 1024 * 1024;
 const DELIVERY_PLAN_NAMESPACE_MAX_BYTES = 256 * 1024 * 1024;
+// Recovery plans are temporary queue custody. A long TTL preserves extended
+// offline recovery while the shipped snapshot sanitizer excludes them.
+const DELIVERY_PLAN_TTL_MS = 365 * 24 * 60 * 60 * 1000;
 
 class MatrixDeliveryPlanInvariantError extends Error {
   constructor(message: string) {
@@ -65,7 +68,7 @@ function createDeliveryPlanStore() {
     maxBytesPerEntry: DELIVERY_PLAN_MAX_BYTES,
     maxBytesPerNamespace: DELIVERY_PLAN_NAMESPACE_MAX_BYTES,
     overflowPolicy: "reject-new",
-    snapshotPolicy: "exclude",
+    defaultTtlMs: DELIVERY_PLAN_TTL_MS,
   });
 }
 
@@ -345,11 +348,7 @@ export async function persistMatrixDeliveryPlan(params: {
   };
   const store = createDeliveryPlanStore();
   const bytes = new TextEncoder().encode(JSON.stringify(plan));
-  if (
-    await store.registerIfAbsent(planKey(identity), bytes, planMetadata(plan), {
-      snapshotOwner: { kind: "delivery-queue", id: identity.queueId },
-    })
-  ) {
+  if (await store.registerIfAbsent(planKey(identity), bytes, planMetadata(plan))) {
     return plan;
   }
   const existing = await loadMatrixDeliveryPlan(params);
