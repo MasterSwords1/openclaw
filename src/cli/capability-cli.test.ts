@@ -1989,6 +1989,12 @@ describe("capability cli", () => {
     await fs.rm(tempOutput, { force: true });
   });
 
+  it("rejects image edit without required --file option", async () => {
+    await expect(runCap("capability", "image", "edit", "--prompt", "cat")).rejects.toThrow(
+      "process.exit unexpectedly called with",
+    );
+  });
+
   it("reports the expanded image.edit flags in capability inspect", async () => {
     await runCap("capability", "inspect", "--name", "image.edit", "--json");
 

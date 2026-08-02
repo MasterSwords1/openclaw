@@ -288,9 +288,13 @@ function resolveImageDescribeInput(filePath: string): string {
   return /^https?:\/\//i.test(trimmed) ? trimmed : path.resolve(filePath);
 }
 
-function addImageGenerationOptions(command: Command): Command {
+function addImageGenerationOptions(command: Command, options?: { requireFile?: boolean }): Command {
+  if (options?.requireFile) {
+    command.requiredOption("--file <path>", "Input file", collectOption);
+  } else {
+    command.option("--file <path>", "Input file", collectOption, []);
+  }
   return command
-    .option("--file <path>", "Input file", collectOption, [])
     .option("--model <provider/model>", "Model override")
     .option("--count <n>", "Number of images")
     .option("--size <size>", "Size hint like 1024x1024")
@@ -352,6 +356,7 @@ export function registerImageCapabilityCommands(capability: Command): void {
       .command("edit")
       .description("Edit images with one or more input files")
       .requiredOption("--prompt <text>", "Prompt text"),
+    { requireFile: true },
   ).action(async (opts) => {
     await runCommandWithRuntime(defaultRuntime, async () => {
       const files = Array.isArray(opts.file) ? (opts.file as string[]) : [String(opts.file)];
