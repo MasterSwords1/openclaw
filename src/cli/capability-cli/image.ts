@@ -104,7 +104,7 @@ async function runImageGenerate(params: {
         : undefined,
     timeoutMs: params.timeoutMs,
     inputImages,
-    mode: params.capability === "image.edit" ? "edit" : undefined,
+    mode: params.capability === "image.edit" ? "edit" : "generate",
   });
   const outputs = await Promise.all(
     result.images.map(async (image, index) => {
@@ -290,6 +290,7 @@ function resolveImageDescribeInput(filePath: string): string {
 
 function addImageGenerationOptions(command: Command): Command {
   return command
+    .option("--file <path>", "Input file", collectOption, [])
     .option("--model <provider/model>", "Model override")
     .option("--count <n>", "Number of images")
     .option("--size <size>", "Size hint like 1024x1024")
@@ -332,7 +333,6 @@ export function registerImageCapabilityCommands(capability: Command): void {
     image
       .command("generate")
       .description("Generate images")
-      .option("--file <path>", "Input file", collectOption, [])
       .requiredOption("--prompt <text>", "Prompt text"),
   ).action(async (opts) => {
     await runCommandWithRuntime(defaultRuntime, async () => {
@@ -351,7 +351,6 @@ export function registerImageCapabilityCommands(capability: Command): void {
     image
       .command("edit")
       .description("Edit images with one or more input files")
-      .requiredOption("--file <path>", "Input file", collectOption, [])
       .requiredOption("--prompt <text>", "Prompt text"),
   ).action(async (opts) => {
     await runCommandWithRuntime(defaultRuntime, async () => {

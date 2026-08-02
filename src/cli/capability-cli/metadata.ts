@@ -76,8 +76,8 @@ export const CAPABILITY_METADATA: CapabilityMetadata[] = [
     description: "Generate raster images with configured image providers.",
     transports: ["local"],
     flags: [
-      "--file",
       "--prompt",
+      "--file",
       "--model",
       "--count",
       "--size",
@@ -99,8 +99,8 @@ export const CAPABILITY_METADATA: CapabilityMetadata[] = [
     description: "Generate edited images from one or more input files.",
     transports: ["local"],
     flags: [
-      "--file",
       "--prompt",
+      "--file",
       "--model",
       "--count",
       "--size",

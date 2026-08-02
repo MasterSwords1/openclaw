@@ -1994,8 +1994,8 @@ describe("capability cli", () => {
 
     expect(firstJsonOutput()?.id).toBe("image.edit");
     expect(firstJsonOutput()?.flags).toEqual([
-      "--file",
       "--prompt",
+      "--file",
       "--model",
       "--count",
       "--size",
@@ -2017,8 +2017,8 @@ describe("capability cli", () => {
 
     expect(firstJsonOutput()?.id).toBe("image.generate");
     expect(firstJsonOutput()?.flags).toEqual([
-      "--file",
       "--prompt",
+      "--file",
       "--model",
       "--count",
       "--size",

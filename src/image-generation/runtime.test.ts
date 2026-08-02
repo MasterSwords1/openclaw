@@ -956,4 +956,37 @@ describe("image-generation runtime", () => {
 
     expect(result.images).toHaveLength(1);
   });
+
+  it("allows inputImages in generate mode when provider generate capability declares reference image support", async () => {
+    const provider: ImageGenerationProvider = {
+      id: "image-plugin",
+      capabilities: {
+        generate: { maxInputImages: 2 },
+        edit: { enabled: false },
+      },
+      async generateImage(req) {
+        expect(req.mode).toBe("generate");
+        expect(req.inputImages).toHaveLength(1);
+        return {
+          images: [{ buffer: Buffer.from("out"), mimeType: "image/png" }],
+        };
+      },
+    };
+    providers = [provider];
+
+    const result = await runGenerateImage({
+      cfg: {
+        agents: {
+          defaults: {
+            imageGenerationModel: { primary: "image-plugin/img-v1" },
+          },
+        },
+      },
+      prompt: "conditioned generation",
+      inputImages: [{ buffer: Buffer.from("ref"), mimeType: "image/png" }],
+      mode: "generate",
+    });
+
+    expect(result.images).toHaveLength(1);
+  });
 });
