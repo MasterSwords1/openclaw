@@ -228,7 +228,7 @@ type AgentWaitResult = {
   yielded?: boolean;
 };
 
-const EMPTY_FINAL_FALLBACK_GRACE_MS = 4000;
+const EMPTY_FINAL_FALLBACK_GRACE_MS = 2000;
 
 function extractTextFromMessage(message: unknown): string {
   if (!message || typeof message !== "object") {
