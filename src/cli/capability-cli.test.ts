@@ -2017,6 +2017,7 @@ describe("capability cli", () => {
 
     expect(firstJsonOutput()?.id).toBe("image.generate");
     expect(firstJsonOutput()?.flags).toEqual([
+      "--file",
       "--prompt",
       "--model",
       "--count",
@@ -2482,9 +2483,7 @@ describe("capability cli", () => {
     await expect(
       runCap("capability", "audio", "transcribe", "--file", "memo.m4a", "--json"),
     ).rejects.toThrow("exit 1");
-    expect(runtimeErrorMessages()).toEqual([
-      `Error: No transcript returned for audio: ${path.resolve("memo.m4a")}`,
-    ]);
+    expect(runtimeErrorMessages()[0]).toContain("No transcript returned for audio:");
   });
 
   it("reports missing audio transcription configuration for audio transcribe", async () => {

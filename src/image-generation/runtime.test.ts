@@ -926,4 +926,34 @@ describe("image-generation runtime", () => {
       }),
     ).rejects.toThrow("image-plugin/img-v1 supports at most 0 reference images, 1 requested");
   });
+
+  it("infers edit capability mode when inputImages are passed without explicit mode", async () => {
+    const provider: ImageGenerationProvider = {
+      id: "image-plugin",
+      capabilities: {
+        generate: {},
+        edit: { enabled: true, maxInputImages: 2 },
+      },
+      async generateImage() {
+        return {
+          images: [{ buffer: Buffer.from("out"), mimeType: "image/png" }],
+        };
+      },
+    };
+    providers = [provider];
+
+    const result = await runGenerateImage({
+      cfg: {
+        agents: {
+          defaults: {
+            imageGenerationModel: { primary: "image-plugin/img-v1" },
+          },
+        },
+      },
+      prompt: "style transfer",
+      inputImages: [{ buffer: Buffer.from("ref"), mimeType: "image/png" }],
+    });
+
+    expect(result.images).toHaveLength(1);
+  });
 });
