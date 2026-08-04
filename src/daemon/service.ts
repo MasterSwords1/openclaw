@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { normalizeLowercaseStringOrEmpty } from "@openclaw/normalization-core/string-coerce";
+import { resolveStateDir } from "../config/paths.js";
 import { assertGatewayServiceMutationAllowed } from "../infra/gateway-supervision.js";
 import { parseTcpPort, parseTcpPortFromArgs } from "../infra/tcp-port.js";
 import { VERSION } from "../version.js";
@@ -46,6 +47,7 @@ import type {
   GatewayServiceState,
 } from "./service-types.js";
 import {
+  collectSystemdManagedEnvDotenvDrift,
   installSystemdService,
   isSystemdServiceEnabled,
   readSystemdServiceExecStart,
@@ -120,10 +122,10 @@ function isMissingProgramPath(value: string | undefined): boolean {
 function collectGatewayServiceStartRepairIssues(
   state: GatewayServiceState,
   expectedPort?: number,
-): GatewayServiceStartRepairIssue[] {
+): Promise<GatewayServiceStartRepairIssue[]> {
   const command = state.command;
   if (!state.loaded || !command) {
-    return [];
+    return Promise.resolve([]);
   }
   const issues: GatewayServiceStartRepairIssue[] = [];
   const serviceVersion = command.environment?.OPENCLAW_SERVICE_VERSION?.trim();
@@ -159,7 +161,44 @@ function collectGatewayServiceStartRepairIssues(
       });
     }
   }
-  return issues;
+  // Managed-key drift detection: the generated systemd env file reflects the
+  // state of the state-directory .env at the last staging. An operator who
+  // edits .env between restarts cannot influence systemd until the env file
+  // is regenerated. Detect that drift so the repair flow restages instead of
+  // silently restarting with stale secrets.
+  const driftCheck = collectManagedEnvDrift(state);
+  return driftCheck.then((driftedKeys) => {
+    if (driftedKeys.length > 0) {
+      issues.push({
+        code: "managed-env-mismatch",
+        message: `managed env keys changed in ~/.openclaw/.env and need a re-stage before restart: ${driftedKeys.join(", ")}`,
+      });
+    }
+    return issues;
+  });
+}
+
+async function collectManagedEnvDrift(state: GatewayServiceState): Promise<string[]> {
+  const command = state.command;
+  if (!command) {
+    return [];
+  }
+  const inlineEnvironment: Record<string, string | undefined> = {};
+  if (command.environment) {
+    Object.assign(inlineEnvironment, command.environment);
+  }
+  // The unit file is the only systemd-restage path we need to consider for
+  // managed-key drift on Linux. Non-systemd platforms (launchd, schtasks) own
+  // their own environment files; we keep the drift check conservative and
+  // surface it only when an installed service reads a generated env file.
+  if (!command.sourcePath?.endsWith(".service")) {
+    return [];
+  }
+  const stateDir = resolveStateDir(state.env as NodeJS.ProcessEnv);
+  return collectSystemdManagedEnvDotenvDrift({
+    inlineEnvironment,
+    stateDir,
+  });
 }
 
 /** Reads the installed service and reports definition drift that must be repaired before launch. */
@@ -169,10 +208,8 @@ export async function inspectGatewayServiceStartRepair(
   expectedPort?: number,
 ): Promise<{ state: GatewayServiceState; issues: GatewayServiceStartRepairIssue[] }> {
   const state = await readGatewayServiceState(service, args);
-  return {
-    state,
-    issues: collectGatewayServiceStartRepairIssues(state, expectedPort),
-  };
+  const issues = await collectGatewayServiceStartRepairIssues(state, expectedPort);
+  return { state, issues };
 }
 
 export function formatGatewayServiceStartRepairIssues(

@@ -503,4 +503,60 @@ describe("startGatewayService", () => {
     expect(result.outcome).toBe("missing-install");
     expect(result.state.installed).toBe(false);
   });
+
+  it("requests repair before start when state .env drifts from managed env-file values (openclaw#118503)", async () => {
+    const tempHome = await makeTempWorkspace("openclaw-service-managed-env-");
+    const stateDir = path.join(tempHome, ".openclaw");
+    const envSnapshot = captureEnv(["HOME", "OPENCLAW_STATE_DIR", "OPENCLAW_CONFIG_PATH"]);
+    try {
+      await fs.mkdir(stateDir, { recursive: true });
+      // .env holds the post-edit value; the env file still has the stale one.
+      await fs.writeFile(path.join(stateDir, ".env"), "HASS_TOKEN=new-secret\n", {
+        encoding: "utf8",
+        mode: 0o600,
+      });
+      await fs.writeFile(path.join(stateDir, "gateway.systemd.env"), "HASS_TOKEN=stale-secret\n", {
+        encoding: "utf8",
+        mode: 0o600,
+      });
+      process.env.HOME = tempHome;
+      process.env.OPENCLAW_STATE_DIR = stateDir;
+      clearConfigCache();
+      clearRuntimeConfigSnapshot();
+
+      const service = createService({
+        readCommand: vi.fn(async () => ({
+          programArguments: ["openclaw", "gateway", "run"],
+          environment: {
+            OPENCLAW_SERVICE_MANAGED_ENV_KEYS: "HASS_TOKEN",
+            HASS_TOKEN: "stale-secret",
+          },
+          environmentValueSources: {
+            HASS_TOKEN: "file",
+          },
+          sourcePath: path.join(tempHome, ".config", "systemd", "user", "openclaw-gateway.service"),
+        })),
+        isLoaded: vi.fn(async () => true),
+        readRuntime: vi.fn(async () => ({ status: "stopped" })),
+      });
+
+      const result = await startGatewayService(service, {
+        env: process.env,
+        stdout: process.stdout,
+      });
+
+      expect(result.outcome).toBe("repair-required");
+      if (result.outcome === "repair-required") {
+        expect(result.issues).toContainEqual(
+          expect.objectContaining({ code: "managed-env-mismatch" }),
+        );
+      }
+      expect(service.start).not.toHaveBeenCalled();
+    } finally {
+      envSnapshot.restore();
+      clearConfigCache();
+      clearRuntimeConfigSnapshot();
+      await fs.rm(tempHome, { recursive: true, force: true });
+    }
+  });
 });

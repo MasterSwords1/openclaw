@@ -1702,6 +1702,62 @@ export async function isSystemdServiceEnabled(args: GatewayServiceEnvArgs): Prom
   throw new Error(`systemctl is-enabled unavailable: ${detail || "unknown error"}`.trim());
 }
 
+/**
+ * Returns managed keys whose state-directory .env value differs from the value
+ * last written to the generated systemd environment file. The drift means a
+ * subsequent `openclaw gateway restart` (or any restage path) must regenerate
+ * the env file before systemd picks up the change. Keys resolved through
+ * literal shell references at staging time (e.g. `${SECRET}`) are skipped:
+ * those are intentionally unresolved in both stores.
+ */
+export async function collectSystemdManagedEnvDotenvDrift(params: {
+  inlineEnvironment: Record<string, string | undefined>;
+  stateDir: string;
+}): Promise<string[]> {
+  const managedKeys = readManagedServiceEnvKeysFromEnvironment(params.inlineEnvironment);
+  if (managedKeys.size === 0) {
+    return [];
+  }
+  const { entries: dotenvEntries, skippedShellReferenceKeys } = readStateDirDotEnvFromStateDir(
+    params.stateDir,
+  );
+  const skipped = new Set(
+    skippedShellReferenceKeys.flatMap((key) => {
+      const normalized = normalizeSystemdEnvironmentKey(key);
+      return normalized ? [normalized] : [];
+    }),
+  );
+  const envFilePath = resolveSystemdEnvironmentFilePath({
+    stateDir: params.stateDir,
+    environment: params.inlineEnvironment,
+  });
+  let envFileEntries: Record<string, string> = {};
+  try {
+    const fromFile = await readSystemdEnvironmentFile(envFilePath);
+    envFileEntries = fromFile.environment;
+  } catch {
+    // Env file missing means no prior staging — treat as full drift if the
+    // state-directory .env has any managed key.
+  }
+  const drifted: string[] = [];
+  for (const key of managedKeys) {
+    const normalized = normalizeSystemdEnvironmentKey(key);
+    if (!normalized || skipped.has(normalized)) {
+      continue;
+    }
+    const dotenvValue = dotenvEntries[normalized];
+    const envFileValue = envFileEntries[normalized];
+    if (dotenvValue === undefined) {
+      // Managed key absent from current .env — leave to existing install path.
+      continue;
+    }
+    if (dotenvValue !== envFileValue) {
+      drifted.push(normalized);
+    }
+  }
+  return drifted.toSorted();
+}
+
 export async function readSystemdServiceRuntime(
   env: GatewayServiceEnv = process.env as GatewayServiceEnv,
   opts?: GatewayServiceReadOptions,
