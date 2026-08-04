@@ -1735,9 +1735,14 @@ export async function collectSystemdManagedEnvDotenvDrift(params: {
   try {
     const fromFile = await readSystemdEnvironmentFile(envFilePath);
     envFileEntries = fromFile.environment;
-  } catch {
-    // Env file missing means no prior staging — treat as full drift if the
-    // state-directory .env has any managed key.
+  } catch (error) {
+    // Only ENOENT means "no prior staging" — propagate every other failure so
+    // the install plan surfaces a real read error rather than silently
+    // restaging every managed key. Matches the pattern used by
+    // readSystemdFileSnapshot above.
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      throw error;
+    }
   }
   const drifted: string[] = [];
   for (const key of managedKeys) {
@@ -1751,7 +1756,9 @@ export async function collectSystemdManagedEnvDotenvDrift(params: {
       // Managed key absent from current .env — leave to existing install path.
       continue;
     }
-    if (dotenvValue !== envFileValue) {
+    const dotenvTrimmed = dotenvValue.trim();
+    const envFileTrimmed = envFileValue?.trim() ?? "";
+    if (dotenvTrimmed !== envFileTrimmed) {
       drifted.push(normalized);
     }
   }

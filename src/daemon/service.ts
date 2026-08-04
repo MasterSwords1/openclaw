@@ -119,13 +119,13 @@ function isMissingProgramPath(value: string | undefined): boolean {
   return !fs.existsSync(value);
 }
 
-function collectGatewayServiceStartRepairIssues(
+async function collectGatewayServiceStartRepairIssues(
   state: GatewayServiceState,
   expectedPort?: number,
 ): Promise<GatewayServiceStartRepairIssue[]> {
   const command = state.command;
   if (!state.loaded || !command) {
-    return Promise.resolve([]);
+    return [];
   }
   const issues: GatewayServiceStartRepairIssue[] = [];
   const serviceVersion = command.environment?.OPENCLAW_SERVICE_VERSION?.trim();
@@ -166,6 +166,13 @@ function collectGatewayServiceStartRepairIssues(
   // edits .env between restarts cannot influence systemd until the env file
   // is regenerated. Detect that drift so the repair flow restages instead of
   // silently restarting with stale secrets.
+  //
+  // Operator-owned keys — those present in ~/.openclaw/.env but NOT listed
+  // in OPENCLAW_SERVICE_MANAGED_ENV_KEYS — are intentionally left alone.
+  // OpenClaw must not silently rewrite values the operator manages outside
+  // the service definition. If a previously-managed key has been removed
+  // from the managed list, the install path picks that up; the drift check
+  // only reports divergence for keys that are still under OpenClaw control.
   const driftCheck = collectManagedEnvDrift(state);
   return driftCheck.then((driftedKeys) => {
     if (driftedKeys.length > 0) {

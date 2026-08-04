@@ -2337,6 +2337,50 @@ describe("collectSystemdManagedEnvDotenvDrift (openclaw#118503)", () => {
       expect(drifted).toEqual(["HASS_TOKEN"]);
     });
   });
+
+  it("treats whitespace-padded .env and env-file values as equal (no false-positive drift)", async () => {
+    await withDriftFixture(async ({ stateDir, envFilePath }) => {
+      await writeDotenv(stateDir, ["HASS_TOKEN=  edited-token  "]);
+      await writeEnvFile(envFilePath, ["HASS_TOKEN=edited-token"]);
+      const drifted = await collectSystemdManagedEnvDotenvDrift({
+        inlineEnvironment: { OPENCLAW_SERVICE_MANAGED_ENV_KEYS: "HASS_TOKEN" },
+        stateDir,
+      });
+      expect(drifted).toEqual([]);
+    });
+  });
+});
+
+describe("collectSystemdManagedEnvDotenvDrift error handling", () => {
+  async function withDriftFixture(
+    run: (context: { stateDir: string; envFilePath: string }) => Promise<void>,
+  ): Promise<void> {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-systemd-drift-err-"));
+    const stateDir = path.join(tempRoot, "state");
+    const envFilePath = path.join(stateDir, "gateway.systemd.env");
+    await fs.mkdir(stateDir, { recursive: true });
+    try {
+      await run({ stateDir, envFilePath });
+    } finally {
+      await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+  }
+
+  it("propagates a non-ENOENT read error from the env file", async () => {
+    await withDriftFixture(async ({ stateDir, envFilePath }) => {
+      await fs.writeFile(path.join(stateDir, ".env"), "HASS_TOKEN=***\n");
+      // Replace the env file path with a directory so readSystemdEnvironmentFile
+      // throws EISDIR rather than ENOENT. The drift helper must propagate that
+      // error instead of silently restaging every managed key.
+      await fs.mkdir(envFilePath, { recursive: true });
+      await expect(
+        collectSystemdManagedEnvDotenvDrift({
+          inlineEnvironment: { OPENCLAW_SERVICE_MANAGED_ENV_KEYS: "HASS_TOKEN" },
+          stateDir,
+        }),
+      ).rejects.toThrow();
+    });
+  });
 });
 
 describe("systemd service install and uninstall", () => {
