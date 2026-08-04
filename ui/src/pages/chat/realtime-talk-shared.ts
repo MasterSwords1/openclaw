@@ -363,6 +363,13 @@ function waitForChatResult(params: {
       if (payload.state === "final") {
         const finalText = extractTextFromMessage(payload.message);
         if (finalText) {
+          // Clear the grace-window timer to allow delayed text to win over fallback
+          // This handles the race where text arrives after agent.wait completes
+          // but before the 500ms no-text timer fires
+          if (emptyFinalFallbackTimer !== undefined) {
+            window.clearTimeout(emptyFinalFallbackTimer);
+            emptyFinalFallbackTimer = undefined;
+          }
           settleResolve(finalText);
           return;
         }
