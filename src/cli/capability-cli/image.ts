@@ -104,7 +104,6 @@ async function runImageGenerate(params: {
         : undefined,
     timeoutMs: params.timeoutMs,
     inputImages,
-    mode: params.capability === "image.edit" ? "edit" : "generate",
   });
   const outputs = await Promise.all(
     result.images.map(async (image, index) => {

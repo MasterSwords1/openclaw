@@ -37,7 +37,6 @@ export type GenerateImageParams = {
   providerOptions?: ImageGenerationProviderOptions;
   /** SSRF policy to propagate into image-generation provider HTTP calls. */
   ssrfPolicy?: SsrFPolicy;
-  mode?: "generate" | "edit";
 };
 
 export type GenerateImageRuntimeResult = {

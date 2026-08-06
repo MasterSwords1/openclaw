@@ -81,8 +81,8 @@ export async function generateImage(
   const attempts: FallbackAttempt[] = [];
   let lastError: unknown;
 
-  // Try configured/fallback models in order and return the first provider that
-  // yields at least one image; failed attempts are preserved for diagnostics.
+  // Try configured/fallback models in order and return the first provider whose
+  // entire image batch is present and non-empty; preserve failed attempts for diagnostics.
   for (const candidate of candidates) {
     const provider = getProvider(candidate.provider, params.cfg);
     if (!provider) {
@@ -99,12 +99,10 @@ export async function generateImage(
       continue;
     }
 
-    const mode = params.mode ?? (params.inputImages?.length ? "edit" : "generate");
     const inputImageCount = params.inputImages?.length ?? 0;
     const maxInputImages = resolveImageGenerationMaxInputImages({
       provider,
       model: candidate.model,
-      mode,
     });
     if (maxInputImages !== undefined && inputImageCount > maxInputImages) {
       const error = `${candidate.provider}/${candidate.model} supports at most ${maxInputImages} reference image${maxInputImages === 1 ? "" : "s"}, ${inputImageCount} requested`;
@@ -114,9 +112,7 @@ export async function generateImage(
         error,
       });
       lastError = new Error(error);
-      logger.warn(
-        `image-generation candidate failed: ${candidate.provider}/${candidate.model}: ${error}`,
-      );
+      logger.warn(`image-generation candidate skipped: ${error}`);
       continue;
     }
 
@@ -127,8 +123,9 @@ export async function generateImage(
       });
       const modelResolutions =
         provider.capabilities.geometry?.resolutionsByModel?.[candidate.model];
-      const modeCapabilities =
-        mode === "edit" ? provider.capabilities.edit : provider.capabilities.generate;
+      const modeCapabilities = params.inputImages?.length
+        ? provider.capabilities.edit
+        : provider.capabilities.generate;
       const inferredResolution =
         modeCapabilities.supportsResolution === false || modelResolutions?.length === 0
           ? undefined
@@ -143,7 +140,6 @@ export async function generateImage(
         outputFormat: params.outputFormat,
         background: params.background,
         inputImages: params.inputImages,
-        mode,
       });
       // Providers receive only supported overrides. Ignored/normalized values
       // are returned to callers so user-facing replies can explain adjustments.
@@ -162,13 +158,18 @@ export async function generateImage(
         outputFormat: sanitized.outputFormat,
         background: sanitized.background,
         inputImages: params.inputImages,
-        mode,
         ...(timeoutMs !== undefined ? { timeoutMs } : {}),
         providerOptions: params.providerOptions,
         ssrfPolicy: params.ssrfPolicy,
       });
       if (!Array.isArray(result.images) || result.images.length === 0) {
         throw new Error("Image generation provider returned no images.");
+      }
+      const emptyImageIndex = result.images.findIndex((image) => image.buffer.byteLength === 0);
+      if (emptyImageIndex >= 0) {
+        throw new Error(
+          `Image generation provider returned an empty image buffer at index ${emptyImageIndex}.`,
+        );
       }
       return {
         images: result.images,

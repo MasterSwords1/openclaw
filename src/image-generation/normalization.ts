@@ -40,7 +40,7 @@ function finalizeImageNormalization(
 
 /** Returns supported image overrides plus ignored/normalized override metadata for replies. */
 export function resolveImageGenerationOverrides(params: {
-  provider: Pick<ImageGenerationProvider, "capabilities">;
+  provider: ImageGenerationProvider;
   model?: string;
   size?: string;
   aspectRatio?: string;
@@ -49,13 +49,13 @@ export function resolveImageGenerationOverrides(params: {
   outputFormat?: ImageGenerationOutputFormat;
   background?: ImageGenerationBackground;
   inputImages?: ImageGenerationSourceImage[];
-  mode?: "generate" | "edit";
 }): ResolvedImageGenerationOverrides {
-  const mode = params.mode ?? ((params.inputImages?.length ?? 0) > 0 ? "edit" : "generate");
+  const hasInputImages = (params.inputImages?.length ?? 0) > 0;
   // Edit and generate modes can expose different knobs for the same provider,
   // so normalize requested overrides against the active mode only.
-  const modeCaps =
-    mode === "edit" ? params.provider.capabilities.edit : params.provider.capabilities.generate;
+  const modeCaps = hasInputImages
+    ? params.provider.capabilities.edit
+    : params.provider.capabilities.generate;
   const geometry = params.provider.capabilities.geometry;
   const modelGeometry = {
     sizes: params.model

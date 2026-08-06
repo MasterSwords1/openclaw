@@ -228,11 +228,6 @@ describe("comfy image-generation provider", () => {
     vi.restoreAllMocks();
   });
 
-  it("declares generate-mode reference image capabilities", () => {
-    const provider = buildComfyImageGenerationProvider();
-    expect(provider.capabilities.generate.maxInputImages).toBe(1);
-  });
-
   it("treats local comfy workflows as configured without an API key", () => {
     const provider = buildComfyImageGenerationProvider();
     expect(

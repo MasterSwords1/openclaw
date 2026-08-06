@@ -24,7 +24,6 @@ export function buildComfyImageGenerationProvider(): ImageGenerationProvider {
     capabilities: {
       generate: {
         maxCount: 1,
-        maxInputImages: 1,
         supportsSize: false,
         supportsAspectRatio: false,
         supportsResolution: false,
