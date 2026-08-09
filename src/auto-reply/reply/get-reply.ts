@@ -1,5 +1,6 @@
 // Main auto-reply pipeline: prepares context, runs commands, and dispatches agents.
 import fs from "node:fs/promises";
+import path from "node:path";
 import { normalizeOptionalString } from "@openclaw/normalization-core/string-coerce";
 import {
   hasLegacyAutoFallbackWithoutOrigin,
@@ -38,7 +39,7 @@ import {
   sessionDeliveryOrigin,
 } from "../../utils/delivery-context.shared.js";
 import { resolveCommandTurnTargetSessionKey } from "../command-turn-context.js";
-import type { GetReplyOptions } from "../get-reply-options.types.js";
+import type { GetReplyOptions, TurnAdoptionLifecycle } from "../get-reply-options.types.js";
 import { DEFAULT_HEARTBEAT_ACK_MAX_CHARS, stripHeartbeatToken } from "../heartbeat.js";
 import type { ReplyPayload } from "../reply-payload.js";
 import type { RuntimeMsgContext as MsgContext } from "../templating.js";
@@ -1072,6 +1073,7 @@ export async function getReplyFromConfig(
     }
   }
 
+  let hostWorkspaceStagingDir: string | undefined;
   // Already-staged facts or SDK projections must remain a single-stage contract.
   if (
     !useFastTestBootstrap &&
@@ -1081,7 +1083,7 @@ export async function getReplyFromConfig(
     hasInboundMedia(ctx)
   ) {
     const { stageSandboxMedia } = await loadStageSandboxMediaRuntime();
-    await traceGetReplyPhase("reply.stage_media", () =>
+    const stageResult = await traceGetReplyPhase("reply.stage_media", () =>
       stageSandboxMedia({
         ctx,
         sessionCtx,
@@ -1090,64 +1092,154 @@ export async function getReplyFromConfig(
         workspaceDir,
       }),
     );
+    hostWorkspaceStagingDir = stageResult.hostWorkspaceStagingDir;
+    if (hostWorkspaceStagingDir) {
+      logVerbose(
+        `[host-staging-cleanup] Staged inbound media into host workspace directory: ${path.basename(hostWorkspaceStagingDir)}`,
+      );
+    }
   }
 
-  logResolverTiming("milestone", "before_run_prepared_reply");
-  const replyResult = await traceGetReplyPhase("reply.run_prepared_reply", () =>
-    runPreparedReply({
-      ctx,
-      sessionCtx,
-      cfg,
-      agentId,
-      agentDir,
-      agentCfg,
-      sessionCfg,
-      commandAuthorized,
-      command,
-      commandSource,
-      allowTextCommands,
-      directives,
-      defaultActivation,
-      resolvedThinkLevel,
-      resolvedFastMode,
-      resolvedFastModeAutoOnSeconds,
-      resolvedFastModeOverride,
-      resolvedFastModeAutoOnSecondsOverride,
-      resolvedVerboseLevel,
-      resolvedReasoningLevel,
-      resolvedElevatedLevel,
-      execOverrides,
-      elevatedEnabled,
-      elevatedAllowed,
-      blockStreamingEnabled,
-      blockReplyChunking,
-      resolvedBlockStreamingBreak,
-      modelState: runModelState,
-      provider: runProvider,
-      model: runModel,
-      requestedRouteResolution: runAutoFallbackPrimaryProbe
-        ? runModelState.requestedRouteResolution
-        : requestedRouteResolution,
-      perMessageQueueMode,
-      perMessageQueueOptions,
-      typing,
-      opts: withExtractedFileImages(resolvedOpts, extractedFileImages),
-      defaultModel,
-      timeoutMs,
-      isNewSession,
-      resetTriggered,
-      systemSent,
-      sessionEntry,
-      sessionStore,
-      sessionKey,
-      sessionId,
-      storePath,
-      workspaceDir,
-      abortedLastRun,
-      autoFallbackPrimaryProbe: runAutoFallbackPrimaryProbe,
-    }),
-  );
-  logResolverTiming("completed", "prepared_reply");
-  return replyResult;
+  let effectiveOpts = resolvedOpts;
+  let stagingCleanupDelegated = false;
+  const originalLifecycle = effectiveOpts?.turnAdoptionLifecycle;
+  if (hostWorkspaceStagingDir && !originalLifecycle) {
+    effectiveOpts = {
+      ...effectiveOpts,
+      hostWorkspaceStagingDir,
+      onHostStagingDelegated: () => {
+        stagingCleanupDelegated = true;
+      },
+    };
+  } else if (hostWorkspaceStagingDir && originalLifecycle) {
+    const targetStagingDir = hostWorkspaceStagingDir;
+    const wrappedLifecycle: TurnAdoptionLifecycle = {
+      ...originalLifecycle,
+      onDeferred: () => {
+        const res = originalLifecycle.onDeferred?.();
+        if (res !== false) {
+          stagingCleanupDelegated = true;
+        }
+        return res;
+      },
+      onAbandoned: () => {
+        try {
+          originalLifecycle?.onAbandoned?.();
+        } finally {
+          logVerbose(
+            `[host-staging-cleanup] Cleaning up delegated queued host workspace staging directory (abandoned): ${path.basename(targetStagingDir)}`,
+          );
+          fs.rm(targetStagingDir, { recursive: true, force: true }).catch((err: unknown) => {
+            const errorCode =
+              err instanceof Error && "code" in err && typeof err.code === "string"
+                ? err.code
+                : "UNKNOWN";
+            logVerbose(
+              `[host-staging-cleanup] Failed to clean up delegated host workspace staging directory (abandoned): ${path.basename(targetStagingDir)} (${errorCode})`,
+            );
+          });
+        }
+      },
+      onSettled: () => {
+        try {
+          originalLifecycle?.onSettled?.();
+        } finally {
+          logVerbose(
+            `[host-staging-cleanup] Cleaning up delegated queued host workspace staging directory (settled): ${path.basename(targetStagingDir)}`,
+          );
+          fs.rm(targetStagingDir, { recursive: true, force: true }).catch((err: unknown) => {
+            const errorCode =
+              err instanceof Error && "code" in err && typeof err.code === "string"
+                ? err.code
+                : "UNKNOWN";
+            logVerbose(
+              `[host-staging-cleanup] Failed to clean up delegated host workspace staging directory (settled): ${path.basename(targetStagingDir)} (${errorCode})`,
+            );
+          });
+        }
+      },
+    };
+    effectiveOpts = {
+      ...effectiveOpts,
+      turnAdoptionLifecycle: wrappedLifecycle,
+    };
+  }
+
+  try {
+    logResolverTiming("milestone", "before_run_prepared_reply");
+    const replyResult = await traceGetReplyPhase("reply.run_prepared_reply", () =>
+      runPreparedReply({
+        ctx,
+        sessionCtx,
+        cfg,
+        agentId,
+        agentDir,
+        agentCfg,
+        sessionCfg,
+        commandAuthorized,
+        command,
+        commandSource,
+        allowTextCommands,
+        directives,
+        defaultActivation,
+        resolvedThinkLevel,
+        resolvedFastMode,
+        resolvedFastModeAutoOnSeconds,
+        resolvedFastModeOverride,
+        resolvedFastModeAutoOnSecondsOverride,
+        resolvedVerboseLevel,
+        resolvedReasoningLevel,
+        resolvedElevatedLevel,
+        execOverrides,
+        elevatedEnabled,
+        elevatedAllowed,
+        blockStreamingEnabled,
+        blockReplyChunking,
+        resolvedBlockStreamingBreak,
+        modelState: runModelState,
+        provider: runProvider,
+        model: runModel,
+        requestedRouteResolution: runAutoFallbackPrimaryProbe
+          ? runModelState.requestedRouteResolution
+          : requestedRouteResolution,
+        perMessageQueueMode,
+        perMessageQueueOptions,
+        typing,
+        opts: withExtractedFileImages(effectiveOpts, extractedFileImages),
+        defaultModel,
+        timeoutMs,
+        isNewSession,
+        resetTriggered,
+        systemSent,
+        sessionEntry,
+        sessionStore,
+        sessionKey,
+        sessionId,
+        storePath,
+        workspaceDir,
+        abortedLastRun,
+        autoFallbackPrimaryProbe: runAutoFallbackPrimaryProbe,
+      }),
+    );
+    logResolverTiming("completed", "prepared_reply");
+    return replyResult;
+  } finally {
+    if (hostWorkspaceStagingDir && !stagingCleanupDelegated) {
+      logVerbose(
+        `[host-staging-cleanup] Cleaning up host workspace staging directory recursively: ${path.basename(hostWorkspaceStagingDir)}`,
+      );
+      await fs
+        .rm(hostWorkspaceStagingDir, { recursive: true, force: true })
+        .catch((error: unknown) => {
+          const errorCode =
+            error instanceof Error && "code" in error && typeof error.code === "string"
+              ? error.code
+              : "UNKNOWN";
+          logVerbose(
+            `[host-staging-cleanup] Failed to clean up host workspace staging directory recursively: ${path.basename(hostWorkspaceStagingDir)} (${errorCode})`,
+          );
+        });
+    }
+  }
 }
 /* oxlint-disable max-lines -- TODO: split this grandfathered oversized file. */

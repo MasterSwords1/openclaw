@@ -275,6 +275,7 @@ export async function runReplyAgent(
       typing.cleanup();
       return undefined;
     }
+    opts?.onHostStagingDelegated?.();
     if (replyOperationRunState) {
       replyOperationRunState.admission = { status: "accepted", mode: "followup" };
     }

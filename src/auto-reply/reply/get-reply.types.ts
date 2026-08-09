@@ -36,6 +36,8 @@ type InternalReplySessionOptions = {
   /** Dispatch-owned operation used to defer hooks until durable run admission. */
   replyOperation?: ReplyOperation;
   skillOverrides?: SessionToolOverrides["skills"];
+  hostWorkspaceStagingDir?: string;
+  onHostStagingDelegated?: () => void;
 };
 
 export type InternalGetReplyOptions = GetReplyOptions &

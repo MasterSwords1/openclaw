@@ -139,6 +139,7 @@ export type FollowupRun = {
   originatingReplyToMode?: ReplyToMode;
   /** Chat type for context-aware threading (e.g., DM vs channel). */
   originatingChatType?: string;
+  hostWorkspaceStagingDir?: string;
   run: {
     agentId: string;
     agentDir: string;
@@ -240,7 +241,10 @@ const retiredTurnAdoptionCancellationLifecycles = new WeakSet<TurnAdoptionLifecy
 const completedTurnAdoptionLifecycles = new WeakSet<TurnAdoptionLifecycle>();
 const completedTurnAdoptionLifecycleCallbacks = new WeakSet<TurnAdoptionLifecycle>();
 
-type FollowupLifecycleRun = Pick<FollowupRun, "steerPending" | "turnAdoptionLifecycle">;
+type FollowupLifecycleRun = Pick<
+  FollowupRun,
+  "steerPending" | "turnAdoptionLifecycle" | "hostWorkspaceStagingDir"
+>;
 
 export function markFollowupRunEnqueued(run: FollowupLifecycleRun): boolean {
   const lifecycle = run.turnAdoptionLifecycle;
@@ -291,11 +295,26 @@ export async function admitFollowupRunLifecycle(run: FollowupLifecycleRun): Prom
   }
 }
 
+const completedHostStagingCleanups = new WeakSet<FollowupLifecycleRun>();
+
 export function completeFollowupRunLifecycle(run: FollowupLifecycleRun): void {
   run.steerPending?.settle(false);
   const lifecycle = run.turnAdoptionLifecycle;
 
+  const cleanupHostStaging = () => {
+    if (run.hostWorkspaceStagingDir && !completedHostStagingCleanups.has(run)) {
+      completedHostStagingCleanups.add(run);
+      // Fire-and-forget deletion of the staging directory
+      import("node:fs/promises")
+        .then((fs) =>
+          fs.rm(run.hostWorkspaceStagingDir!, { recursive: true, force: true }).catch(() => {}),
+        )
+        .catch(() => {});
+    }
+  };
+
   const finish = () => {
+    cleanupHostStaging();
     if (!lifecycle || completedTurnAdoptionLifecycleCallbacks.has(lifecycle)) {
       return;
     }
