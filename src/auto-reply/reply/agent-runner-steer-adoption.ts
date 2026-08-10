@@ -168,6 +168,7 @@ export async function runActiveReplySteer(params: ActiveReplySteerParams): Promi
     }
     if (admission === "fallback") {
       parked.fallback();
+      params.opts?.onHostStagingDelegated?.();
       if (replyOperationRunState) {
         replyOperationRunState.admission = { status: "accepted", mode: "followup" };
       }
@@ -202,6 +203,7 @@ export async function runActiveReplySteer(params: ActiveReplySteerParams): Promi
     );
     if (!steerOutcome.queued) {
       parked.fallback();
+      params.opts?.onHostStagingDelegated?.();
       if (replyOperationRunState) {
         replyOperationRunState.admission = { status: "accepted", mode: "followup" };
       }
@@ -241,6 +243,7 @@ export async function runActiveReplySteer(params: ActiveReplySteerParams): Promi
       parked.consume();
     } else {
       parked.fallback();
+      params.opts?.onHostStagingDelegated?.();
     }
     throw error;
   } finally {
@@ -249,6 +252,7 @@ export async function runActiveReplySteer(params: ActiveReplySteerParams): Promi
         parked.consume();
       } else {
         parked.fallback();
+        params.opts?.onHostStagingDelegated?.();
       }
     }
   }

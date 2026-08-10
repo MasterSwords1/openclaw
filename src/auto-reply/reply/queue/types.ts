@@ -1,6 +1,4 @@
 import type { FastMode } from "@openclaw/normalization-core/string-coerce";
-// Shared queue type contracts for admission, drain, and fallback handling.
-import { logVerbose } from "../../../infra/logging.js";
 import type { QueueMode } from "../../../../packages/gateway-protocol/src/schema/logs-chat.js";
 import type { AutoFallbackPrimaryProbe } from "../../../agents/agent-scope.js";
 import type { ExecToolDefaults } from "../../../agents/bash-tools.js";
@@ -14,6 +12,9 @@ import type { SessionEntry, SessionToolOverrides } from "../../../config/session
 import type { ReplyToMode } from "../../../config/types.base.js";
 import type { OpenClawConfig } from "../../../config/types.openclaw.js";
 import type { GroupToolPolicyConfig } from "../../../config/types.tools.js";
+// Shared queue type contracts for admission, drain, and fallback handling.
+import { logVerbose } from "../../../globals.js";
+import { logError } from "../../../logger.js";
 import type { MediaFact } from "../../../media/media-facts.js";
 import type { PromptImageOrderEntry } from "../../../media/prompt-image-order.js";
 import type { PluginHookChannelContext } from "../../../plugins/hook-types.js";
@@ -309,24 +310,26 @@ export function completeFollowupRunLifecycle(run: FollowupLifecycleRun): void {
       import("node:path")
         .then(async (path) => {
           const fs = await import("node:fs/promises");
-          await fs.rm(run.hostWorkspaceStagingDir!, { recursive: true, force: true }).catch((error: unknown) => {
-            const errorCode =
-              error instanceof Error && "code" in error && typeof error.code === "string"
-                ? error.code
-                : "UNKNOWN";
-            logVerbose(
-              `[host-staging-cleanup] Failed to clean up queued host workspace staging directory (terminal): ${path.basename(run.hostWorkspaceStagingDir!)} (${errorCode})`,
-            );
-          });
+          await fs
+            .rm(run.hostWorkspaceStagingDir!, { recursive: true, force: true })
+            .catch((error: unknown) => {
+              const errorCode =
+                error instanceof Error && "code" in error && typeof error.code === "string"
+                  ? error.code
+                  : "UNKNOWN";
+              const msg = `[host-staging-cleanup] Failed to clean up queued host workspace staging directory (terminal): ${path.basename(run.hostWorkspaceStagingDir!)} (${errorCode})`;
+              logError(msg);
+              logVerbose(msg);
+            });
         })
         .catch((error: unknown) => {
           const errorCode =
             error instanceof Error && "code" in error && typeof error.code === "string"
               ? error.code
               : "UNKNOWN";
-          logVerbose(
-            `[host-staging-cleanup] Failed to load modules for queued host workspace staging directory cleanup (terminal) (${errorCode})`,
-          );
+          const msg = `[host-staging-cleanup] Failed to load modules for queued host workspace staging directory cleanup (terminal) (${errorCode})`;
+          logError(msg);
+          logVerbose(msg);
         });
     }
   };
