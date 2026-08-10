@@ -910,7 +910,7 @@ async function drainProtectedPriorityFollowup(
 }
 
 export function createOverflowSummaryRetrySource(source: FollowupRun): FollowupRun {
-  return {
+  const clone: FollowupRun = {
     prompt: source.prompt,
     queueAbortSignal: source.queueAbortSignal,
     transcriptPrompt: source.transcriptPrompt,
@@ -933,7 +933,10 @@ export function createOverflowSummaryRetrySource(source: FollowupRun): FollowupR
       ? { currentInboundEventKind: "room_event" }
       : {}),
     run: source.run,
+    hostWorkspaceStagingDir: source.hostWorkspaceStagingDir,
   };
+  source.hostWorkspaceStagingDir = undefined;
+  return clone;
 }
 
 function resolveOverflowSummaryInboundEventKind(sources: FollowupRun[]): "room_event" | undefined {

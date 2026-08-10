@@ -584,7 +584,7 @@ describe("stageSandboxMedia", () => {
 
       expect(result.staged.size).toBe(1);
       expect(result.hostWorkspaceStagingDir).toBeDefined();
-      expect(ctx.media?.[0]?.originalPath).toBe(mediaPath);
+      expect((ctx.media?.[0] as any)?.originalPath).toBe(mediaPath);
 
       const stagingDir = result.hostWorkspaceStagingDir!;
       await expect(fs.stat(stagingDir)).resolves.toBeDefined();

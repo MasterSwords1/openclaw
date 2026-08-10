@@ -181,13 +181,15 @@ export async function stageSandboxMedia(params: {
       nextMedia[index] = {
         ...fact,
         path: stagedPath,
-        ...(hostWorkspaceStagingDir ? { originalPath: fact.originalPath ?? fact.path } : {}),
-        ...(hostWorkspaceStagingDir && stagedUrlAliases.has(index)
-          ? { originalUrl: fact.originalUrl ?? fact.url }
-          : {}),
         ...(stagedUrlAliases.has(index) ? { url: stagedPath } : {}),
         workspaceDir: effectiveWorkspaceDir,
       };
+      if (hostWorkspaceStagingDir) {
+        (nextMedia[index] as any).originalPath = (fact as any).originalPath ?? fact.path;
+        if (stagedUrlAliases.has(index)) {
+          (nextMedia[index] as any).originalUrl = (fact as any).originalUrl ?? fact.url;
+        }
+      }
     }
   }
   applyStagedMediaContext(ctx, nextMedia);

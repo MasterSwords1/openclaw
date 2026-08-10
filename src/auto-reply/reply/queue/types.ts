@@ -1,5 +1,6 @@
 import type { FastMode } from "@openclaw/normalization-core/string-coerce";
 // Shared queue type contracts for admission, drain, and fallback handling.
+import { logVerbose } from "../../../infra/logging.js";
 import type { QueueMode } from "../../../../packages/gateway-protocol/src/schema/logs-chat.js";
 import type { AutoFallbackPrimaryProbe } from "../../../agents/agent-scope.js";
 import type { ExecToolDefaults } from "../../../agents/bash-tools.js";
@@ -305,11 +306,28 @@ export function completeFollowupRunLifecycle(run: FollowupLifecycleRun): void {
     if (run.hostWorkspaceStagingDir && !completedHostStagingCleanups.has(run)) {
       completedHostStagingCleanups.add(run);
       // Fire-and-forget deletion of the staging directory
-      import("node:fs/promises")
-        .then((fs) =>
-          fs.rm(run.hostWorkspaceStagingDir!, { recursive: true, force: true }).catch(() => {}),
-        )
-        .catch(() => {});
+      import("node:path")
+        .then(async (path) => {
+          const fs = await import("node:fs/promises");
+          await fs.rm(run.hostWorkspaceStagingDir!, { recursive: true, force: true }).catch((error: unknown) => {
+            const errorCode =
+              error instanceof Error && "code" in error && typeof error.code === "string"
+                ? error.code
+                : "UNKNOWN";
+            logVerbose(
+              `[host-staging-cleanup] Failed to clean up queued host workspace staging directory (terminal): ${path.basename(run.hostWorkspaceStagingDir!)} (${errorCode})`,
+            );
+          });
+        })
+        .catch((error: unknown) => {
+          const errorCode =
+            error instanceof Error && "code" in error && typeof error.code === "string"
+              ? error.code
+              : "UNKNOWN";
+          logVerbose(
+            `[host-staging-cleanup] Failed to load modules for queued host workspace staging directory cleanup (terminal) (${errorCode})`,
+          );
+        });
     }
   };
 
