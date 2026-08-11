@@ -200,6 +200,17 @@ export const pushHandlers: GatewayRequestHandlers = {
         );
         return;
       }
+      // If every delivery failed (`ok: false`), return UNAVAILABLE with the full result list.
+      const allFailed = results.every((r) => !(r as any).ok);
+      if (allFailed) {
+        respond(
+          false,
+          { results },
+          errorShape(ErrorCodes.UNAVAILABLE, "all web push deliveries failed"),
+        );
+        return;
+      }
+      // Otherwise at least one delivery succeeded – treat as a successful test.
       respond(true, { results }, undefined);
     });
   },
