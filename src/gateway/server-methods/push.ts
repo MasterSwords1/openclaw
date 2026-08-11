@@ -200,8 +200,14 @@ export const pushHandlers: GatewayRequestHandlers = {
         );
         return;
       }
-      // If every delivery failed (`ok: false`), return UNAVAILABLE with the full result list.
-      const allFailed = results.every((r) => !(r as any).ok);
+      // If every delivery failed (`ok: false`), return `UNAVAILABLE` with the full result list.
+      interface ResultLike {
+        ok: boolean;
+      }
+      const allFailed = results.every((r) => {
+        const rec = r as ResultLike;
+        return typeof rec.ok === "boolean" && !rec.ok;
+      });
       if (allFailed) {
         respond(
           false,
