@@ -26,8 +26,6 @@ export type MediaFact = {
   transcribed?: boolean;
   messageId?: string;
   workspaceDir?: string;
-  originalPath?: string;
-  originalUrl?: string;
   /** Internal proof that this exact fact was covered by a legacy staged projection. */
   staged?: boolean;
   // Declared field, not a symbol: suppression must survive every fact copy or
@@ -376,8 +374,6 @@ function normalizeMediaFact<TInput extends MediaFactInput>(
     transcribed: media.transcribed === true || defaults.transcribed?.(media, index) === true,
     messageId: normalizeOptionalString(media.messageId) ?? defaults.messageId,
     ...(workspaceDir ? { workspaceDir } : {}),
-    ...(media.originalPath ? { originalPath: normalizeOptionalString(media.originalPath) } : {}),
-    ...(media.originalUrl ? { originalUrl: normalizeOptionalString(media.originalUrl) } : {}),
     ...(media.staged === true ? { staged: true } : {}),
     ...(media.hydrationSuppressed === true ? { hydrationSuppressed: true } : {}),
   };

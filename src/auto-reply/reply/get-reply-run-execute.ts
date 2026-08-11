@@ -9,6 +9,7 @@ import { resolveOwnerPromptNumbers } from "../../agents/owner-display.js";
 import { conversationIdentityFromMsgContext } from "../../config/sessions/conversation-identity.js";
 import { resolveGroupSessionKey } from "../../config/sessions/group.js";
 import { normalizeMediaFacts } from "../../media/media-facts.js";
+import type { MediaFact } from "../../media/media-facts.js";
 import { MEDIA_ONLY_USER_TEXT } from "../../sessions/user-turn-media.js";
 import {
   createUserTurnTranscriptRecorder,
@@ -19,6 +20,11 @@ import type { OriginatingChannelType } from "../templating.js";
 import { resolveCurrentTurnImages } from "./current-turn-images.js";
 import { resolveEffectiveReplyRoute } from "./effective-reply-route.js";
 import type { PreparedReplyRunAdmission } from "./get-reply-run-admission.js";
+
+type MediaFactWithOriginal = MediaFact & {
+  originalPath?: string;
+  originalUrl?: string;
+};
 import {
   buildPersistedMediaImageLayout,
   normalizeMessageTimestampMs,
@@ -191,16 +197,16 @@ export async function executePreparedReplyRun(state: PreparedReplyRunAdmission) 
   setChannelSourceTurnId(sessionCtx, sourceTurnId);
   const persistGroupSender = replyRoute.chatType === "group" || replyRoute.chatType === "channel";
   const rawCtxMedia = (ctx.media ?? []).map((fact) => {
-    if ((fact as any).originalPath) {
-      const copy = Object.assign({}, fact);
-      copy.path = (fact as any).originalPath;
-      if ((fact as any).originalUrl) {
-        copy.url = (fact as any).originalUrl;
-        delete (copy as any).originalUrl;
+    if ((fact as MediaFactWithOriginal).originalPath) {
+      const copy = Object.assign({}, fact) as MediaFactWithOriginal;
+      copy.path = copy.originalPath;
+      if (copy.originalUrl) {
+        copy.url = copy.originalUrl;
+        delete copy.originalUrl;
       }
-      delete (copy as any).originalPath;
+      delete copy.originalPath;
       delete copy.workspaceDir;
-      return copy;
+      return copy as MediaFact;
     }
     return fact;
   });

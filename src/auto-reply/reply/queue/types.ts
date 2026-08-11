@@ -312,6 +312,11 @@ export function completeFollowupRunLifecycle(run: FollowupLifecycleRun): void {
           const fs = await import("node:fs/promises");
           await fs
             .rm(run.hostWorkspaceStagingDir!, { recursive: true, force: true })
+            .then(() => {
+              logVerbose(
+                `[host-staging-cleanup] Successfully cleaned up queued host workspace staging directory: ${path.basename(run.hostWorkspaceStagingDir!)}`,
+              );
+            })
             .catch((error: unknown) => {
               const errorCode =
                 error instanceof Error && "code" in error && typeof error.code === "string"

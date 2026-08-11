@@ -32,6 +32,11 @@ export type StageSandboxMediaResult = {
   hostWorkspaceStagingDir?: string;
 };
 
+type MediaFactWithOriginal = MediaFact & {
+  originalPath?: string;
+  originalUrl?: string;
+};
+
 const EMPTY_STAGE_RESULT: StageSandboxMediaResult = { staged: new Map() };
 
 type StageableMediaSource = {
@@ -161,15 +166,22 @@ export async function stageSandboxMedia(params: {
   if (staged.size === 0) {
     if (hostWorkspaceStagingDir) {
       const absolutePath = path.resolve(effectiveWorkspaceDir, hostWorkspaceStagingDir);
-      await fs.rm(absolutePath, { recursive: true, force: true }).catch((error: unknown) => {
-        const errorCode =
-          error instanceof Error && "code" in error && typeof error.code === "string"
-            ? error.code
-            : "UNKNOWN";
-        logVerbose(
-          `[host-staging-cleanup] Failed to clean up empty host workspace staging directory recursively: ${path.basename(absolutePath)} (${errorCode})`,
-        );
-      });
+      await fs
+        .rm(absolutePath, { recursive: true, force: true })
+        .then(() => {
+          logVerbose(
+            `[host-staging-cleanup] Successfully cleaned up empty host workspace staging directory recursively: ${path.basename(absolutePath)}`,
+          );
+        })
+        .catch((error: unknown) => {
+          const errorCode =
+            error instanceof Error && "code" in error && typeof error.code === "string"
+              ? error.code
+              : "UNKNOWN";
+          logVerbose(
+            `[host-staging-cleanup] Failed to clean up empty host workspace staging directory recursively: ${path.basename(absolutePath)} (${errorCode})`,
+          );
+        });
     }
     return { staged };
   }
@@ -185,9 +197,11 @@ export async function stageSandboxMedia(params: {
         workspaceDir: effectiveWorkspaceDir,
       };
       if (hostWorkspaceStagingDir) {
-        (nextMedia[index] as any).originalPath = (fact as any).originalPath ?? fact.path;
+        (nextMedia[index] as MediaFactWithOriginal).originalPath =
+          (fact as MediaFactWithOriginal).originalPath ?? fact.path;
         if (stagedUrlAliases.has(index)) {
-          (nextMedia[index] as any).originalUrl = (fact as any).originalUrl ?? fact.url;
+          (nextMedia[index] as MediaFactWithOriginal).originalUrl =
+            (fact as MediaFactWithOriginal).originalUrl ?? fact.url;
         }
       }
     }
