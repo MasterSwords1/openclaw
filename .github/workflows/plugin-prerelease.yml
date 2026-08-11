@@ -44,7 +44,7 @@ env:
 jobs:
   preflight:
     name: Build plugin prerelease plan
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 15
     outputs:
       checkout_revision: ${{ steps.manifest.outputs.checkout_revision }}
@@ -372,7 +372,7 @@ jobs:
     needs: [preflight]
     if: needs.preflight.outputs.run_plugin_prerelease_suite == 'true'
     continue-on-error: true
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 30
     steps:
       - name: Checkout
@@ -594,7 +594,7 @@ jobs:
       - plugin-prerelease-inspector
       - plugin-prerelease-docker-suite
     if: ${{ !cancelled() && always() && needs.preflight.outputs.run_plugin_prerelease_suite == 'true' }}
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 5
     steps:
       - name: Verify plugin prerelease suite

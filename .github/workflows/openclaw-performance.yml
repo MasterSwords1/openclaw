@@ -79,7 +79,7 @@ env:
 jobs:
   resolve_target:
     name: Resolve target ref
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 10
     outputs:
       checkout_ref: ${{ steps.resolve.outputs.checkout_ref }}
@@ -845,7 +845,7 @@ jobs:
     name: Publish ${{ matrix.title }} report
     needs: [resolve_target, kova, source_performance]
     if: ${{ always() && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.publish_reports == true)) && needs.resolve_target.result == 'success' && needs.kova.result != 'cancelled' && needs.source_performance.result != 'cancelled' }}
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 30
     permissions:
       actions: read
@@ -1283,7 +1283,7 @@ jobs:
     name: Verify artifact-only report mode
     needs: [resolve_target, kova, publish]
     if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.publish_reports != true }}
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 5
     permissions:
       contents: read

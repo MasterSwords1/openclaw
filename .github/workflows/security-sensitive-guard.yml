@@ -16,7 +16,7 @@ concurrency:
 jobs:
   security-sensitive-guard-detect:
     if: ${{ !github.event.pull_request.draft }}
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 5
     steps:
       - name: Check out trusted base workflow scripts
@@ -37,7 +37,7 @@ jobs:
     if: ${{ !github.event.pull_request.draft && always() }}
     needs:
       - security-sensitive-guard-detect
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 5
     steps:
       - name: Check out trusted base workflow scripts

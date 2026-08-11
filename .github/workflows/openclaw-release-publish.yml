@@ -93,7 +93,7 @@ env:
 jobs:
   resolve_release_target:
     name: Resolve release target
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 20
     outputs:
       sha: ${{ steps.manifest.outputs.sha || steps.ref.outputs.sha }}
@@ -572,7 +572,7 @@ jobs:
       attestations: write
       contents: write
       id-token: write
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 120
     environment: npm-release
     steps:

@@ -18,7 +18,7 @@ permissions:
 jobs:
   scope:
     name: Detect shared OpenClawKit scan scope
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     outputs:
       should-scan: ${{ steps.scope.outputs.should-scan }}
     steps:
@@ -233,7 +233,7 @@ jobs:
     name: Intersect shared OpenClawKit dead code
     needs: [scope, scan-ios, scan-macos]
     if: ${{ always() && needs.scope.outputs.should-scan == 'true' && needs.scan-ios.result != 'cancelled' && needs.scan-macos.result != 'cancelled' }}
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
