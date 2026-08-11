@@ -33,7 +33,7 @@ env:
 jobs:
   validate_manual_backfill:
     if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: read
     steps:
@@ -60,7 +60,7 @@ jobs:
   resolve_release_policy:
     needs: validate_manual_backfill
     if: ${{ always() && (github.event_name != 'workflow_dispatch' || needs.validate_manual_backfill.result == 'success') }}
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: read
     outputs:
@@ -103,7 +103,7 @@ jobs:
     if: github.event_name == 'workflow_dispatch'
     needs: [validate_manual_backfill, resolve_release_policy]
     # WARNING: KEEP MANUAL BACKFILLS GATED BY THE docker-release ENVIRONMENT.
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     environment: docker-release
     permissions: {}
     steps:
@@ -114,7 +114,7 @@ jobs:
           echo "Approved immutable Docker image backfill for ${RELEASE_TAG}"
 
   validate_publish_config:
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: read
     steps:
@@ -134,7 +134,7 @@ jobs:
   resolve_build_provenance:
     needs: [approve_manual_backfill, resolve_release_policy, validate_publish_config]
     if: ${{ always() && needs.resolve_release_policy.result == 'success' && needs.validate_publish_config.result == 'success' && (github.event_name != 'workflow_dispatch' || needs.approve_manual_backfill.result == 'success') }}
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: read
     outputs:
@@ -162,7 +162,7 @@ jobs:
     needs: [approve_manual_backfill, validate_publish_config, resolve_build_provenance]
     if: ${{ always() && needs.validate_publish_config.result == 'success' && needs.resolve_build_provenance.result == 'success' && (github.event_name != 'workflow_dispatch' || needs.approve_manual_backfill.result == 'success') }}
     # WARNING: DO NOT REVERT THIS TO A BLACKSMITH RUNNER WITHOUT RE-VALIDATING TAG BACKFILLS.
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       packages: write
       contents: read
@@ -196,8 +196,8 @@ jobs:
             sleep "${sleep_seconds}"
           done
 
-      - name: Set up Docker Builder
-        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+      - name: Setup Blacksmith Builder
+        uses: useblacksmith/setup-docker-builder@v1
 
       - name: Login to GitHub Container Registry
         uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
@@ -282,12 +282,10 @@ jobs:
       - name: Build and push amd64 image
         id: build
         # WARNING: KEEP THE OFFICIAL DOCKER ACTION HERE; DO NOT SWITCH THIS BACK TO BLACKSMITH BLINDLY.
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        uses: useblacksmith/build-push-action@v2
         with:
           context: .
           platforms: linux/amd64
-          cache-from: type=gha,scope=docker-release-amd64
-          cache-to: type=gha,mode=max,scope=docker-release-amd64
           build-args: |
             GIT_COMMIT=${{ needs.resolve_build_provenance.outputs.source_sha }}
             OPENCLAW_BUILD_TIMESTAMP=${{ needs.resolve_build_provenance.outputs.built_at }}
@@ -302,14 +300,10 @@ jobs:
         id: build-browser
         if: steps.tags.outputs.browser != ''
         # WARNING: KEEP THE OFFICIAL DOCKER ACTION HERE; DO NOT SWITCH THIS BACK TO BLACKSMITH BLINDLY.
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        uses: useblacksmith/build-push-action@v2
         with:
           context: .
           platforms: linux/amd64
-          cache-from: |
-            type=gha,scope=docker-release-amd64
-            type=gha,scope=docker-release-browser-amd64
-          cache-to: type=gha,mode=max,scope=docker-release-browser-amd64
           build-args: |
             GIT_COMMIT=${{ needs.resolve_build_provenance.outputs.source_sha }}
             OPENCLAW_BUILD_TIMESTAMP=${{ needs.resolve_build_provenance.outputs.built_at }}
@@ -389,7 +383,7 @@ jobs:
     needs: [approve_manual_backfill, validate_publish_config, resolve_build_provenance]
     if: ${{ always() && needs.validate_publish_config.result == 'success' && needs.resolve_build_provenance.result == 'success' && (github.event_name != 'workflow_dispatch' || needs.approve_manual_backfill.result == 'success') }}
     # WARNING: DO NOT REVERT THIS TO A BLACKSMITH RUNNER WITHOUT RE-VALIDATING TAG BACKFILLS.
-    runs-on: ubuntu-24.04-arm
+    runs-on: blacksmith-4vcpu-ubuntu-2404-arm
     permissions:
       packages: write
       contents: read
@@ -404,8 +398,8 @@ jobs:
           fetch-depth: 0
 
       - *buildkit_prepull_step
-      - name: Set up Docker Builder
-        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+      - name: Setup Blacksmith Builder
+        uses: useblacksmith/setup-docker-builder@v1
 
       - name: Login to GitHub Container Registry
         uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
@@ -490,12 +484,10 @@ jobs:
       - name: Build and push arm64 image
         id: build
         # WARNING: KEEP THE OFFICIAL DOCKER ACTION HERE; DO NOT SWITCH THIS BACK TO BLACKSMITH BLINDLY.
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        uses: useblacksmith/build-push-action@v2
         with:
           context: .
           platforms: linux/arm64
-          cache-from: type=gha,scope=docker-release-arm64
-          cache-to: type=gha,mode=max,scope=docker-release-arm64
           build-args: |
             GIT_COMMIT=${{ needs.resolve_build_provenance.outputs.source_sha }}
             OPENCLAW_BUILD_TIMESTAMP=${{ needs.resolve_build_provenance.outputs.built_at }}
@@ -510,14 +502,10 @@ jobs:
         id: build-browser
         if: steps.tags.outputs.browser != ''
         # WARNING: KEEP THE OFFICIAL DOCKER ACTION HERE; DO NOT SWITCH THIS BACK TO BLACKSMITH BLINDLY.
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        uses: useblacksmith/build-push-action@v2
         with:
           context: .
           platforms: linux/arm64
-          cache-from: |
-            type=gha,scope=docker-release-arm64
-            type=gha,scope=docker-release-browser-arm64
-          cache-to: type=gha,mode=max,scope=docker-release-browser-arm64
           build-args: |
             GIT_COMMIT=${{ needs.resolve_build_provenance.outputs.source_sha }}
             OPENCLAW_BUILD_TIMESTAMP=${{ needs.resolve_build_provenance.outputs.built_at }}
@@ -605,7 +593,7 @@ jobs:
       ]
     if: ${{ always() && needs.validate_publish_config.result == 'success' && needs.build-amd64.result == 'success' && needs.build-arm64.result == 'success' && (github.event_name != 'workflow_dispatch' || needs.approve_manual_backfill.result == 'success') }}
     # WARNING: DO NOT REVERT THIS TO A BLACKSMITH RUNNER WITHOUT RE-VALIDATING TAG BACKFILLS.
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       packages: write
       contents: read
@@ -730,7 +718,7 @@ jobs:
     name: Verify attestations and promote channel
     needs: [resolve_release_policy, resolve_build_provenance, create-manifest]
     if: ${{ always() && needs.create-manifest.result == 'success' }}
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: read
       packages: write
@@ -742,8 +730,8 @@ jobs:
           fetch-depth: 1
 
       - *buildkit_prepull_step
-      - name: Set up Docker Builder
-        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+      - name: Setup Blacksmith Builder
+        uses: useblacksmith/setup-docker-builder@v1
 
       - name: Login to GitHub Container Registry
         uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0

@@ -21,7 +21,7 @@ jobs:
   build:
     name: Build Linux companion
     # Match the release build base so PR artifacts have the same glibc floor.
-    runs-on: ubuntu-22.04
+    runs-on: blacksmith-4vcpu-ubuntu-2204
     timeout-minutes: 30
     steps:
       - name: Checkout
@@ -108,7 +108,7 @@ jobs:
     # macos-15, not macos-14: tauri-plugin-notifications' Swift sources use
     # typed throws (`throws(FFIResult)`), which needs Swift 6. The macos-14
     # image still ships Swift 5.x and fails to parse them.
-    runs-on: macos-15
+    runs-on: blacksmith-6vcpu-macos-15
     timeout-minutes: 30
     steps:
       - name: Checkout

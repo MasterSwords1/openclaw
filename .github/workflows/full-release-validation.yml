@@ -151,7 +151,7 @@ env:
 jobs:
   resolve_target:
     name: Resolve target ref
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 10
     outputs:
       sha: ${{ steps.resolve.outputs.sha }}
@@ -262,7 +262,7 @@ jobs:
     name: Check for reusable validation evidence
     needs: [resolve_target]
     if: inputs.rerun_group == 'all' && inputs.reuse_evidence && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release-ci/'))
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 10
     outputs:
       reuse: ${{ steps.find.outputs.reuse }}
@@ -367,7 +367,7 @@ jobs:
     name: Verify Docker runtime image assets
     needs: [resolve_target, evidence_reuse]
     if: ${{ always() && needs.resolve_target.result == 'success' && inputs.rerun_group == 'all' && needs.evidence_reuse.outputs.reuse != 'true' }}
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 20
     permissions:
       contents: read
@@ -415,7 +415,7 @@ jobs:
     name: Run normal full CI
     needs: [resolve_target, evidence_reuse]
     if: ${{ always() && needs.resolve_target.result == 'success' && contains(fromJSON('["all","ci"]'), inputs.rerun_group) && needs.evidence_reuse.outputs.reuse != 'true' }}
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: ${{ inputs.release_profile != 'beta' && 240 || 60 }}
     outputs:
       run_id: ${{ steps.dispatch.outputs.run_id }}
@@ -613,7 +613,7 @@ jobs:
     name: Run plugin prerelease validation
     needs: [resolve_target, evidence_reuse, prepare_release_candidate]
     if: ${{ always() && needs.resolve_target.result == 'success' && (needs.prepare_release_candidate.result == 'success' || needs.prepare_release_candidate.result == 'skipped') && contains(fromJSON('["all","plugin-prerelease"]'), inputs.rerun_group) && needs.evidence_reuse.outputs.reuse != 'true' }}
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: ${{ inputs.release_profile == 'full' && 300 || inputs.release_profile == 'stable' && 240 || 60 }}
     outputs:
       run_id: ${{ steps.dispatch.outputs.run_id }}
@@ -807,7 +807,7 @@ jobs:
     name: Run release/live/Docker/QA validation
     needs: [resolve_target, evidence_reuse, prepare_release_candidate]
     if: ${{ always() && needs.resolve_target.result == 'success' && (needs.prepare_release_candidate.result == 'success' || needs.prepare_release_candidate.result == 'skipped') && contains(fromJSON('["all","release-checks","install-smoke","cross-os","live-e2e","package","qa","qa-parity","qa-live"]'), inputs.rerun_group) && needs.evidence_reuse.outputs.reuse != 'true' }}
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: ${{ inputs.release_profile != 'beta' && 240 || 60 }}
     outputs:
       run_id: ${{ steps.dispatch.outputs.run_id }}
@@ -1161,7 +1161,7 @@ jobs:
     needs: [resolve_target]
     if: ${{ always() && needs.resolve_target.result == 'success' && inputs.rerun_group == 'npm-telegram' && (inputs.npm_telegram_package_spec != '' || inputs.release_package_spec != '') }}
     continue-on-error: ${{ startsWith(github.ref, 'refs/heads/tideclaw/alpha/') }}
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: ${{ inputs.release_profile == 'full' && 360 || 60 }}
     outputs:
       run_id: ${{ steps.dispatch.outputs.run_id }}
@@ -1526,7 +1526,7 @@ jobs:
         performance,
       ]
     if: always()
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 5
     steps:
       - name: Verify child workflow results

@@ -316,7 +316,7 @@ jobs:
     name: Publish Mantis web UI chat evidence
     needs: [resolve_request, run_web_ui_chat]
     if: ${{ always() && needs.resolve_request.outputs.pr_number != '' && needs.run_web_ui_chat.outputs.artifact_name != '' }}
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     environment: qa-live-shared
     steps:
       - name: Checkout harness ref
@@ -372,7 +372,7 @@ jobs:
     name: Clear Mantis command reaction
     needs: [resolve_request, validate_candidate, run_web_ui_chat, publish_evidence]
     if: ${{ always() && github.event_name == 'issue_comment' && needs.resolve_request.outputs.request_source == 'issue_comment' }}
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       issues: write
     steps:

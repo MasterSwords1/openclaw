@@ -25,7 +25,7 @@ env:
 jobs:
   validate_release:
     name: Validate release tag
-    runs-on: ubuntu-22.04
+    runs-on: blacksmith-4vcpu-ubuntu-2204
     timeout-minutes: 10
     # Build jobs check out this exact SHA so a tag force-moved mid-run cannot
     # swap in code the ancestry guard never validated.
@@ -77,7 +77,7 @@ jobs:
     needs: validate_release
     # Oldest supported build base: bundles link against this glibc, so newer
     # runners would silently drop Ubuntu 22.04/Debian 12 users.
-    runs-on: ubuntu-22.04
+    runs-on: blacksmith-4vcpu-ubuntu-2204
     timeout-minutes: 45
     steps:
       - name: Checkout selected tag
@@ -169,7 +169,7 @@ jobs:
     # macos-15, not macos-14: tauri-plugin-notifications' Swift sources use
     # typed throws (`throws(FFIResult)`), which needs Swift 6. The macos-14
     # image still ships Swift 5.x, so this job could not build the plugin.
-    runs-on: macos-15
+    runs-on: blacksmith-6vcpu-macos-15
     timeout-minutes: 45
     steps:
       - name: Checkout selected tag
@@ -237,7 +237,7 @@ jobs:
     name: Build unsigned Windows test bundle
     if: ${{ inputs['desktop-test-bundles'] }}
     needs: validate_release
-    runs-on: windows-2022
+    runs-on: blacksmith-4vcpu-windows-2025
     timeout-minutes: 45
     steps:
       - name: Checkout selected tag
@@ -316,7 +316,7 @@ jobs:
     concurrency:
       group: linux-app-release-publish
       cancel-in-progress: false
-    runs-on: ubuntu-22.04
+    runs-on: blacksmith-4vcpu-ubuntu-2204
     timeout-minutes: 10
     steps:
       - name: Download Linux bundles

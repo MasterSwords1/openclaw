@@ -47,7 +47,7 @@ jobs:
     if: >-
       github.repository == 'openclaw/openclaw' &&
       (github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main')
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     outputs:
       sha: ${{ steps.base.outputs.sha }}
     steps:
@@ -79,7 +79,7 @@ jobs:
     name: Verify generated PR App permissions
     needs: resolve-base
     if: needs.resolve-base.result == 'success'
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -150,7 +150,7 @@ jobs:
             fa,
             ru,
           ]
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     name: Refresh ${{ matrix.locale }}
     steps:
       - name: Checkout
@@ -269,7 +269,7 @@ jobs:
       needs.publisher-preflight.result == 'success' &&
       needs.refresh.result == 'success' &&
       !(github.event_name == 'workflow_dispatch' && inputs.token_preflight_only)
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3

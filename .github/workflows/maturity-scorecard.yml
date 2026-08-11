@@ -75,7 +75,7 @@ env:
 jobs:
   validate_selected_ref:
     name: Validate selected ref
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     outputs:
       publication_base: ${{ steps.validate.outputs.publication_base }}
       publication_head: ${{ steps.validate.outputs.publication_head }}
@@ -283,7 +283,7 @@ jobs:
     name: Verify generated PR App permissions
     needs: validate_selected_ref
     if: ${{ inputs.publish_pull_request }}
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - name: Checkout trusted workflow source
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -337,7 +337,7 @@ jobs:
         needs.validate_selected_ref.result == 'success' &&
         (!inputs.publish_pull_request || needs.publisher_preflight.result == 'success') &&
         (inputs.qa_evidence_run_id != '' || needs.generate_qa_evidence.result == 'success') }}
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 30
     permissions:
       actions: read
@@ -594,7 +594,7 @@ jobs:
         needs.validate_selected_ref.outputs.workflow_file_path == '.github/workflows/maturity-scorecard.yml' &&
         needs.validate_selected_ref.outputs.workflow_ref == 'openclaw/openclaw/.github/workflows/maturity-scorecard.yml@refs/heads/main' &&
         needs.validate_selected_ref.outputs.workflow_repository == 'openclaw/openclaw' }}
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       actions: read
       contents: read
