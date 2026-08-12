@@ -8,11 +8,8 @@ import type { Command as CommanderCommand, Option as CommanderOption } from "com
 import { sanitizeTerminalText } from "../../packages/terminal-core/src/safe-text.js";
 import { resolveStateDir } from "../config/paths.js";
 import type { ConfigFileSnapshot, OpenClawConfig } from "../config/types.openclaw.js";
-import {
-  isLoopbackAddress,
-  isSecureWebSocketUrl,
-  normalizeWebSocketProtocol,
-} from "../gateway/net.js";
+import { isLoopbackAddress, isSecureWebSocketUrl } from "../gateway/net.js";
+import { normalizeWebSocketProtocol } from "../gateway/websocket-protocol.js";
 import {
   consumeRootOptionToken,
   FLAG_TERMINATOR,
@@ -23,7 +20,6 @@ import type { ProxyHandle } from "../infra/net/proxy/proxy-lifecycle.js";
 import { ensureOpenClawCliOnPath } from "../infra/path-env.js";
 import { assertSupportedRuntime } from "../infra/runtime-guard.js";
 import { tryProcessCwd } from "../infra/safe-cwd.js";
-import type { PluginManifestCommandAliasRegistry } from "../plugins/manifest-command-aliases.js";
 import { resolveCliArgvInvocation } from "./argv-invocation.js";
 import {
   normalizeGeneratedHelpCommandArgv,
@@ -61,7 +57,7 @@ import {
 } from "./program/core-command-descriptors.js";
 import { getSubCliEntries } from "./program/subcli-descriptors.js";
 import {
-  resolveMissingPluginCommandMessage as resolveMissingPluginCommandMessageFromPolicy,
+  resolveMissingPluginCommandMessage,
   rewriteUpdateFlagArgv,
   shouldHandleBareRoot,
   shouldEnsureCliPath,
@@ -268,45 +264,45 @@ async function tryRunGatewayRunFastPath(
   return true;
 }
 
-async function closeCliMemoryManagers(): Promise<void> {
-  try {
-    const { hasMemoryRuntime } = await import("../plugins/memory-state.js");
-    if (!hasMemoryRuntime()) {
-      return;
-    }
-    const { closeActiveMemorySearchManagers } = await import("../plugins/memory-runtime.js");
-    await closeActiveMemorySearchManagers();
-  } catch {
-    // Best-effort teardown for short-lived CLI processes. Package updates can
-    // replace hashed chunks before this finalizer runs.
-  }
-}
-
-async function disposeCliAgentHarnesses(): Promise<void> {
-  try {
-    const { listRegisteredAgentHarnesses, disposeRegisteredAgentHarnesses } =
-      await import("../agents/harness/registry.js");
-    if (listRegisteredAgentHarnesses().length === 0) {
-      return;
-    }
-    await disposeRegisteredAgentHarnesses();
-  } catch {
-    // Best-effort teardown for short-lived CLI commands. Harness plugins may
-    // own subprocesses, but cleanup must not hide the command's real outcome.
-  }
-}
-
-async function closeCliMcpLoopbackServer(): Promise<void> {
-  try {
-    const { getActiveMcpLoopbackRuntime } = await import("../gateway/mcp-http.loopback-runtime.js");
-    if (!getActiveMcpLoopbackRuntime()) {
-      return;
-    }
-    const { closeMcpLoopbackServer } = await import("../gateway/mcp-http.js");
-    await closeMcpLoopbackServer();
-  } catch {
-    // Best-effort teardown for short-lived CLI commands. A command result is
-    // already final, so cleanup must not replace its outcome.
+async function closeCliResources(): Promise<void> {
+  const finalizers = [
+    async () => {
+      const { listRegisteredAgentHarnesses, disposeRegisteredAgentHarnesses } =
+        await import("../agents/harness/registry.js");
+      if (listRegisteredAgentHarnesses().length > 0) {
+        await disposeRegisteredAgentHarnesses();
+      }
+    },
+    async () => {
+      const { stopManagedProviderLocalServices } =
+        await import("../agents/provider-local-service.js");
+      stopManagedProviderLocalServices();
+    },
+    async () => {
+      const { closeProviderTransportDispatcherPool } =
+        await import("../agents/provider-transport-dispatcher-pool.js");
+      await closeProviderTransportDispatcherPool();
+    },
+    async () => {
+      const { getActiveMcpLoopbackRuntime } =
+        await import("../gateway/mcp-http.loopback-runtime.js");
+      if (getActiveMcpLoopbackRuntime()) {
+        const { closeMcpLoopbackServer } = await import("../gateway/mcp-http.js");
+        await closeMcpLoopbackServer();
+      }
+    },
+    async () => {
+      const { hasMemoryRuntime } = await import("../plugins/memory-state.js");
+      if (hasMemoryRuntime()) {
+        const { closeActiveMemorySearchManagers } = await import("../plugins/memory-runtime.js");
+        await closeActiveMemorySearchManagers();
+      }
+    },
+  ];
+  // Teardown is sequential and best-effort so one stale lazy chunk or plugin
+  // failure cannot mask the CLI command's result or skip later resources.
+  for (const finalize of finalizers) {
+    await finalize().catch(() => undefined);
   }
 }
 
@@ -698,18 +694,6 @@ function pauseNonTtyStdinForCliExit(): void {
   }
 }
 
-export function resolveMissingPluginCommandMessage(
-  pluginId: string,
-  config?: OpenClawConfig,
-  options?: { registry?: PluginManifestCommandAliasRegistry },
-): string | null {
-  return resolveMissingPluginCommandMessageFromPolicy(
-    pluginId,
-    config,
-    options?.registry ? { registry: options.registry } : undefined,
-  );
-}
-
 function shouldLoadCliDotEnv(
   loadGlobalEnv: boolean,
   env: NodeJS.ProcessEnv = process.env,
@@ -1008,15 +992,11 @@ async function resolveUnownedCliPrimaryMessage(params: {
   const { resolveManifestCommandAliasOwner, resolveManifestToolOwner } =
     await loadManifestCommandAliasesRuntimeModule();
   const cliCommandSurfaceOwner = await resolveCliCommandSurfaceOwner(params);
-  const pluginPolicyMessage = resolveMissingPluginCommandMessageFromPolicy(
-    params.primary,
-    params.config,
-    {
-      resolveCommandAliasOwner: resolveManifestCommandAliasOwner,
-      resolveToolOwner: resolveManifestToolOwner,
-      resolveCliCommandSurfaceOwner: () => cliCommandSurfaceOwner,
-    },
-  );
+  const pluginPolicyMessage = resolveMissingPluginCommandMessage(params.primary, params.config, {
+    resolveCommandAliasOwner: resolveManifestCommandAliasOwner,
+    resolveToolOwner: resolveManifestToolOwner,
+    resolveCliCommandSurfaceOwner: () => cliCommandSurfaceOwner,
+  });
   if (pluginPolicyMessage) {
     return pluginPolicyMessage;
   }
@@ -1195,6 +1175,12 @@ async function runCliWithPreparedOutputMode(
   if (shouldEnsureCliPath(normalizedArgv)) {
     ensureOpenClawCliOnPath();
   }
+  // Cheap import gate only. Session-ref owns the authoritative URL/options parse.
+  const mayContainBareSessionUrl = normalizedArgv.slice(2).some((arg) => arg.includes("://"));
+  const bareSessionInvocation =
+    !isHelpOrVersionInvocation && mayContainBareSessionUrl
+      ? (await import("./session-ref.js")).parseBareSessionInvocation(normalizedArgv)
+      : null;
 
   // Activate operator-managed proxy routing for network-capable commands.
   // Local Gateway/control-plane commands keep direct loopback access while
@@ -1240,6 +1226,7 @@ async function runCliWithPreparedOutputMode(
   }
   if (
     !isHelpOrVersionInvocation &&
+    !bareSessionInvocation &&
     normalizedInvocation.primary &&
     !isKnownBuiltInCommandRoot(normalizedInvocation.primary)
   ) {
@@ -1308,9 +1295,11 @@ async function runCliWithPreparedOutputMode(
   };
   if (!isHelpOrVersionInvocation && shouldStartProxyForCli(normalizedArgv)) {
     const config = await withConsoleLogsRoutedToStderr(readBestEffortCliConfig);
-    const unownedPrimary = await resolveUnownedCliPrimary({ argv: normalizedArgv, config });
-    if (unownedPrimary) {
-      throw new Error(await resolveUnownedCliPrimaryMessage({ primary: unownedPrimary, config }));
+    if (!bareSessionInvocation) {
+      const unownedPrimary = await resolveUnownedCliPrimary({ argv: normalizedArgv, config });
+      if (unownedPrimary) {
+        throw new Error(await resolveUnownedCliPrimaryMessage({ primary: unownedPrimary, config }));
+      }
     }
     await replaceStartedProxy(config?.proxy ?? undefined);
   }
@@ -1357,6 +1346,19 @@ async function runCliWithPreparedOutputMode(
     // Genuine help fast paths have returned. Any remaining help/version-shaped
     // invocation can still fail validation and must honor the console style.
     await installConsoleCapture();
+
+    if (bareSessionInvocation) {
+      if (!process.stdin.isTTY || !process.stdout.isTTY) {
+        console.error(
+          "OpenClaw TUI needs an interactive TTY. Use `openclaw agent --local ...` for automation.",
+        );
+        process.exitCode = 1;
+        return;
+      }
+      const { runTuiCliAction } = await import("./tui-cli.js");
+      await runTuiCliAction(bareSessionInvocation.target, bareSessionInvocation.options);
+      return;
+    }
 
     // Reject unowned command roots before help/version routing, so that
     // `openclaw <typo> --help` surfaces the same Unknown command error as
@@ -1609,7 +1611,7 @@ async function runCliWithPreparedOutputMode(
               primary,
               config,
             });
-            const missingPluginCommandMessage = resolveMissingPluginCommandMessageFromPolicy(
+            const missingPluginCommandMessage = resolveMissingPluginCommandMessage(
               primary,
               config,
               {
@@ -1656,9 +1658,7 @@ async function runCliWithPreparedOutputMode(
   } finally {
     uninstallGatewayRunRuntimeHooks?.();
     await stopStartedProxy();
-    await disposeCliAgentHarnesses();
-    await closeCliMcpLoopbackServer();
-    await closeCliMemoryManagers();
+    await closeCliResources();
     pauseNonTtyStdinForCliExit();
   }
 }

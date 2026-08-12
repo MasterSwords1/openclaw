@@ -16,45 +16,34 @@ import {
   type DiagnosticToolExecutionErrorEvent,
 } from "../../infra/diagnostic-events.js";
 import { formatErrorMessage } from "../../infra/errors.js";
-import {
-  loadExecApprovals,
-  maxAsk,
-  minSecurity,
-  normalizeExecAsk,
-  resolveExecApprovalsFromFile,
-  resolveExecModePolicy,
-  type ExecAsk,
-  type ExecSecurity,
-} from "../../infra/exec-approvals.js";
+import type { ExecAsk, ExecSecurity } from "../../infra/exec-approvals.js";
 import { BLOCKED_TOOL_CALL_ABORT_FLOOR_MS } from "../../logging/diagnostic-run-activity.js";
 import { KeyedAsyncQueue } from "../../plugin-sdk/keyed-async-queue.js";
 import type {
   CliBackendConfig,
   CliBackendLiveSessionRequirement,
+  CliBackendParseJsonlEvent,
 } from "../../plugins/cli-backend.types.js";
-import {
-  LEGACY_IMPLICIT_AGENT_ID,
-  resolveAgentIdFromSessionKey,
-} from "../../routing/session-key.js";
-import { resolveAgentConfig, resolveDefaultAgentId } from "../agent-scope-config.js";
+import type {
+  CliOutput,
+  CliStreamingDelta,
+  CliStreamJsonOutputLimits,
+  CliThinkingDelta,
+  CliThinkingProgress,
+  CliToolResultDelta,
+  CliToolUseStartDelta,
+  CliUsage,
+} from "../cli-output-contracts.js";
 import {
   CLI_STREAM_JSON_DEFAULT_MAX_TURN_RAW_CHARS,
+  CLI_STREAM_JSON_OUTPUT_LIMITS,
   createCliJsonlStreamingParser,
-  extractCliErrorMessage,
   frameBoundedCliJsonlChunk,
   normalizeClaudeCliStreamJsonRecord,
-  parseCliOutput,
-  type CliOutput,
-  type CliUsage,
-  type CliStreamJsonOutputLimits,
-  type CliStreamingDelta,
-  type CliThinkingDelta,
-  type CliThinkingProgress,
-  type CliToolResultDelta,
-  type CliToolUseStartDelta,
-  resolveCliStreamJsonOutputLimits,
-} from "../cli-output.js";
+} from "../cli-output-stream.js";
+import { extractCliErrorMessage, parseCliOutput } from "../cli-output.js";
 import { classifyFailoverReason } from "../embedded-agent-helpers.js";
+import { resolveExecDefaults } from "../exec-defaults.js";
 import {
   type CliTimeoutContext,
   FailoverError,
@@ -79,6 +68,7 @@ type ProcessSupervisor = ReturnType<
 type ManagedRun = Awaited<ReturnType<ProcessSupervisor["spawn"]>>;
 type ClaudeLiveTurn = {
   backend: CliBackendConfig;
+  parseJsonlEvent?: CliBackendParseJsonlEvent;
   diagnosticRefs: ClaudeLiveDiagnosticRefs;
   /** Enclosing run abort signal; authoritative for tool terminal reason on turn failure. */
   abortSignal?: AbortSignal;
@@ -353,7 +343,6 @@ function buildClaudeLiveArgs(params: {
 if (process.env.VITEST || process.env.NODE_ENV === "test") {
   (globalThis as Record<PropertyKey, unknown>)[Symbol.for("openclaw.claudeLiveSessionTestApi")] = {
     buildClaudeLiveArgs,
-    readConfiguredExecPolicy,
     resetClaudeLiveSessionsForTest,
   };
 }
@@ -985,50 +974,14 @@ function parseSessionId(parsed: Record<string, unknown>): string | undefined {
   return sessionId || undefined;
 }
 
-function readConfiguredExecPolicy(context: PreparedCliRunContext): {
-  security: ExecSecurity;
-  ask: ExecAsk;
-  agentId: string;
-} {
-  const agentId =
-    context.params.agentId ??
-    resolveAgentIdFromSessionKey(
-      context.params.sessionKey,
-      context.params.config
-        ? resolveDefaultAgentId(context.params.config)
-        : LEGACY_IMPLICIT_AGENT_ID,
-    );
-  const agentExec = context.params.config
-    ? resolveAgentConfig(context.params.config, agentId)?.tools?.exec
-    : undefined;
-  const exec = agentExec ?? context.params.config?.tools?.exec;
-  const configured = resolveExecModePolicy({
-    mode: exec?.mode,
-    security: exec?.security ?? "full",
-    ask: exec?.ask ?? "off",
-  });
-  const security = configured.security;
-  const configuredAsk = configured.ask;
-  const sessionAsk = normalizeExecAsk(context.params.sessionEntry?.execAsk);
-  return {
-    agentId,
-    security,
-    ask: sessionAsk ? maxAsk(configuredAsk, sessionAsk) : configuredAsk,
-  };
-}
-
 function resolveClaudeLiveExecPermission(context: PreparedCliRunContext): ClaudeLiveExecPermission {
-  const configured = readConfiguredExecPolicy(context);
-  const approvals = resolveExecApprovalsFromFile({
-    file: loadExecApprovals(),
-    agentId: configured.agentId,
-    overrides: {
-      security: configured.security,
-      ask: configured.ask,
-    },
+  const { security, ask } = resolveExecDefaults({
+    cfg: context.params.config,
+    sessionEntry: context.params.sessionEntry,
+    execOverrides: context.params.execOverrides,
+    agentId: context.params.agentId,
+    sessionKey: context.params.runtimePolicySessionKey ?? context.params.sessionKey,
   });
-  const security = minSecurity(configured.security, approvals.agent.security);
-  const ask = maxAsk(configured.ask, approvals.agent.ask);
   return {
     security,
     ask,
@@ -1410,10 +1363,14 @@ function handleClaudeLiveLine(session: ClaudeLiveSession, line: string): void {
       raw,
       backend: turn.backend,
       providerId: session.providerId,
+      parseJsonlEvent: turn.parseJsonlEvent,
       outputMode: "jsonl",
       fallbackSessionId: turn.sessionId,
     });
-  if (output.errorText) {
+  const syntheticNoResponsePendingContinuation =
+    output.terminalFailure?.reason === "synthetic_no_response" &&
+    session.outstandingBackgroundTaskIds.size > 0;
+  if (output.errorText && !syntheticNoResponsePendingContinuation) {
     const error = createCliOutputFailoverError({
       output,
       provider: session.providerId,
@@ -1685,6 +1642,7 @@ function createTurn(params: {
 }): ClaudeLiveTurn {
   const turn: ClaudeLiveTurn = {
     backend: params.context.preparedBackend.backend,
+    parseJsonlEvent: params.context.backendResolved.parseJsonlEvent,
     diagnosticRefs: {
       runId: params.context.params.runId,
       sessionId: params.context.params.sessionId,
@@ -1692,7 +1650,7 @@ function createTurn(params: {
       ...(params.context.params.agentId ? { agentId: params.context.params.agentId } : {}),
     },
     abortSignal: params.context.params.abortSignal,
-    outputLimits: resolveCliStreamJsonOutputLimits(params.context.preparedBackend.backend),
+    outputLimits: CLI_STREAM_JSON_OUTPUT_LIMITS,
     startedAtMs: Date.now(),
     rawLines: [],
     noOutputTimer: null,
@@ -1710,6 +1668,7 @@ function createTurn(params: {
     streamingParser: createCliJsonlStreamingParser({
       backend: params.context.preparedBackend.backend,
       providerId: params.context.backendResolved.id,
+      parseJsonlEvent: params.context.backendResolved.parseJsonlEvent,
       onAssistantDelta: params.onAssistantDelta,
       onThinkingDelta: params.onThinkingDelta,
       onThinkingProgress: params.onThinkingProgress,

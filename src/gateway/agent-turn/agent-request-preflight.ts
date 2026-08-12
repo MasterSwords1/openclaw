@@ -7,9 +7,9 @@ import { normalizeSpawnedRunMetadata } from "../../agents/spawned-context.js";
 import {
   findAuthorizedSwarmCollectorRequest,
   findSwarmCollectorSession,
-} from "../../agents/subagent-registry-memory.js";
-import { resolveSwarmConfig } from "../../agents/swarm-config.js";
-import { validateStructuredOutputSchema } from "../../agents/swarm-output-schema.js";
+} from "../../agents/subagents/registry/subagent-registry-memory.js";
+import { resolveSwarmConfig } from "../../agents/subagents/swarm/swarm-config.js";
+import { validateStructuredOutputSchema } from "../../agents/subagents/swarm/swarm-output-schema.js";
 import { resolveAgentIdFromSessionKey, resolveStorePath } from "../../config/sessions.js";
 import { loadSessionEntry } from "../../config/sessions/session-accessor.js";
 import {

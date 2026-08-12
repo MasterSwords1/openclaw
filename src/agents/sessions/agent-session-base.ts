@@ -13,7 +13,7 @@ import type {
   AgentSessionConfig,
   AgentSessionEvent,
   AgentSessionEventListener,
-  AgentSessionWriteLockRunner,
+  AgentSessionWriteSettlementRunner,
 } from "./agent-session-types.js";
 import { extractTextContent } from "./agent-session-utils.js";
 import { formatNoApiKeyFoundMessage } from "./auth-guidance.js";
@@ -109,13 +109,14 @@ export abstract class AgentSessionBase {
   protected disableBuiltInTools: boolean;
   protected baseToolsOverride?: Record<string, AgentTool>;
   protected sessionStartEvent: SessionStartEvent;
-  protected withExternalSessionWriteLock?: AgentSessionWriteLockRunner;
+  protected withExternalSessionWriteSettlement?: AgentSessionWriteSettlementRunner;
   protected extensionUIContext?: ExtensionUIContext;
   protected extensionCommandContextActions?: ExtensionCommandContextActions;
   protected extensionAbortHandler?: () => void;
   protected extensionShutdownHandler?: ShutdownHandler;
   protected extensionErrorListener?: ExtensionErrorListener;
   protected extensionErrorUnsubscriber?: () => void;
+  private readonly cleanupProviderSessionResourcesOnDispose: boolean;
 
   // Model registry for API key resolution
   protected sessionModelRegistry: ModelRegistry;
@@ -150,8 +151,10 @@ export abstract class AgentSessionBase {
       type: "session_start",
       reason: "startup",
     };
-    this.withExternalSessionWriteLock = config.withSessionWriteLock;
+    this.withExternalSessionWriteSettlement = config.withSessionWriteSettlement;
     this.contextOverflowRecoveryOwner = config.contextOverflowRecoveryOwner ?? "session";
+    this.cleanupProviderSessionResourcesOnDispose =
+      config.cleanupProviderSessionResourcesOnDispose ?? true;
   }
 
   /** Model registry for API key resolution and model discovery */
@@ -200,9 +203,9 @@ export abstract class AgentSessionBase {
     return result.ok ? { apiKey: result.apiKey, headers: result.headers } : {};
   }
 
-  protected async runWithSessionWriteLock<T>(run: () => Promise<T> | T): Promise<T> {
-    return this.withExternalSessionWriteLock
-      ? await this.withExternalSessionWriteLock(run)
+  protected async runWithSessionWriteSettlement<T>(run: () => Promise<T> | T): Promise<T> {
+    return this.withExternalSessionWriteSettlement
+      ? await this.withExternalSessionWriteSettlement(run)
       : await run();
   }
 
@@ -221,7 +224,7 @@ export abstract class AgentSessionBase {
   protected installAgentToolHooks(): void {
     this.agent.beforeToolCall = async ({ toolCall, args }) => {
       const runner = this.currentExtensionRunner;
-      return await this.runWithSessionWriteLock(async () => {
+      return await this.runWithSessionWriteSettlement(async () => {
         if (!runner.hasHandlers("tool_call")) {
           return undefined;
         }
@@ -248,7 +251,7 @@ export abstract class AgentSessionBase {
         return undefined;
       }
 
-      const hookResult = await this.runWithSessionWriteLock(
+      const hookResult = await this.runWithSessionWriteSettlement(
         async () =>
           await runner.emitToolResult({
             type: "tool_result",
@@ -323,7 +326,9 @@ export abstract class AgentSessionBase {
         (reason as { turnHandoff?: unknown }).turnHandoff === true;
     }
     if (this.eventMayWriteSession(event)) {
-      await this.runWithSessionWriteLock(async () => await this.handleAgentEventUnlocked(event));
+      await this.runWithSessionWriteSettlement(
+        async () => await this.handleAgentEventUnlocked(event),
+      );
       return;
     }
     await this.handleAgentEventUnlocked(event);
@@ -620,7 +625,9 @@ export abstract class AgentSessionBase {
     );
     this.disconnectFromAgent();
     this.eventListeners = [];
-    cleanupSessionResources(this.sessionId);
+    if (this.cleanupProviderSessionResourcesOnDispose) {
+      cleanupSessionResources(this.sessionId);
+    }
   }
 
   // =========================================================================

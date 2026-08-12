@@ -6,7 +6,6 @@ import type {
   SessionDiscussionState,
   SessionSharingRole,
   SessionSuggestion,
-  TaskSuggestion,
 } from "../../../../packages/gateway-protocol/src/index.js";
 import type {
   ControlUiSessionBranch,
@@ -30,9 +29,7 @@ import type {
   BoardProviderLease,
 } from "../../lib/board/provider.ts";
 import type { BoardFace, BoardVisibleChatDock } from "../../lib/board/settings.ts";
-import type { BoardSnapshot, BoardTab } from "../../lib/board/types.ts";
-import type { BoardViewSnapshot } from "../../lib/board/view-types.ts";
-import { ObserverDigestHistory } from "../../lib/observer-digest.ts";
+import type { BoardTab } from "../../lib/board/types.ts";
 import { parseCatalogSessionKey } from "../../lib/sessions/catalog-key.ts";
 import type { SwarmRosterHydrator } from "../../lib/sessions/swarm-roster.ts";
 import { SessionUnreadPatchGuard } from "../../lib/sessions/unread.ts";
@@ -62,7 +59,6 @@ import type { SessionRailMode } from "./components/chat-session-rail.ts";
 import type { ChatSessionSharingState } from "./components/chat-session-sharing.ts";
 import { ChatTranscriptController } from "./components/chat-thread.ts";
 import type { SessionDiscussionPanelConfig } from "./components/session-discussion-panel.ts";
-import type { ChatSessionScrollPosition } from "./scroll.ts";
 import type { ChatMessageCache } from "./session-message-cache.ts";
 
 export abstract class ChatPaneBase extends OpenClawLightDomElement {
@@ -73,22 +69,59 @@ export abstract class ChatPaneBase extends OpenClawLightDomElement {
   @consume({ context: applicationContext, subscribe: true })
   protected context!: ChatPageContext;
   @property({ attribute: false }) paneId = "single";
+  @property({ attribute: false }) presentationId = "single";
   @property({ attribute: false }) chatMessagesBySession?: ChatMessageCache;
   // Empty means "no route/layout opinion yet": the pane boots on the page
   // state's default session and must not canonicalize or write global session
   // bindings until the container supplies a real key (classic mode renders
   // before route data resolves).
   @property({ attribute: false }) sessionKey = "";
-  @property({ attribute: false }) active = false;
+  private activeValue = false;
+  private presentedValue = true;
+  get presented(): boolean {
+    return this.presentedValue;
+  }
+  set presented(value: boolean) {
+    const previous = this.presentedValue;
+    if (value === previous) {
+      return;
+    }
+    this.presentedValue = value;
+    this.requestUpdate("presented", previous);
+    this.presentedChanged(value);
+  }
+  protected presentedChanged(_presented: boolean): void {}
+  get active(): boolean {
+    return this.activeValue;
+  }
+  set active(value: boolean) {
+    const previous = this.activeValue;
+    if (value === previous) {
+      return;
+    }
+    this.activeValue = value;
+    this.requestUpdate("active", previous);
+    this.activeChanged(value);
+  }
+  protected activeChanged(_active: boolean): void {}
   @property({ attribute: false }) draft?: string;
   @property({ attribute: false }) focusComposer = false;
   @property({ attribute: false }) routeFace: BoardFace = "chat";
-  @property({ attribute: false }) onFaceChange?: (face: BoardFace) => void;
+  @property({ attribute: false }) onFaceChange?: (
+    paneId: string,
+    sessionKey: string,
+    face: BoardFace,
+  ) => void;
   @property({ attribute: false }) onFocusPane?: (paneId: string) => void;
   @property({ attribute: false }) onPaneSessionChange?: (
     paneId: string,
     nextSessionKey: string,
     options?: PaneSessionChangeOptions,
+  ) => boolean | void;
+  @property({ attribute: false }) onSessionDeleted?: (
+    paneId: string,
+    sessionKey: string,
+    replacementSessionKey: string,
   ) => void;
   @property({ attribute: false }) paneTitle = "";
   @property({ attribute: false }) narrow = false;
@@ -255,9 +288,6 @@ export abstract class ChatPaneBase extends OpenClawLightDomElement {
     | undefined;
   protected readonly lastVisibleBoardDock = new Map<string, BoardVisibleChatDock>();
   protected retainedBoardSessionKey = "";
-  protected readonly observerDigestHistory = new ObserverDigestHistory();
-  protected builtinBoardSnapshot: BoardViewSnapshot | null = null;
-  protected builtinBoardSnapshotBase: BoardSnapshot | null = null;
   protected swarmHydrator: SwarmRosterHydrator | null = null;
   protected readonly sessionDiscussionStates = new Map<string, SessionDiscussionState>();
   protected readonly sessionDiscussionOpenUrls = new Map<string, string | null>();
@@ -291,16 +321,6 @@ export abstract class ChatPaneBase extends OpenClawLightDomElement {
   >();
   protected nativeDraftCleanup: (() => void) | null = null;
   protected readonly unreadPatchGuard = new SessionUnreadPatchGuard();
-  protected taskSuggestions: TaskSuggestion[] = [];
-  protected readonly taskSuggestionBusyIds = new Set<string>();
-  protected readonly taskSuggestionOperations = new Map<string, symbol>();
-  protected taskSuggestionsRequestVersion = 0;
-  protected taskSuggestionCloudProfiles: Array<{ id: string }> = [];
-  protected taskSuggestionCloudProfileGeneration = -1;
-  protected resetTaskSuggestionCloudProfiles(): void {
-    this.taskSuggestionCloudProfiles = [];
-    this.taskSuggestionCloudProfileGeneration = -1;
-  }
   protected sessionSuggestions: SessionSuggestion[] = [];
   protected sessionSuggestionRole: SessionSharingRole | undefined;
   protected readonly sessionSuggestionBusyIds = new Set<string>();
@@ -364,17 +384,12 @@ export abstract class ChatPaneBase extends OpenClawLightDomElement {
         (runtimeConfig, notify) =>
           runtimeConfig.subscribe(() => {
             this.refreshSwarmRoster();
-            this.refreshBuiltinBoardSnapshot();
             notify();
           }),
       )
       .watch(
         () => this.resolveBoardProvider(),
-        (provider, notify) =>
-          provider.snapshot$.subscribe(() => {
-            this.refreshBuiltinBoardSnapshot();
-            notify();
-          }),
+        (provider, notify) => provider.snapshot$.subscribe(notify),
       )
       .effect(
         () => this.resolveBoardProvider(),
@@ -384,7 +399,6 @@ export abstract class ChatPaneBase extends OpenClawLightDomElement {
 
   protected abstract refreshSessionPullRequests(options?: { refresh?: boolean }): Promise<void>;
   protected abstract refreshSwarmRoster(): void;
-  protected abstract refreshBuiltinBoardSnapshot(): void;
   protected abstract resolveBoardProvider(): BoardProvider;
   protected abstract handleBoardCommand(event: BoardCommandEvent): void;
   protected abstract reconcileWaitingApprovalSnapshot(
@@ -400,9 +414,6 @@ export abstract class ChatPaneBase extends OpenClawLightDomElement {
   protected abstract applyApplicationConfig(config: ChatPageContext["config"]["current"]): void;
   protected abstract applySessionsState(state: ChatPageContext["sessions"]["state"]): void;
   protected abstract cancelHeaderRename(): void;
-  protected abstract resetOlderMessagesViewport(
-    nextSessionKey?: string,
-  ): ChatSessionScrollPosition | null;
-  protected abstract restoreOlderMessagesViewport(sessionKey: string, scrollTop: number): void;
+  protected abstract resetOlderMessagesViewport(): void;
   protected abstract sendPendingSkillWorkshopRevision(expectedSessionKey: string): void;
 }

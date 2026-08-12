@@ -227,6 +227,7 @@ const hoisted = vi.hoisted(() => ({
   activeEmbeddedRunSessionKeys: [] as string[],
   markRestartAbortedMainSessions: vi.fn(async (_params: unknown) => ({ marked: 1, skipped: 0 })),
   runtimeConfig: { value: { session: { store: "/tmp/active-sessions.json" } } as OpenClawConfig },
+  resetSkillSnapshotConfigFingerprintCache: vi.fn(),
   reloadEvents: [] as string[],
   loadModelCatalog: vi.fn(async (_params: { config: OpenClawConfig }) => []),
   resetModelCatalogCache: vi.fn(() => {}),
@@ -300,7 +301,7 @@ vi.mock("../agents/embedded-agent-runner/run-state.js", () => ({
   listActiveEmbeddedRunSessionKeys: () => hoisted.activeEmbeddedRunSessionKeys,
 }));
 
-vi.mock("../agents/main-session-restart-recovery.js", () => ({
+vi.mock("../agents/main-session-recovery/main-session-restart-recovery.js", () => ({
   markRestartAbortedMainSessions: hoisted.markRestartAbortedMainSessions,
 }));
 
@@ -311,6 +312,11 @@ vi.mock("../config/config.js", async () => {
     getRuntimeConfig: () => hoisted.runtimeConfig.value,
   };
 });
+
+vi.mock("../skills/runtime/snapshot-config-fingerprint.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../skills/runtime/snapshot-config-fingerprint.js")>()),
+  resetSkillSnapshotConfigFingerprintCache: hoisted.resetSkillSnapshotConfigFingerprintCache,
+}));
 
 vi.mock("../agents/model-catalog.js", () => ({
   loadModelCatalog: (params: { config: OpenClawConfig }) => {
@@ -855,6 +861,7 @@ beforeEach(() => {
   resetProcessRegistryForTests();
   delete process.env.OPENCLAW_SKIP_CHANNELS;
   delete process.env.OPENCLAW_SKIP_PROVIDERS;
+  hoisted.resetSkillSnapshotConfigFingerprintCache.mockClear();
 });
 
 afterEach(() => {
@@ -972,6 +979,7 @@ describe("managed reload transaction ownership", () => {
     expect(result.acceptTerminalConfig).toHaveBeenCalledOnce();
     expect(result.prepareTerminalConfig).toHaveBeenCalledOnce();
     expect(result.reconcileTerminalSessions).toHaveBeenCalledOnce();
+    expect(hoisted.resetSkillSnapshotConfigFingerprintCache).toHaveBeenCalledOnce();
     expect(getActiveSecretsRuntimeSnapshot()?.sourceConfig).toEqual(result.configA);
   });
 
@@ -3840,6 +3848,7 @@ describe("gateway Gmail hot reload handlers", () => {
           refKeys: ["env:default:TTS_FOURTH"],
         },
       ]);
+      expect(hoisted.resetSkillSnapshotConfigFingerprintCache).not.toHaveBeenCalled();
     } finally {
       await reloader.stop();
     }

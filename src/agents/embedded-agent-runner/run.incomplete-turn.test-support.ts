@@ -1,8 +1,8 @@
 import { vi } from "vitest";
 import { formatErrorMessage } from "../../infra/errors.js";
 import type { AssistantMessage } from "../../llm/types.js";
-import type { FailoverReason } from "../embedded-agent-helpers/types.js";
 import { isStrictAgenticSupportedProviderModel } from "../execution-contract.js";
+import type { FailoverReason } from "../failover/signal.js";
 import type { AgentHarness } from "../harness/types.js";
 import { buildEmbeddedRunBlockedResult } from "./run/blocked-run-result.js";
 import { createEmbeddedRunContextRecoveryState } from "./run/context-recovery-state.js";
@@ -426,7 +426,7 @@ export async function runIncompleteTurnOwnerHarness(params: OwnerHarnessParams) 
       attemptAuthProfileStore: { version: 1, profiles: {} },
       apiKeyInfo: null,
       agentHarnessId: selectedHarness.id,
-      settledTurnFinalizationAttempted: finalized.finalizationAttempted,
+      settledTurnFinalizationOutcome: finalized.finalizationOutcome,
       pluginHarnessOwnsTransport: false,
       pluginHarnessOwnsAuthBootstrap: false,
       reportedModelRef: prepared.reportedModelRef,

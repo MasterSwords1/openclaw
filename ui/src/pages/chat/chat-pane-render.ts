@@ -104,6 +104,11 @@ export class ChatPane extends ChatPaneBrowserAnnotationRender {
       digest: observerDigest,
     });
     const workspaceConflict = workspaceResultConflictFromPlacement(selectedSession?.placement);
+    const placement = selectedSession?.placement;
+    const terminalReason = (placement as { terminalReason?: string } | undefined)?.terminalReason;
+    const placementRunError = terminalReason
+      ? { summary: t("chat.cloudWorkerFailed", { error: terminalReason }) }
+      : null;
     const visibleWorkspaceConflict =
       workspaceConflict &&
       this.dismissedWorkspaceConflictRefs.get(selectedSession?.key ?? state.sessionKey) !==
@@ -134,9 +139,10 @@ export class ChatPane extends ChatPaneBrowserAnnotationRender {
     const { catalogKey, fullMessageLoader, chatProps } = resolveChatMessageAccess(state);
     const overlays = this.context?.overlays;
     const approvalSnapshot = overlays?.snapshot;
-    const inlineApproval = this.active
-      ? findInlineApproval(approvalSnapshot?.approvalQueue ?? [], state.sessionKey)
-      : null;
+    const inlineApproval = findInlineApproval(
+      approvalSnapshot?.approvalQueue ?? [],
+      state.sessionKey,
+    );
     // Tool rows consult the global title store while rendering; point its
     // fetcher at this pane's connection. Requests capture session + agent at
     // schedule time, so later renders of other panes cannot re-route them.
@@ -158,6 +164,8 @@ export class ChatPane extends ChatPaneBrowserAnnotationRender {
       agentModel: agentDefaultModel,
     });
     const selectedSessionArchived = this.isCurrentSessionArchived(state);
+    const cloudStartup = this.context.cloudStartup.get(state.sessionKey);
+    const cloudStartupPending = cloudStartup !== null && cloudStartup.phase !== "failed";
     const sessionParticipationBlocked = this.sessionParticipationTracker.resolve({
       catalog: catalogKey !== null,
       listLoading: state.sessionsLoading,
@@ -205,7 +213,7 @@ export class ChatPane extends ChatPaneBrowserAnnotationRender {
       ? this.paneWidth
       : (sidebarChatColumn?.width ?? sidebarPrimaryWidth(sidebarLayout, this.paneWidth));
     const sessionWorkspace = createSessionWorkspaceProps(state, {
-      draftScope: this.paneId,
+      draftScope: this.presentationId,
       narrowLayout: chatLayoutWidth < WORKSPACE_RAIL_SIDE_MIN_PANE_WIDTH,
     });
     const railSideDocked =
@@ -255,9 +263,9 @@ export class ChatPane extends ChatPaneBrowserAnnotationRender {
     const props: ChatProps = {
       transcript: this.transcript,
       backgroundTaskTranscript: this.backgroundTaskTranscript,
-      paneId: this.paneId,
+      paneId: this.presentationId,
       sessionKey: state.sessionKey,
-      announceTranscript: this.active,
+      announceTranscript: this.active && this.presented,
       onSessionKeyChange: (next) => {
         this.onPaneSessionChange?.(this.paneId, next);
       },
@@ -267,7 +275,14 @@ export class ChatPane extends ChatPaneBrowserAnnotationRender {
       showToolCalls: state.settings.chatShowToolCalls,
       persistCommentary: state.settings.chatPersistCommentary !== false,
       loading: catalogKey ? this.catalogLoading : state.chatLoading,
-      sending: state.chatSending || this.sessionSuggestionAddOperation !== undefined,
+      sending:
+        cloudStartupPending ||
+        state.chatSending ||
+        this.sessionSuggestionAddOperation !== undefined,
+      cloudStartup,
+      onRetryCloudStartup: cloudStartup?.retryable
+        ? () => this.context.cloudStartup.retry(state.sessionKey)
+        : undefined,
       canAbort: sessionParticipationBlocked ? false : hasAbortableSessionRun(state),
       runStatus: state.chatRunStatus,
       startupStatus: activeChatRunStartupStatus(state.chatRunStartup),
@@ -341,13 +356,14 @@ export class ChatPane extends ChatPaneBrowserAnnotationRender {
       gatewayClient: state.client,
       composerHoldToRecord: state.settings.composerHoldToRecord,
       suggestionComposer: suggestionViewer,
-      typingLabel: multiIdentity ? this.typingLabel() : null,
+      typingActors: multiIdentity ? this.typingActorViews() : [],
       onTypingChange: typingEnabled ? (typing) => this.sendTypingState(typing) : undefined,
       canSend: catalogKey
         ? this.catalogSession?.canContinue === true
         : !modelSetupRequired &&
           !selectedSessionArchived &&
-          (!sessionParticipationBlocked || suggestionViewer),
+          (!sessionParticipationBlocked || suggestionViewer) &&
+          !cloudStartupPending,
       disabledReason: catalogDisabledReason ?? disabledReason,
       disabledBanner:
         selectedSessionArchived && !catalogDisabledReason
@@ -370,7 +386,7 @@ export class ChatPane extends ChatPaneBrowserAnnotationRender {
       modelSetupRequired: modelSetupRequired && !selectedSessionArchived,
       onModelSetup: () => this.context.navigate("model-setup"),
       error: state.lastError,
-      runError: catalogKey ? null : (state.chatRunError ?? null),
+      runError: catalogKey ? null : (state.chatRunError ?? placementRunError),
       inlineApproval: sessionParticipationBlocked ? null : inlineApproval,
       approvalBusy: approvalSnapshot?.approvalBusy,
       approvalErrors: approvalSnapshot?.approvalErrors,
@@ -408,15 +424,11 @@ export class ChatPane extends ChatPaneBrowserAnnotationRender {
       composerControls: catalogKey
         ? nothing
         : renderChatPaneComposerControls({
-            paneId: this.paneId,
             state,
             selectedSession,
             agentDefaultModel,
             modelAccess: mutationAccess.model,
             effortAccess: mutationAccess.effort,
-            preferencesBrowserOnly:
-              this.context.runtimeConfig.state.connected &&
-              this.context.runtimeConfig.canPatch === false,
           }),
       sessionWorkspace: catalogKey ? undefined : sessionWorkspace,
       backgroundTasks: catalogKey ? undefined : backgroundTasks,
@@ -464,6 +476,8 @@ export class ChatPane extends ChatPaneBrowserAnnotationRender {
         isGatewayMethodAdvertised(this.context.gateway.snapshot, "taskSuggestions.dismiss") ===
           true,
       taskSuggestionCloudProfiles: this.taskSuggestionCloudProfiles,
+      taskSuggestionCopiedIds: this.taskSuggestionCopiedIds,
+      onCopyTaskSuggestionPrompt: (suggestion) => void this.copyTaskSuggestionPrompt(suggestion),
       onAcceptTaskSuggestion: (suggestion, mode, cloudProfileId) =>
         void this.acceptTaskSuggestion(suggestion, mode, cloudProfileId),
       onDismissTaskSuggestion: (suggestion) => void this.dismissTaskSuggestion(suggestion),
@@ -536,6 +550,7 @@ export class ChatPane extends ChatPaneBrowserAnnotationRender {
       onQueueSteer: sessionParticipationBlocked
         ? undefined
         : (id) => void state.steerQueuedChatMessage(id),
+      onQueueMove: sessionParticipationBlocked ? undefined : state.moveQueuedChatMessage,
       onGoalCommand: (command) => void state.handleSendChat(command),
       onCompanionQuestion: (question) => void this.submitSessionCompanionQuestion(question),
       onCompanionPrefill: this.prefillSessionCompanionQuestion,
@@ -582,10 +597,7 @@ export class ChatPane extends ChatPaneBrowserAnnotationRender {
       gatewayUrl: state.settings.gatewayUrl,
     };
     const chat = renderChat(props);
-    const primary = this.renderBoardPrimary(board, chat, {
-      activeRunId: observerRunId,
-      lastReadAt: selectedSession?.lastReadAt,
-    });
+    const primary = this.renderBoardPrimary(board, chat);
     const discussion = this.buildSessionDiscussionPanel(state, state.sessionKey.trim());
     const panelTemplates = {
       chat,
@@ -670,7 +682,7 @@ export class ChatPane extends ChatPaneBrowserAnnotationRender {
       layout: sidebarLayout,
       narrow: this.paneWidth < SIDEBAR_NARROW_BREAKPOINT_PX,
       panelMutationEnabled: {
-        chat: Boolean(board.activeTabId) && !board.activeTabReadOnly && board.provider.canMutate,
+        chat: Boolean(board.activeTabId) && board.provider.canMutate,
       },
       panelTemplates,
       primary,
