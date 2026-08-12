@@ -834,6 +834,49 @@ describe("runReplyAgent active steering", () => {
     expect(parkedSteer.consume).not.toHaveBeenCalled();
   });
 
+  it("delegates host staging ownership when steering is accepted", async () => {
+    const runState: ReplyOperationRunState = {};
+    const active = createReplyOperation({
+      sessionKey: "main",
+      sessionId: "session",
+      resetTriggered: false,
+    });
+    active.attachBackend({
+      kind: "embedded",
+      cancel: vi.fn(),
+      isStreaming: () => true,
+    });
+    active.setPhase("running");
+    state.queueEmbeddedAgentMessageMock.mockReturnValueOnce({
+      queued: true,
+      sessionId: "session",
+      target: "embedded_run",
+      gatewayHealth: "live",
+      transcriptCommit: "confirmed",
+    });
+    const onAdopted = vi.fn();
+    const onHostStagingDelegated = vi.fn();
+    const { run, typing } = createMinimalRun({
+      opts: {
+        [REPLY_OPERATION_RUN_STATE]: runState,
+        turnAdoptionLifecycle: { onAdopted },
+        onHostStagingDelegated,
+      },
+      isActive: true,
+      shouldSteer: true,
+      shouldFollowup: true,
+      resolvedQueueMode: "steer",
+    });
+
+    await expect(run()).resolves.toBeUndefined();
+
+    expect(onAdopted).toHaveBeenCalledOnce();
+    expect(onHostStagingDelegated).toHaveBeenCalledOnce();
+    expect(parkedSteer.consume).toHaveBeenCalledOnce();
+    expect(parkedSteer.fallback).not.toHaveBeenCalled();
+    active.complete();
+  });
+
   it("adopts and consumes unconfirmed steering without replay", async () => {
     const runState: ReplyOperationRunState = {};
     const cancel = vi.fn();
