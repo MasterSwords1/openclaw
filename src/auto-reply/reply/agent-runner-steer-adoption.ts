@@ -224,6 +224,7 @@ export async function runActiveReplySteer(params: ActiveReplySteerParams): Promi
       transcriptCommit: steerOutcome.transcriptCommit,
     });
     parked.consume();
+    params.opts?.onHostStagingDelegated?.();
     if (adoptionDisposition === "stop") {
       return "handled";
     }
