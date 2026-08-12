@@ -30,7 +30,7 @@ import {
   renderChatPaneComposerControls,
 } from "./chat-pane-session-controls.ts";
 import {
-  SESSION_RAIL_DOCK_MIN_WIDTH,
+  SESSION_RAIL_SIDE_MIN_PANE_WIDTH,
   WORKSPACE_RAIL_MAX_WIDTH,
   WORKSPACE_RAIL_SIDE_MIN_PANE_WIDTH,
 } from "./chat-pane-shared.ts";
@@ -61,6 +61,7 @@ import {
   openSessionWorkspaceFile,
   revealSessionWorkspaceFile,
 } from "./components/chat-session-workspace.ts";
+import { activeQueuedMessageEdit } from "./queued-message-edit.ts";
 import { hasAbortableSessionRun } from "./run-lifecycle.ts";
 import { scheduleChatScroll } from "./scroll.ts";
 import {
@@ -86,6 +87,7 @@ export class ChatPane extends ChatPaneBrowserAnnotationRender {
     }
     void this.ensureTaskSuggestionCloudProfiles();
     const selectedSession = selectedChatSessionRow(state);
+    const selectedSessionId = selectedSession?.sessionId?.trim() || undefined;
     const mutationAccess = readChatPaneMutationAccess(
       this.context.gateway.snapshot,
       state.sessionKey,
@@ -230,8 +232,6 @@ export class ChatPane extends ChatPaneBrowserAnnotationRender {
     // Only side-docked rails narrow the conversation region.
     const sideRailCount = (railSideDocked ? 1 : 0) + (tasksSideDocked ? 1 : 0);
     const chatMainWidth = chatLayoutWidth - sideRailCount * WORKSPACE_RAIL_MAX_WIDTH;
-    const selectedSessionRailMode =
-      this.sessionRailModeSessionKey === state.sessionKey ? this.sessionRailMode : "hidden";
     const selfUser = resolveCurrentSelfUser({
       snapshotUser: gatewaySnapshot.selfUser,
       presenceEntries: readPresenceEntries(gatewaySnapshot.hello?.snapshot),
@@ -298,9 +298,9 @@ export class ChatPane extends ChatPaneBrowserAnnotationRender {
       sessionRailCompanion: catalogKey
         ? undefined
         : this.sessionCompanionThreads.view(state.sessionKey),
-      ...this.sessionRailOpenRequestProps(state.sessionKey),
-      sessionRailMode: selectedSessionRailMode,
-      sessionRailDocked: !catalogKey && chatMainWidth >= SESSION_RAIL_DOCK_MIN_WIDTH,
+      ...this.sessionRailCommandProps(state.sessionKey),
+      sessionRailMode: this.selectedSessionRailMode(state.sessionKey),
+      sessionRailDocked: !catalogKey && chatMainWidth >= SESSION_RAIL_SIDE_MIN_PANE_WIDTH,
       onSessionRailSubmit: (question) => void this.submitSessionCompanionQuestion(question),
       onSessionRailDraftChange: (draft) =>
         this.sessionCompanionThreads.setDraft(state.sessionKey, draft),
@@ -371,12 +371,14 @@ export class ChatPane extends ChatPaneBrowserAnnotationRender {
               kind: "composer-replacement",
               text: t("chat.archivedSessionDisabled"),
               actionLabel: t("common.unarchive"),
-              disabledReason: mutationAccess.unarchive.allowed
-                ? undefined
-                : mutationAccess.unarchive.reason,
+              disabledReason: !selectedSessionId
+                ? "Session lifecycle action requires a durable session identity."
+                : mutationAccess.unarchive.allowed
+                  ? undefined
+                  : mutationAccess.unarchive.reason,
               onAction: () => {
-                if (mutationAccess.unarchive.allowed) {
-                  void this.restoreArchivedSession(state.sessionKey);
+                if (selectedSessionId && mutationAccess.unarchive.allowed) {
+                  void this.restoreArchivedSession(state.sessionKey, selectedSessionId);
                 }
               },
             }
@@ -551,6 +553,11 @@ export class ChatPane extends ChatPaneBrowserAnnotationRender {
         ? undefined
         : (id) => void state.steerQueuedChatMessage(id),
       onQueueMove: sessionParticipationBlocked ? undefined : state.moveQueuedChatMessage,
+      queuedEdit: {
+        editingId: activeQueuedMessageEdit(state)?.id ?? null,
+        onEdit: sessionParticipationBlocked ? undefined : state.editQueuedChatMessage,
+        onCancel: state.cancelQueuedChatMessageEdit,
+      },
       onGoalCommand: (command) => void state.handleSendChat(command),
       onCompanionQuestion: (question) => void this.submitSessionCompanionQuestion(question),
       onCompanionPrefill: this.prefillSessionCompanionQuestion,
@@ -563,6 +570,7 @@ export class ChatPane extends ChatPaneBrowserAnnotationRender {
         state.chatReplyTarget = target;
         state.requestUpdate?.();
       },
+      replyMessageAccess: catalogKey ? undefined : this.currentReplyMessageAccess(state.sessionKey),
       onRewindMessage: sessionActionCallbacks.onRewindMessage,
       onForkMessage: sessionActionCallbacks.onForkMessage,
       onNewSession: () => void this.createSession(),

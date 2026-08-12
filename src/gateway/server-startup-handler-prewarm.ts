@@ -21,12 +21,12 @@ type GatewayHandlerPrewarmHandle = {
 };
 
 async function prewarmGatewaySessionListData(cfg: OpenClawConfig, agentId: string): Promise<void> {
-  const [{ loadCombinedSessionStoreForGateway }, { listSessionsFromStoreAsync }] =
+  const [{ loadCombinedSessionStoreForGatewayCore }, { listSessionsFromStoreAsync }] =
     await Promise.all([
       import("../config/sessions/combined-store-gateway.js"),
       import("./session-utils-list.js"),
     ]);
-  const { durableStorePath, storePath, store } = loadCombinedSessionStoreForGateway(cfg, {
+  const { durableStorePath, storePath, store } = loadCombinedSessionStoreForGatewayCore(cfg, {
     agentId,
     projection: "list",
   });
@@ -38,7 +38,9 @@ async function prewarmGatewaySessionListData(cfg: OpenClawConfig, agentId: strin
     opts: {
       agentId,
       configuredAgentsOnly: true,
-      includeDerivedTitles: true,
+      // Transcript title probes can touch multi-gigabyte agent databases. Keep that optional
+      // decoration request-driven so an idle gateway does not spend minutes warming it.
+      includeDerivedTitles: false,
       includeGlobal: true,
       includeUnknown: true,
       limit: SIDEBAR_SESSION_LIST_LIMIT,

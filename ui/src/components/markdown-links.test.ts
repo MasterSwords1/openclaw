@@ -281,17 +281,17 @@ describe("toSanitizedMarkdownHtml links", () => {
       expect(fragment.textContent).toContain("foo.ts");
     });
 
-    it("preserves line suffixes in labels while storing the parsed line", () => {
+    it("keeps line suffixes on the label while storing the parsed line", () => {
       const fragment = htmlFragment(
-        toSanitizedMarkdownHtml("src/lib/foo.ts:42 and foo.ts:7:3", { fileLinks: true }),
+        toSanitizedMarkdownHtml("src/lib/foo.ts:42 and bar.ts:7:3", { fileLinks: true }),
       );
       const links = [...fragment.querySelectorAll<HTMLAnchorElement>("a.markdown-file-link")];
       expect(links[0]?.dataset.filePath).toBe("src/lib/foo.ts");
       expect(links[0]?.dataset.fileLine).toBe("42");
-      expect(links[0]?.textContent).toBe("src/lib/foo.ts:42");
-      expect(links[1]?.dataset.filePath).toBe("foo.ts");
+      expect(links[0]?.textContent).toBe("foo.ts:42");
+      expect(links[1]?.dataset.filePath).toBe("bar.ts");
       expect(links[1]?.dataset.fileLine).toBe("7");
-      expect(links[1]?.textContent).toBe("foo.ts:7:3");
+      expect(links[1]?.textContent).toBe("bar.ts:7:3");
     });
 
     it("links Windows absolute paths", () => {
@@ -366,6 +366,94 @@ describe("toSanitizedMarkdownHtml links", () => {
       );
       expect(fragment.querySelector("a[data-file-path]")).toBeNull();
     });
+
+    it("labels a file link with its basename and keeps the path addressable", () => {
+      const fragment = htmlFragment(
+        toSanitizedMarkdownHtml("see src/components/Button.tsx for details", { fileLinks: true }),
+      );
+      const link = fragment.querySelector<HTMLAnchorElement>("a.markdown-file-link");
+      expect(link?.textContent).toBe("Button.tsx");
+      expect(link?.dataset.filePath).toBe("src/components/Button.tsx");
+      expect(link?.getAttribute("title")).toBe("src/components/Button.tsx");
+    });
+
+    it("adds no tooltip when the label is already the whole reference", () => {
+      const fragment = htmlFragment(toSanitizedMarkdownHtml("`README.md`", { fileLinks: true }));
+      const link = fragment.querySelector<HTMLAnchorElement>("a.markdown-file-link");
+      expect(link?.textContent).toBe("README.md");
+      expect(link?.hasAttribute("title")).toBe(false);
+    });
+
+    it("adds no tooltip when an explicit label already repeats the reference", () => {
+      const fragment = htmlFragment(
+        toSanitizedMarkdownHtml("[src/lib/foo.ts](src/lib/foo.ts) and [go](src/lib/bar.ts)", {
+          fileLinks: true,
+        }),
+      );
+      const links = [...fragment.querySelectorAll<HTMLAnchorElement>("a.markdown-file-link")];
+      expect(links.map((link) => link.getAttribute("title"))).toEqual([null, "src/lib/bar.ts"]);
+    });
+
+    it("shortens inline-code paths and keeps author labels on explicit links", () => {
+      const fragment = htmlFragment(
+        toSanitizedMarkdownHtml("`src/lib/foo.ts` and [the button](src/ui/Button.tsx:12)", {
+          fileLinks: true,
+        }),
+      );
+      const links = [...fragment.querySelectorAll<HTMLAnchorElement>("a.markdown-file-link")];
+      expect(links.map((link) => link.textContent)).toEqual(["foo.ts", "the button"]);
+      expect(links.map((link) => link.getAttribute("title"))).toEqual([
+        "src/lib/foo.ts",
+        "src/ui/Button.tsx:12",
+      ]);
+    });
+
+    it("grows the label only far enough to tell equal basenames apart", () => {
+      const fragment = htmlFragment(
+        toSanitizedMarkdownHtml("ui/src/app.ts and api/src/app.ts and `D:\\work\\app.ts`", {
+          fileLinks: true,
+        }),
+      );
+      const links = [...fragment.querySelectorAll<HTMLAnchorElement>("a.markdown-file-link")];
+      // The Windows path is unique one segment up, so it stops there while the
+      // other two grow to three — and it keeps its own separator.
+      expect(links.map((link) => link.textContent)).toEqual([
+        "ui/src/app.ts",
+        "api/src/app.ts",
+        "work\\app.ts",
+      ]);
+    });
+
+    it.each([
+      ["README.md", "markdown"],
+      ["package.json", "package"],
+      ["src/components/Button.tsx", "component"],
+      ["src/index.ts", "code"],
+      ["config/app.yaml", "data"],
+      ["scripts/run.sh", "shell"],
+      ["docs/logo.png", "image"],
+      ["notes/todo.txt", "file"],
+      // Inline code so bare filenames link too: the prose scan deliberately
+      // ignores them unless they carry a directory or a line suffix.
+    ])("classifies %s as the %s glyph kind", (path, kind) => {
+      const fragment = htmlFragment(toSanitizedMarkdownHtml(`\`${path}\``, { fileLinks: true }));
+      const link = fragment.querySelector<HTMLAnchorElement>("a.markdown-file-link");
+      expect(link?.dataset.filePath).toBe(path);
+      expect(link?.dataset.fileKind).toBe(kind);
+    });
+
+    it.each([
+      ["spaces", "see docs/my notes.md today"],
+      ["parentheses", "see src/lib/foo(1).ts today"],
+      ["a fragment", "see README.md#install today"],
+      ["a query", "see config.json?raw=1 today"],
+    ])("never pulls %s into a file path, and leaves the prose intact", (_kind, input) => {
+      const fragment = htmlFragment(toSanitizedMarkdownHtml(input, { fileLinks: true }));
+      for (const link of fragment.querySelectorAll<HTMLAnchorElement>("a.markdown-file-link")) {
+        expect(link.dataset.filePath).not.toMatch(/[\s()?]/);
+      }
+      expect(fragment.textContent).toContain(input);
+    });
   });
 
   describe("bare url links", () => {
@@ -390,10 +478,11 @@ describe("toSanitizedMarkdownHtml links", () => {
 
   describe("github link marks", () => {
     it.each([
+      ["bare autolink", "https://github.com/openclaw/openclaw/pull/3434", "openclaw/openclaw#3434"],
       [
-        "bare autolink",
-        "https://github.com/openclaw/openclaw/pull/3434",
-        "https://github.com/openclaw/openclaw/pull/3434",
+        "bare issue autolink",
+        "https://github.com/openclaw/openclaw/issues/3435",
+        "openclaw/openclaw#3435",
       ],
       ["issue shorthand", "[#3434](https://github.com/openclaw/openclaw/pull/3434)", "#3434"],
       ["labelled link", "[the fix](https://github.com/openclaw/openclaw/pull/3434)", "the fix"],
@@ -404,9 +493,20 @@ describe("toSanitizedMarkdownHtml links", () => {
       const fragment = htmlFragment(toSanitizedMarkdownHtml(input));
       const link = fragment.querySelector<HTMLAnchorElement>("a");
       expect(link?.classList.contains("markdown-github-link")).toBe(true);
-      // The mark is CSS-only: the anchor keeps its authored text so copied text
-      // and screen-reader output stay unchanged.
       expect(link?.textContent).toBe(expectedText);
+    });
+
+    it("keeps long generated item references breakable after compaction", () => {
+      const fragment = htmlFragment(
+        toSanitizedMarkdownHtml(
+          "https://github.com/a-very-long-organization-name/a-very-long-repository-name/issues/3434",
+        ),
+      );
+      const link = fragment.querySelector<HTMLAnchorElement>("a");
+      expect(link?.textContent).toBe(
+        "a-very-long-organization-name/a-very-long-repository-name#3434",
+      );
+      expect(link?.classList.contains("markdown-bare-url")).toBe(true);
     });
 
     it.each([
