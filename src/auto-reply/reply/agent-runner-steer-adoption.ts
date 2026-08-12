@@ -1,3 +1,4 @@
+import path from "node:path";
 import { expectDefined } from "@openclaw/normalization-core";
 import { normalizeOptionalString } from "@openclaw/normalization-core/string-coerce";
 import {
@@ -223,9 +224,29 @@ export async function runActiveReplySteer(params: ActiveReplySteerParams): Promi
       steerSessionId,
       transcriptCommit: steerOutcome.transcriptCommit,
     });
-    parked.consume();
+    await admitFollowupRunLifecycle(followupRun);
+    const activeRunLifecycle =
+      activeReplyOperation?.turnAdoptionLifecycle ??
+      params.opts?.turnAdoptionLifecycle;
+    const terminalizeParkedRun = () => {
+      if (followupRun.hostWorkspaceStagingDir) {
+        logVerbose(
+          `[host-staging-cleanup] Deferring cleanup of staged media until active terminal completion: ${path.basename(followupRun.hostWorkspaceStagingDir)}`,
+        );
+      }
+      followupRun.steerPending?.settle(false);
+      parked.consume();
+    };
     if (adoptionDisposition === "stop") {
+      terminalizeParkedRun();
       return "handled";
+    }
+    if (activeRunLifecycle?.onSettled) {
+      activeRunLifecycle.onSettled = () => {
+        terminalizeParkedRun();
+      };
+    } else {
+      terminalizeParkedRun();
     }
     if (followupRun.currentInboundAudio === true) {
       activeReplyOperation?.markAcceptedSteeredInboundAudio();
