@@ -808,12 +808,14 @@ describe("runPreparedReply media-only handling", () => {
     params.ctx.media = [
       {
         path: "/tmp/staged.png",
-        originalPath: "/tmp/input.png",
         url: "media://staged.png",
-        originalUrl: "media://input.png",
-        workspaceDir: "/tmp/workspace",
       },
     ];
+    Object.assign(params.ctx.media[0], {
+      originalPath: "/tmp/input.png",
+      originalUrl: "media://input.png",
+      workspaceDir: "/tmp/workspace",
+    });
     params.sessionCtx.ThreadHistoryBody = undefined;
 
     await runPreparedReply(params);
