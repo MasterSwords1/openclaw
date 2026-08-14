@@ -275,17 +275,22 @@ go through normal pairing and scope-upgrade checks.
 
 ### Worker role and closed protocol
 
-Cloud workers use a dedicated loopback ingress through the gateway-owned,
-host-key-pinned SSH tunnel. It accepts only worker identity and never dispatches
-general auth, node events, operator RPCs, or plugin methods. A strict `connect`
-verifies a hash-at-rest, short-lived credential bound to the environment, bundle
-hash, owner epoch, RPC-set version, expiry, and one nullable session; it
-separately checks the current version and feature set. Success returns minimal
-`worker-hello-ok`; feature negotiation is independent of the general protocol
-version. Frames stay under 64 KiB, except a negotiated `worker.inference.start`
-frame may be up to 25 MiB. The closed allowlist contains `worker.heartbeat`,
-`worker.transcript.commit`, `worker.live-event`, `worker.inference.start`, and
-`worker.inference.cancel`.
+Workers use a closed protocol through either the public
+`/__openclaw__/worker` WebSocket path on the main TLS endpoint or the dedicated
+loopback ingress reached through the gateway-owned, host-key-pinned SSH tunnel.
+The route selects worker mode before reading frames, so it never dispatches
+general auth, node events, operator RPCs, or plugin methods. Public admission
+shares the main per-client pre-auth budget and authentication rate limiter; its
+wire errors collapse credential and environment details to
+`admission-rejected`, while trusted gateway diagnostics retain the internal
+reason. A strict `connect` verifies a hash-at-rest, short-lived credential bound
+to the environment, bundle hash, owner epoch, RPC-set version, expiry, and one
+nullable session; it separately checks the current version and feature set.
+Success returns minimal `worker-hello-ok`; feature negotiation is independent of
+the general protocol version. Frames stay under 64 KiB, except a negotiated
+`worker.inference.start` frame may be up to 25 MiB. The closed allowlist contains
+`worker.heartbeat`, `worker.transcript.commit`, `worker.live-event`,
+`worker.inference.start`, and `worker.inference.cancel`.
 
 Transcript commits use owner-epoch fencing, a gateway-owned session binding,
 base-leaf compare-and-swap, and durable sequence replay; the gateway generates
@@ -394,6 +399,10 @@ method scope (`operator.pairing`), based on the pending request's declared
 | none                                                                                                                                                     | `operator.pairing`                    |
 | ordinary commands                                                                                                                                        | `operator.pairing` + `operator.write` |
 | includes `system.run`, `system.run.prepare`, `system.which`, `browser.proxy`, `browser.proxy.upload.v1`, `fs.listDir`, or `system.execApprovals.get/set` | `operator.pairing` + `operator.admin` |
+
+In this table, `fs.listDir` is the node command relayed through `node.invoke`.
+The top-level Gateway `fs.listDir` RPC needs `operator.write` for
+workspace-contained host browsing and `operator.admin` when `nodeId` is present.
 
 ### Caps/commands/permissions (node)
 
@@ -520,7 +529,7 @@ methods. Treat this as feature discovery, not a full enumeration of
     - `last-heartbeat` returns the latest persisted heartbeat event.
     - `set-heartbeats` toggles heartbeat processing on the gateway.
     - `gateway.restart.preflight` is a deprecated, read-only compatibility preview of restart-specific active work. It does not close admission, create a suspension lease, or provide the atomic full-work fence of `gateway.suspend.prepare`; new restart flows should call `gateway.restart.request`.
-    - `gateway.suspend.prepare` creates a short cooperative-suspension lease only when tracked Gateway work is idle. `gateway.suspend.status` checks that lease, and `gateway.suspend.resume` releases it after thaw or an aborted host operation.
+    - `gateway.suspend.prepare` creates a short cooperative-suspension lease only when tracked Gateway work is idle. While prepared, authenticated WebSocket connects remain available, but every method except `gateway.suspend.*` is fenced. `gateway.suspend.status` checks the lease, and `gateway.suspend.resume` releases it after thaw or an aborted host operation.
 
   </Accordion>
 
@@ -634,7 +643,7 @@ methods. Treat this as feature discovery, not a full enumeration of
   </Accordion>
 
   <Accordion title="Session control">
-    - `sessions.list` returns the current session index, including per-row `agentRuntime` metadata when an agent runtime backend is configured. When cloud-worker placement is enabled or durable recovery state exists, session rows also include a closed `placement` state (`local`, `requested`, `provisioning`, `syncing`, `starting`, `active`, `draining`, `reconciling`, `reclaimed`, or `failed`) plus state-specific environment, owner-epoch, workspace, bundle, ACK-cursor, or recovery fields.
+    - `sessions.list` returns the current session index, including per-row `agentRuntime` metadata when an agent runtime backend is configured. When cloud-worker placement is enabled or durable recovery state exists, session rows also include a closed `placement` state (`local`, `requested`, `provisioning`, `syncing`, `starting`, `active`, `draining`, `reconciling`, `reclaimed`, or `failed`) plus state-specific environment, owner-epoch, workspace, bundle, ACK-cursor, or recovery fields. Active placements may include an advisory `diskSpace` sample with `status` (`ok`, `warning`, or `critical`), `availableBytes`, `totalBytes`, and `observedAtMs`.
     - `sessions.subscribe` enables session change events for the current WebSocket client. The subscription ends when that client disconnects.
     - `sessions.messages.subscribe` and `sessions.messages.unsubscribe` toggle transcript/message event subscriptions for one session. Pass `includeApprovals: true` to also receive sanitized `session.approval` lifecycle events for approvals whose persisted audience includes that exact session and whose reviewer binding authorizes the subscribing client. The subscribe response then includes a bounded pending `approvalReplay`; it is authoritative when `truncated` is false. The opt-in is per subscribe call, not sticky: re-subscribing to the same session without `includeApprovals: true` removes an existing approval subscription. In addition to normal session-read authority, this opt-in requires `operator.admin`, or `operator.approvals` on a paired device.
     - `sessions.preview` returns bounded transcript previews for specific session keys.
@@ -658,7 +667,8 @@ methods. Treat this as feature discovery, not a full enumeration of
 
   <Accordion title="Device pairing and device tokens">
     - `device.pair.list` returns pending and approved paired devices.
-    - `device.pair.setupCode` creates a mobile setup code and, by default, a PNG QR data URL. It requires `operator.admin` and is intentionally omitted from advertised discovery. The result includes `setupCode`, optional `qrDataUrl`, `gatewayUrl`, the non-secret `auth` label, and `urlSource`.
+    - `device.pair.setupCode` creates a mobile setup code and, by default, a PNG QR data URL. It requires `operator.admin` and is intentionally omitted from advertised discovery. Current gateways include an opaque non-secret `setupId`, authoritative `expiresAtMs`, `setupCode`, optional `qrDataUrl`, `gatewayUrl`, the non-secret `auth` label, `urlSource`, and the issued `access` level (`full`, `limited`, or `node`). Older protocol-v4 gateways omit `setupId` and `expiresAtMs`, so separately shipped clients must treat those lifecycle fields as optional. The `setupId` is independent from the bootstrap credential and is not embedded in the setup code.
+    - `device.pair.setupStatus` reconciles one setup credential the caller already issued (`{ setupId }`). It requires `operator.admin`, is omitted from advertised discovery, and returns either `{ completion }` after the credential-bearing response finishes or `{ deliveryUncertain }` when the bearer was retired but response delivery could not be confirmed. Both use the same non-secret payload as their corresponding events. When both fields are absent, the gateway holds no retained outcome for that `setupId`.
     - `device.pair.approve`, `device.pair.reject`, and `device.pair.remove` manage device-pairing records.
     - `device.pair.rename` assigns an operator label (`{ deviceId, label }`) that is preferred over the client-reported display name and survives device repair or re-approval.
     - `device.token.rotate` rotates a paired device token within its approved role and caller scope bounds.
@@ -666,6 +676,23 @@ methods. Treat this as feature discovery, not a full enumeration of
 
     The setup code embeds a short-lived bootstrap credential. Clients must not
     log or persist it beyond the pairing flow.
+
+    Pairing-scoped clients receive `device.pair.setup.completed` only after the
+    exact setup handoff has delivered its credentials. Its payload is
+    `{ setupId, deviceId, deviceName?, access, ts }`; it never includes the
+    bootstrap credential or token-derived identifiers.
+
+    If the response closes before delivery can be confirmed, the gateway keeps
+    the bearer retired and emits `device.pair.setup.deliveryUncertain` instead
+    of success. The presenting client should offer the operator a path to inspect
+    or remove the paired device and generate a new setup code.
+
+    The gateway records an uncertain outcome when it consumes the bearer, then
+    promotes it to completion only after response delivery finishes. Operator
+    event frames are best effort and drop for slow subscribers rather than
+    closing their socket. A client that displayed a setup code must therefore
+    call `device.pair.setupStatus` before presenting the code as expired.
+    Outcomes are retained past the credential's own expiry.
 
   </Accordion>
 
@@ -733,7 +760,11 @@ methods. Treat this as feature discovery, not a full enumeration of
 - `shutdown`: gateway shutdown notification.
 - `node.pair.requested` / `node.pair.resolved`: node pairing lifecycle.
 - `node.invoke.request`: node invoke request broadcast.
-- `device.pair.requested` / `device.pair.resolved`: paired-device lifecycle.
+- `device.pair.requested` / `device.pair.resolved`: paired-device approval lifecycle.
+- `device.pair.setup.completed`: exact setup-code handoff completion, scoped to
+  `operator.pairing`.
+- `device.pair.setup.deliveryUncertain`: replay-safe setup-code retirement whose
+  credential response delivery could not be confirmed, scoped to `operator.pairing`.
 - `voicewake.changed`: wake-word trigger config changed.
 - `config.changed`: a config write persisted (payload carries the config path,
   the new snapshot hash, and a timestamp — never config content). Operator-read
@@ -1019,6 +1050,18 @@ context.
   runtime request configuration.
 - `"all"`: full gateway catalog, bypassing `agents.defaults.modelPolicy.allow`. Use for
   diagnostics/discovery UIs, not normal model pickers.
+
+Two optional controls separate automatic reads from operator-requested discovery:
+
+- `preparedOnly: true` reuses the current prepared catalog or a completed catalog for that
+  runtime generation without starting provider discovery. Control UI startup and polling use
+  this mode.
+- `refresh: true` replaces a completed full catalog when the selected view requires discovery.
+  Concurrent refreshes share one build; a failed refresh leaves the previous completed catalog
+  available and returns the failure to the caller.
+
+`preparedOnly: true` and `refresh: true` are mutually exclusive because one forbids discovery
+while the other requests it.
 
 ## Exec approvals
 

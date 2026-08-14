@@ -12,7 +12,6 @@ import {
   applyPersistentOperation,
   assertConfigWriteDoesNotBypassInferenceVerification,
   createNoExitRuntime,
-  executePluginInstall,
   executeSetDefaultModel,
   executeSetup,
   formatChannelDocsUrl,
@@ -30,6 +29,7 @@ import {
   type ExecuteOptions,
 } from "./operations-execution-helpers.js";
 import type { SystemAgentOperation, SystemAgentOperationResult } from "./operations-parse.js";
+import { executePluginInstall } from "./plugin-install.js";
 
 const loadOverviewModule = async () => await import("./overview.js");
 
@@ -502,15 +502,19 @@ export async function executeSystemAgentOperation(
         },
       });
     case "open-tui": {
-      const agentId = await resolveTuiAgentId({
+      const overview = await loadOverviewForOperation(opts.deps);
+      const agentId = resolveTuiAgentId({
         requestedAgentId: operation.agentId,
         requestedWorkspace: operation.workspace,
-        deps: opts.deps,
+        overview,
       });
       const session = agentId ? buildAgentMainSessionKey({ agentId }) : undefined;
       const runTui = opts.deps?.runTui ?? (await import("../tui/tui.js")).runTui;
+      // A reachable Gateway owns the state lock, so embedded mode would fail during hatch.
+      // Keep embedded mode only as the no-Gateway fallback for standalone sessions.
+      const useEmbeddedTui = !overview.gateway.reachable;
       const result = await runTui({
-        local: true,
+        local: useEmbeddedTui,
         session,
         deliver: false,
         historyLimit: 200,

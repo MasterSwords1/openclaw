@@ -43,6 +43,8 @@ type ActiveReplySteerParams = {
   touchActiveSessionEntry: () => Promise<void>;
   typing: RunReplyAgentParams["typing"];
   typingSignals: TypingSignaler;
+  toolAuthorityFingerprint: string;
+  pendingInputAuthorityFingerprint?: string;
 };
 
 function resolveAcceptedSteerRunId(params: ActiveReplySteerParams): string {
@@ -189,6 +191,10 @@ export async function runActiveReplySteer(params: ActiveReplySteerParams): Promi
       {
         steeringMode: "all",
         isInboundUserMessage: true,
+        toolAuthorityFingerprint: params.toolAuthorityFingerprint,
+        ...(params.pendingInputAuthorityFingerprint
+          ? { pendingInputAuthorityFingerprint: params.pendingInputAuthorityFingerprint }
+          : {}),
         ...(followupRun.images?.length ? { images: followupRun.images } : {}),
         ...(followupRun.imageOrder?.length ? { imageOrder: followupRun.imageOrder } : {}),
         ...(followupRun.media?.length ? { media: followupRun.media } : {}),

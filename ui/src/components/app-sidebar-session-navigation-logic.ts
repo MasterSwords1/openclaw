@@ -1,6 +1,6 @@
+import { normalizeOptionalString } from "@openclaw/normalization-core/string-coerce";
 import type { GatewaySessionRow, SessionsListResult } from "../api/types.ts";
-import { SIDEBAR_NAV_ROUTES } from "../app-navigation.ts";
-import type { NavigationRouteId } from "../app-navigation.ts";
+import { SIDEBAR_NAV_ROUTES, type NavigationRouteId } from "../app-navigation.ts";
 import type { RouteId } from "../app-route-paths.ts";
 import type { ApplicationContext } from "../app/context.ts";
 import { t } from "../i18n/index.ts";
@@ -38,7 +38,6 @@ import {
   resolveUiSessionNavigationParentKey,
 } from "../lib/sessions/session-key.ts";
 import { reconcileSidebarZone } from "../lib/sidebar-zone.ts";
-import { normalizeOptionalString } from "../lib/string-coerce.ts";
 import {
   limitSidebarSessionRows,
   SIDEBAR_SESSION_NO_ATTENTION,
@@ -49,6 +48,7 @@ import {
 } from "./app-sidebar-session-types.ts";
 import type { SidebarWorkboardBoard } from "./app-sidebar-workboard.ts";
 import { resolveCloudWorkerStopAction } from "./cloud-worker-stop.ts";
+import type { SessionAttentionController } from "./session-attention-controller.ts";
 import {
   listSessionCreators,
   type SessionCreatedActor,
@@ -56,6 +56,20 @@ import {
 } from "./session-owner-chip.ts";
 
 type SessionRow = SessionsListResult["sessions"][number];
+
+export function resolveSidebarHomeAttention(
+  attention: SessionAttentionController,
+  sessionKey: string,
+  row: GatewaySessionRow | null,
+) {
+  const known = attention
+    .knownSessionAttention()
+    .find((entry) => areUiSessionKeysEquivalent(entry.sessionKey, sessionKey));
+  return (
+    known?.attention ??
+    (row ? attention.resolveSessionAttention(row) : SIDEBAR_SESSION_NO_ATTENTION)
+  );
+}
 
 export function compareSidebarSessionRowsByMode(input: {
   a: SessionRow;
@@ -197,6 +211,8 @@ export function buildSidebarSessionNavigationState(input: {
       acpSession: isAcpSessionKey(row.key),
       worktreeId: row.worktree?.id,
       placementState: row.placement?.state,
+      diskSpaceStatus:
+        row.placement?.state === "active" ? row.placement.diskSpace?.status : undefined,
       workspaceConflictCount:
         row.placement && "workspaceResultConflict" in row.placement
           ? Math.max(
@@ -579,4 +595,29 @@ export function applySidebarSessionCreatorFilter(input: {
     ownershipVisible,
     activeCreatorId,
   };
+}
+
+/** Merge adopted catalog sessions into the visible PR-indicator rows so an
+    adopted session hidden from the regular list still surfaces its PR state. */
+export function mergeAdoptedSessionPullRequestRows(input: {
+  rows: SidebarRecentSession[];
+  adopted: ReadonlySet<string>;
+  sessionsResult: SessionsListResult | null;
+  sessionRowsByAgent: Record<string, GatewaySessionRow[]>;
+  navigationState: SidebarSessionNavigationState;
+}): SidebarRecentSession[] {
+  if (input.adopted.size === 0) {
+    return input.rows;
+  }
+  const byKey = new Map(input.rows.map((row) => [row.key, row]));
+  const liveRows = [
+    ...(input.sessionsResult?.sessions ?? []),
+    ...Object.values(input.sessionRowsByAgent).flat(),
+  ];
+  for (const row of liveRows) {
+    if (input.adopted.has(row.key) && !byKey.has(row.key)) {
+      byKey.set(row.key, input.navigationState.toSidebarSession(row));
+    }
+  }
+  return [...byKey.values()];
 }
