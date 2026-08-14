@@ -12,6 +12,7 @@ import {
 } from "./agent-runner-core.js";
 import {
   admitFollowupRunLifecycle,
+  completeFollowupRunLifecycle,
   parkSteerCandidate,
   resolveFollowupAbortSignal,
   scheduleFollowupDrain,
@@ -223,6 +224,20 @@ export async function runActiveReplySteer(params: ActiveReplySteerParams): Promi
       steerSessionId,
       transcriptCommit: steerOutcome.transcriptCommit,
     });
+    const hostStagingDir = followupRun.hostWorkspaceStagingDir;
+    const turnAdoptionLifecycle = followupRun.turnAdoptionLifecycle;
+
+    if (activeReplyOperation && (hostStagingDir || turnAdoptionLifecycle)) {
+      delete followupRun.hostWorkspaceStagingDir;
+      delete followupRun.turnAdoptionLifecycle;
+      activeReplyOperation.completeThen(() => {
+        completeFollowupRunLifecycle({
+          hostWorkspaceStagingDir: hostStagingDir,
+          turnAdoptionLifecycle: turnAdoptionLifecycle,
+        });
+      });
+    }
+
     parked.consume();
     params.opts?.onHostStagingDelegated?.();
     if (adoptionDisposition === "stop") {
