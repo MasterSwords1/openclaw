@@ -43,13 +43,15 @@ vi.mock("./agent-runner-core.js", () => ({
 const { runActiveReplySteer } = await import("./agent-runner-steer-adoption.js");
 
 describe("runActiveReplySteer", () => {
-  it("transfers cleanup ownership of accepted steer from queued followup to active operation terminal callback", async () => {
-    let capturedTerminalCallback: (() => void) | undefined;
+  it("transfers cleanup ownership of accepted steer to active operation settlement", async () => {
+    let settleOwner: (() => void) | undefined;
+    const ownerSettlement = new Promise<void>((resolve) => {
+      settleOwner = resolve;
+    });
 
     const activeReplyOperation = {
-      completeThen: (fn: () => void) => {
-        capturedTerminalCallback = fn;
-      },
+      completeThen: vi.fn(),
+      ownerSettlement,
       recordActivity: vi.fn(),
       markAcceptedSteeredInboundAudio: vi.fn(),
     };
@@ -57,9 +59,9 @@ describe("runActiveReplySteer", () => {
     const followupRun = {
       hostWorkspaceStagingDir: "/tmp/steer-staging",
       turnAdoptionLifecycle: { onAdopted: vi.fn() },
-      run: { 
+      run: {
         sessionId: "steer-session",
-        messageProvenance: { Provider: "test-provider", Surface: "test-surface" }
+        messageProvenance: { Provider: "test-provider", Surface: "test-surface" },
       },
     };
 
@@ -83,12 +85,12 @@ describe("runActiveReplySteer", () => {
     expect(followupRun.hostWorkspaceStagingDir).toBeUndefined();
     expect(followupRun.turnAdoptionLifecycle).toBeUndefined();
 
-    // Check that completeThen callback was registered and completeFollowupRunLifecycle wasn't called yet
-    expect(capturedTerminalCallback).toBeDefined();
+    // Cleanup must wait for the active owner; registering it must not complete the owner.
+    expect(activeReplyOperation.completeThen).not.toHaveBeenCalled();
     expect(mocks.completeFollowupRunLifecycle).not.toHaveBeenCalled();
 
-    // Call terminal callback
-    capturedTerminalCallback!();
+    settleOwner!();
+    await Promise.resolve();
 
     expect(mocks.completeFollowupRunLifecycle).toHaveBeenCalledWith({
       hostWorkspaceStagingDir: "/tmp/steer-staging",

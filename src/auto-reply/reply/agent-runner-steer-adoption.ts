@@ -19,7 +19,11 @@ import {
   type FollowupRun,
 } from "./queue.js";
 import type { ReplyOperationRunState } from "./reply-operation-run-state.js";
-import { type ReplyOperation, replyRunRegistry } from "./reply-run-registry.js";
+import {
+  runAfterReplyOperationClear,
+  type ReplyOperation,
+  replyRunRegistry,
+} from "./reply-run-registry.js";
 import { refreshReplyOperationTyping } from "./reply-run-typing.js";
 import { buildChannelSourceTurnId } from "./source-turn-id.js";
 import type { TypingSignaler } from "./typing-mode.js";
@@ -230,12 +234,17 @@ export async function runActiveReplySteer(params: ActiveReplySteerParams): Promi
     if (activeReplyOperation && (hostStagingDir || turnAdoptionLifecycle)) {
       delete followupRun.hostWorkspaceStagingDir;
       delete followupRun.turnAdoptionLifecycle;
-      activeReplyOperation.completeThen(() => {
+      const cleanupAfterSettlement = () => {
         completeFollowupRunLifecycle({
           hostWorkspaceStagingDir: hostStagingDir,
           turnAdoptionLifecycle: turnAdoptionLifecycle,
         });
-      });
+      };
+      if (activeReplyOperation.ownerSettlement) {
+        void activeReplyOperation.ownerSettlement.then(cleanupAfterSettlement);
+      } else {
+        runAfterReplyOperationClear(activeReplyOperation, cleanupAfterSettlement);
+      }
     }
 
     parked.consume();

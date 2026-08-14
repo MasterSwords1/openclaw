@@ -1112,7 +1112,6 @@ export async function getReplyFromConfig(
       },
     };
   } else if (hostWorkspaceStagingDir && originalLifecycle) {
-    const targetStagingDir = hostWorkspaceStagingDir;
     const wrappedLifecycle: TurnAdoptionLifecycle = {
       ...originalLifecycle,
       onDeferred: () => {
@@ -1122,45 +1121,13 @@ export async function getReplyFromConfig(
         }
         return res;
       },
-      onAbandoned: () => {
-        try {
-          originalLifecycle?.onAbandoned?.();
-        } finally {
-          logVerbose(
-            `[host-staging-cleanup] Cleaning up delegated queued host workspace staging directory (abandoned): ${path.basename(targetStagingDir)}`,
-          );
-          fs.rm(targetStagingDir, { recursive: true, force: true }).catch((err: unknown) => {
-            const errorCode =
-              err instanceof Error && "code" in err && typeof err.code === "string"
-                ? err.code
-                : "UNKNOWN";
-            logVerbose(
-              `[host-staging-cleanup] Failed to clean up delegated host workspace staging directory (abandoned): ${path.basename(targetStagingDir)} (${errorCode})`,
-            );
-          });
-        }
-      },
-      onSettled: () => {
-        try {
-          originalLifecycle?.onSettled?.();
-        } finally {
-          logVerbose(
-            `[host-staging-cleanup] Cleaning up delegated queued host workspace staging directory (settled): ${path.basename(targetStagingDir)}`,
-          );
-          fs.rm(targetStagingDir, { recursive: true, force: true }).catch((err: unknown) => {
-            const errorCode =
-              err instanceof Error && "code" in err && typeof err.code === "string"
-                ? err.code
-                : "UNKNOWN";
-            logVerbose(
-              `[host-staging-cleanup] Failed to clean up delegated host workspace staging directory (settled): ${path.basename(targetStagingDir)} (${errorCode})`,
-            );
-          });
-        }
-      },
     };
     effectiveOpts = {
       ...effectiveOpts,
+      hostWorkspaceStagingDir,
+      onHostStagingDelegated: () => {
+        stagingCleanupDelegated = true;
+      },
       turnAdoptionLifecycle: wrappedLifecycle,
     };
   }

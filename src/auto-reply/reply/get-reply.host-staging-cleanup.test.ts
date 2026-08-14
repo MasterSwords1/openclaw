@@ -3,12 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { useAutoCleanupTempDirTracker } from "../../../test/helpers/temp-dir.js";
 import { createGetReplyContinueDirectivesResult } from "./get-reply.test-fixtures.js";
 
-const {
-  mocks,
-  stageSandboxMediaMock,
-  runPreparedReplyMock,
-  buildCtx,
-} = vi.hoisted(() => ({
+const { mocks, stageSandboxMediaMock, runPreparedReplyMock, buildCtx } = vi.hoisted(() => ({
   mocks: {
     resolveReplyDirectives: vi.fn(),
     triggerInternalHook: vi.fn(),
@@ -126,6 +121,8 @@ describe("getReplyFromConfig host workspace staging cleanup", () => {
     vi.mocked(runPreparedReplyMock).mockImplementation(async (params) => {
       if (params.opts?.turnAdoptionLifecycle) {
         lifecycleRef = params.opts.turnAdoptionLifecycle;
+        expect(params.opts.hostWorkspaceStagingDir).toBe(tempDir);
+        expect(params.opts.onHostStagingDelegated).toEqual(expect.any(Function));
         lifecycleRef.onDeferred?.();
       }
       return undefined;
@@ -146,7 +143,12 @@ describe("getReplyFromConfig host workspace staging cleanup", () => {
     expect(existsAfterReply).toBe(true);
 
     expect(lifecycleRef).toBeDefined();
-    lifecycleRef?.onSettled?.();
+    const { completeFollowupRunLifecycle } = await import("./queue/types.js");
+    completeFollowupRunLifecycle({
+      hostWorkspaceStagingDir: tempDir,
+      steerPending: undefined,
+      turnAdoptionLifecycle: lifecycleRef,
+    });
 
     await new Promise((resolve) => {
       setTimeout(resolve, 50);
