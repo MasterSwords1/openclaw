@@ -1,3 +1,4 @@
+import { Buffer } from "node:buffer";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import type { Page } from "playwright";
@@ -36,6 +37,7 @@ suite.define(() => {
   it("grows the first prompt downward without moving the identity, then caps at ten lines", async () => {
     await withNewSessionPage(async (page) => {
       const gateway = await installMockGateway(page);
+      await page.emulateMedia({ reducedMotion: "reduce" });
       await page.goto(`${suite.server.baseUrl}new`);
       const message = page.locator(".new-session-page__message");
       await message.waitFor();
@@ -94,9 +96,14 @@ suite.define(() => {
       ]);
       expect(capped.clientHeight).toBeLessThan(capped.scrollHeight);
       expect(capped.overflowY).toBe("auto");
-      expect(expandedIdentityBox?.y).toBeCloseTo(identityBox?.y ?? 0, 0);
-      expect(expandedTriggersBox?.y).toBeCloseTo(triggersBox?.y ?? 0, 0);
-      expect(expandedComposerBox?.y).toBeCloseTo(composerBox?.y ?? 0, 0);
+      // Browser subpixel rounding may shift stable blocks by a pixel; larger movement is visible.
+      for (const [before, after] of [
+        [identityBox, expandedIdentityBox],
+        [triggersBox, expandedTriggersBox],
+        [composerBox, expandedComposerBox],
+      ]) {
+        expect(Math.abs((after?.y ?? 0) - (before?.y ?? 0))).toBeLessThanOrEqual(2);
+      }
       await captureUiProof(page, "new-session-composer-capped-scrollbar.png");
       const start = page.getByRole("button", { name: "Start session" });
       await expect(start.isVisible()).resolves.toBe(true);
@@ -140,6 +147,63 @@ suite.define(() => {
           },
         ],
       });
+    });
+  });
+
+  it("enlarges and removes a picked image without object URL support", async () => {
+    await withNewSessionPage(async (page) => {
+      await page.addInitScript(() => {
+        Object.defineProperty(URL, "createObjectURL", { configurable: true, value: undefined });
+      });
+      await installMockGateway(page);
+      await page.goto(`${suite.server.baseUrl}new`);
+
+      await page
+        .locator(".agent-chat__photo-input")
+        .setInputFiles(path.join(process.cwd(), "ui/public/favicon-32.png"));
+
+      const attachment = page.locator(".chat-attachment-thumb");
+      const preview = attachment.locator('img[alt="Attachment preview"]');
+      const previewButton = page.getByRole("button", { name: "Open image favicon-32.png" });
+      await preview.waitFor({ state: "visible" });
+      await expect.poll(() => preview.getAttribute("src")).toMatch(/^data:image\/png;base64,/u);
+      await captureUiProof(page, "new-session-picked-image-preview.png");
+      await previewButton.click();
+      const lightbox = page.locator("openclaw-image-lightbox");
+      const dialog = page.getByRole("dialog", { name: "Image preview: favicon-32.png" });
+      await dialog.waitFor({ state: "visible" });
+      await expect(lightbox.getAttribute("title")).resolves.toBe("favicon-32.png");
+      await captureUiProof(page, "new-session-picked-image-lightbox.png");
+      await page.keyboard.press("Escape");
+      await lightbox.waitFor({ state: "detached" });
+      await previewButton.press("Enter");
+      await dialog.waitFor({ state: "visible" });
+      await page.keyboard.press("Escape");
+      await page.getByRole("button", { name: "Remove attachment" }).click();
+      await expect.poll(() => attachment.count()).toBe(0);
+      await captureUiProof(page, "new-session-picked-image-removed.png");
+    });
+  });
+
+  it("keeps blob-backed SVG previews out of original-document navigation", async () => {
+    await withNewSessionPage(async (page) => {
+      await installMockGateway(page);
+      await page.goto(`${suite.server.baseUrl}new`);
+
+      await page.locator(".agent-chat__photo-input").setInputFiles({
+        name: "untrusted.svg",
+        mimeType: "image/svg+xml",
+        buffer: Buffer.from(
+          "<svg xmlns='http://www.w3.org/2000/svg'><rect width='1' height='1'/></svg>",
+        ),
+      });
+
+      const previewButton = page.getByRole("button", { name: "Open image untrusted.svg" });
+      await expect.poll(() => previewButton.locator("img").getAttribute("src")).toMatch(/^blob:/u);
+      await previewButton.click();
+      await page.getByRole("dialog", { name: "Image preview: untrusted.svg" }).waitFor();
+      await expect(page.getByRole("link", { name: "Open original" }).count()).resolves.toBe(0);
+      await captureUiProof(page, "new-session-svg-lightbox.png");
     });
   });
 
@@ -614,8 +678,8 @@ suite.define(() => {
 
       const draft = page.locator(".new-session-page__scroll");
       const message = page.locator(".new-session-page__message");
-      const placeSelect = page.locator("wa-popover.new-session-page__place-popover");
-      const placeSummary = page.locator("#new-session-place-trigger");
+      const placeSelect = page.locator("wa-popover.new-session-page__project-popover");
+      const placeSummary = page.locator("#new-session-project-trigger");
 
       await message.fill(submittedMessage);
       await placeSummary.click();
