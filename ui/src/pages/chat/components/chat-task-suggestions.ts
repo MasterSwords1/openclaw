@@ -189,6 +189,7 @@ function renderChatTaskSuggestions(props: {
                       }
                     })}
                     @scroll=${(event: Event) =>
+                      // SAFETY: Event target is an element.
                       updateTaskSuggestionPathFade(event.currentTarget as Element)}
                     >${cwd}</code
                   >

@@ -221,11 +221,14 @@ export async function executePreparedReplyRun(state: PreparedReplyRunAdmission) 
 
   const rawCtxMedia = (ctx.media ?? []).map((fact) => {
     if (isStagedMediaFact(fact)) {
-      const { originalPath, originalUrl, workspaceDir, ...rest } = fact;
-      const copy: MediaFact = { ...rest, path: originalPath };
-      if (originalUrl) {
-        copy.url = originalUrl;
+      const copy: MediaFact = Object.assign({}, fact);
+      copy.path = fact.originalPath;
+      if (fact.originalUrl) {
+        copy.url = fact.originalUrl;
       }
+      Reflect.deleteProperty(copy, "originalPath");
+      Reflect.deleteProperty(copy, "originalUrl");
+      Reflect.deleteProperty(copy, "workspaceDir");
       return copy;
     }
     return fact;

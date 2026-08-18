@@ -32,11 +32,6 @@ export type StageSandboxMediaResult = {
   hostWorkspaceStagingDir?: string;
 };
 
-type MediaFactWithOriginal = MediaFact & {
-  originalPath?: string;
-  originalUrl?: string;
-};
-
 const EMPTY_STAGE_RESULT: StageSandboxMediaResult = { staged: new Map() };
 
 type StageableMediaSource = {

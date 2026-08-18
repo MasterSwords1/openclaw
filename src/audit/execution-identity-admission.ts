@@ -241,6 +241,7 @@ function copyOwnedData<T>(value: T, ancestors = new WeakSet<object>()): T {
         writable: true,
       });
     }
+    // SAFETY: Validated by the type guard.
     return copy as T;
   } finally {
     ancestors.delete(value);
@@ -269,6 +270,7 @@ function validateEnvelope(
   if (Buffer.byteLength(encoded, "utf8") > EXECUTION_IDENTITY_ADMISSION_MAX_BYTES) {
     throw new Error("execution identity admission envelope exceeds 16 KiB");
   }
+  // SAFETY: Validate the bounded shape at runtime.
   return owned as ExecutionIdentityAdmissionEnvelope & Record<string, unknown>;
 }
 
@@ -423,6 +425,7 @@ export function parseExecutionIdentityAdmissionWork(
   if (!owned || typeof owned !== "object") {
     throw new Error("execution identity admission work violates its bounded contract");
   }
+  // SAFETY: Validate the bounded shape at runtime.
   const work = owned as { kind?: unknown; envelope?: unknown; token?: unknown };
   if (work.kind === "capture") {
     return freezeEnvelope({
