@@ -2,11 +2,13 @@ type MarkdownCodeBlockChrome = "copy" | "none";
 type MarkdownCodeBlockInteraction = "interactive" | "static";
 type MarkdownTableInteractions = "enabled" | "none";
 type MarkdownRenderMode = "document" | "message";
+type MarkdownCodeBlockSyntaxHighlighting = "live" | "deferred";
 
 export type MarkdownRenderOptions = {
   assistantTranscriptRoleHeaders?: boolean;
   codeBlockChrome?: MarkdownCodeBlockChrome;
   codeBlockInteraction?: MarkdownCodeBlockInteraction;
+  codeBlockSyntaxHighlighting?: MarkdownCodeBlockSyntaxHighlighting;
   fileLinks?: boolean;
   interactiveImages?: boolean;
   progressBars?: boolean;
@@ -24,6 +26,7 @@ export function normalizeMarkdownRenderOptions(
     assistantTranscriptRoleHeaders: options.assistantTranscriptRoleHeaders ?? false,
     codeBlockChrome: options.codeBlockChrome ?? "copy",
     codeBlockInteraction: options.codeBlockInteraction ?? "static",
+    codeBlockSyntaxHighlighting: options.codeBlockSyntaxHighlighting ?? "live",
     fileLinks: options.fileLinks ?? false,
     interactiveImages: options.interactiveImages ?? false,
     progressBars: options.progressBars ?? false,

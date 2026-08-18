@@ -936,12 +936,15 @@ describe("toStreamingMarkdownHtml", () => {
     expect(html).toBe("<p>prices are $$50 and</p>\n");
   });
 
-  it("streams an open code fence as a live-highlighted code block", () => {
+  it("defers syntax highlighting for an open streaming code fence", () => {
     const html = toStreamingMarkdownHtml("Intro\n\n```ts\nconst x = 1 < 2");
     const fragment = htmlFragment(html);
 
     expect(fragment.querySelector("p")?.textContent).toBe("Intro");
-    expect(fragment.querySelector("code.language-ts")?.textContent).toContain("const x = 1 < 2");
+    const code = fragment.querySelector("code.language-ts");
+    expect(code?.textContent).toContain("const x = 1 < 2");
+    expect(code?.classList.contains("hljs")).toBe(false);
+    expect(html).not.toContain("hljs-");
     expect(html).not.toContain("markdown-plain-text-fallback");
   });
 

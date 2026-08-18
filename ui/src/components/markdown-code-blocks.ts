@@ -55,6 +55,10 @@ function shouldRenderCodeBlockCopy(env: unknown): boolean {
   return codeBlockRenderEnv(env)?.codeBlockChrome !== "none";
 }
 
+function shouldHighlightCodeBlock(env: unknown): boolean {
+  return codeBlockRenderEnv(env)?.codeBlockSyntaxHighlighting !== "deferred";
+}
+
 function shouldRenderCodeBlockInteraction(env: unknown): boolean {
   return codeBlockRenderEnv(env)?.codeBlockInteraction === "interactive";
 }
@@ -268,12 +272,13 @@ function codeClassAttribute(lang: string, highlighted: string): string {
 function renderCodeElement(
   text: string,
   lang: string,
-  options: { blockArt?: boolean } = {},
+  options: { blockArt?: boolean; highlight?: boolean } = {},
 ): string {
   if (options.blockArt || isMarkdownBlockArtText(text)) {
     return `<pre><code class="markdown-block-art">${escapeMarkdownHtml(text)}</code></pre>`;
   }
-  const highlighted = highlightCodeHtml(text, lang);
+  const highlighted =
+    options.highlight === false ? escapeMarkdownHtml(text) : highlightCodeHtml(text, lang);
   const classAttr = codeClassAttribute(lang, highlighted);
   return `<pre><code${classAttr}>${highlighted}</code></pre>`;
 }
@@ -304,7 +309,10 @@ export function renderMarkdownCodeBlock(
   options: { blockArt?: boolean; copyText?: string } = {},
 ): string {
   const blockArt = options.blockArt || isMarkdownBlockArtText(text);
-  const codeBlock = renderCodeElement(text, lang, { blockArt });
+  const codeBlock = renderCodeElement(text, lang, {
+    blockArt,
+    highlight: shouldHighlightCodeBlock(env),
+  });
   if (!shouldRenderCodeBlockCopy(env) && !shouldRenderCodeBlockInteraction(env)) {
     return codeBlock;
   }

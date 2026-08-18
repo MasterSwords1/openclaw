@@ -609,7 +609,10 @@ export function toStreamingMarkdownHtml(
   }
   const tailHtml =
     tailRepairStart === null
-      ? renderSanitizedMarkdown(streamingTail, renderOptions)
+      ? renderSanitizedMarkdown(streamingTail, {
+          ...renderOptions,
+          codeBlockSyntaxHighlighting: "deferred",
+        })
       : renderSanitizedMarkdown(
           repairStreamingMarkdownTail(streamingTail, tailRepairStart - boundary),
           renderOptions,
