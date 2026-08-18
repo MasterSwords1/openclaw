@@ -143,6 +143,14 @@ export function parseIMessageTarget(raw: string): IMessageTarget {
     return { kind: "chat_identifier", chatIdentifier: bareChatIdentifier };
   }
 
+  // Reject bare numeric targets (e.g., "5") that are not valid E.164 numbers.
+  // This prevents silent misinterpretation as phone numbers.
+  if (/^\d+$/.test(trimmed)) {
+    throw new Error(
+      `Invalid iMessage target "${trimmed}". Bare numeric targets are not allowed. Use chat_id:<rowid> for a Messages chat row, a full E.164 handle beginning with '+', or sms:<short-code> for a legitimate SMS short code.`,
+    );
+  }
+
   return { kind: "handle", to: trimmed, service: "auto" };
 }
 

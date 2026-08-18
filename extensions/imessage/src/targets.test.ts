@@ -197,6 +197,18 @@ describe("imessage targets", () => {
       chatIdentifier: identifier,
     });
   });
+
+  it("rejects bare numeric targets", () => {
+    expect(() => parseIMessageTarget("5")).toThrow(
+      /Invalid iMessage target "5". Bare numeric targets are not allowed. Use chat_id:<rowid> for a Messages chat row, a full E.164 handle beginning with '\+', or sms:<short-code> for a legitimate SMS short code\./,
+    );
+    expect(() => parseIMessageTarget("123")).toThrow(
+      /Invalid iMessage target "123". Bare numeric targets are not allowed. Use chat_id:<rowid> for a Messages chat row, a full E.164 handle beginning with '\+', or sms:<short-code> for a legitimate SMS short code\./,
+    );
+    expect(() => parseIMessageTarget("007")).toThrow(
+      /Invalid iMessage target "007". Bare numeric targets are not allowed. Use chat_id:<rowid> for a Messages chat row, a full E.164 handle beginning with '\+', or sms:<short-code> for a legitimate SMS short code\./,
+    );
+  });
 });
 
 describe("imessage group policy", () => {
