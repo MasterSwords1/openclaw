@@ -409,6 +409,33 @@ PY
       );
     });
 
+    it("keeps deferred code highlighting separate from live rendering", () => {
+      const renderings = [
+        {
+          markdown: "```typescript\nconst liveFirst = 42;\n```",
+          first: { codeBlockSyntaxHighlighting: "live" as const },
+          second: { codeBlockSyntaxHighlighting: "deferred" as const },
+        },
+        {
+          markdown: "```typescript\nconst deferredFirst = 42;\n```",
+          first: { codeBlockSyntaxHighlighting: "deferred" as const },
+          second: { codeBlockSyntaxHighlighting: "live" as const },
+        },
+      ];
+
+      for (const { markdown, first, second } of renderings) {
+        const firstHtml = htmlFragment(toSanitizedMarkdownHtml(markdown, first));
+        const secondHtml = htmlFragment(toSanitizedMarkdownHtml(markdown, second));
+
+        expect(firstHtml.querySelector("pre code")?.classList.contains("hljs")).toBe(
+          first.codeBlockSyntaxHighlighting === "live",
+        );
+        expect(secondHtml.querySelector("pre code")?.classList.contains("hljs")).toBe(
+          second.codeBlockSyntaxHighlighting === "live",
+        );
+      }
+    });
+
     it("keeps short code blocks fully visible in interactive hosts", () => {
       const fragment = htmlFragment(
         toSanitizedMarkdownHtml(jsonBlock(7), { codeBlockInteraction: "interactive" }),
