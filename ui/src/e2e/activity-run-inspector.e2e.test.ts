@@ -281,7 +281,7 @@ describeControlUiE2e("Control UI durable Activity run inspector", () => {
       await expect
         .poll(() => modePanel.getAttribute("aria-labelledby"))
         .toBe("activity-mode-tab-live");
-      expect(new URL(page.url()).search).toBe("");
+      expect(new URL(page.url()).search).toBe("?view=live");
       await page.goBack();
       await page.getByRole("heading", { name: "Identity and authority" }).waitFor();
     } finally {
@@ -295,7 +295,7 @@ describeControlUiE2e("Control UI durable Activity run inspector", () => {
     const gateway = await installMockGateway(page, { sessionKey: "main" });
 
     try {
-      await page.goto(`${server.baseUrl}activity`);
+      await page.goto(`${server.baseUrl}activity?view=live`);
       await page.getByText("No activity yet.", { exact: true }).waitFor();
 
       for (let index = 0; index < 40; index += 1) {
@@ -428,8 +428,11 @@ describeControlUiE2e("Control UI durable Activity run inspector", () => {
       expect(finalContentPosition.elementTop).toBeGreaterThanOrEqual(
         finalContentPosition.ancestorTop,
       );
+      // Bound is 2, not 1: the scroll poll above tolerates a <=1px remainder
+      // (scrollHeight/clientHeight are integer-rounded) and the rects here are
+      // fractional, so sub-pixel rendering can add up to another pixel.
       expect(finalContentPosition.elementBottom).toBeLessThanOrEqual(
-        finalContentPosition.ancestorBottom + 1,
+        finalContentPosition.ancestorBottom + 2,
       );
       await screenshot(page, "14-bounded-run-inspector.png");
 

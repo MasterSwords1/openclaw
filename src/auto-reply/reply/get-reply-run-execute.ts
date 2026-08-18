@@ -32,11 +32,6 @@ import type { OriginatingChannelType } from "../templating.js";
 import { resolveCurrentTurnImages } from "./current-turn-images.js";
 import { resolveEffectiveReplyRoute } from "./effective-reply-route.js";
 import type { PreparedReplyRunAdmission } from "./get-reply-run-admission.js";
-
-type MediaFactWithOriginal = MediaFact & {
-  originalPath?: string;
-  originalUrl?: string;
-};
 import {
   buildPersistedMediaImageLayout,
   normalizeMessageTimestampMs,
@@ -59,6 +54,11 @@ import {
   setChannelSourceTurnId,
   shouldMintChannelSourceTurnId,
 } from "./source-turn-id.js";
+
+type MediaFactWithOriginal = MediaFact & {
+  originalPath?: string;
+  originalUrl?: string;
+};
 
 export async function executePreparedReplyRun(state: PreparedReplyRunAdmission) {
   const {
@@ -242,13 +242,26 @@ export async function executePreparedReplyRun(state: PreparedReplyRunAdmission) 
     inboundMediaIndexes,
     unresolvedSourceIndexes,
   });
-
   const mediaImageLayout = buildPersistedMediaImageLayout({
     ctx,
     media: userTurnMediaForPersistence,
     ctxMediaCount: ctxMediaForPersistence.length,
     imageOrder: currentTurnImages.imageOrder,
     imageSourceIndexes: currentTurnImages.imageSourceIndexes,
+  });
+  const promptMediaSourceIndexes = currentTurnImages.imageSourceIndexes?.map((sourceIndex) => {
+    if (sourceIndex === undefined) {
+      return undefined;
+    }
+    const promptIndex = inboundMediaIndexes.indexOf(sourceIndex);
+    return promptIndex >= 0 ? promptIndex : undefined;
+  });
+  const promptMediaImageLayout = buildPersistedMediaImageLayout({
+    ctx: {},
+    media: promptMediaForRun,
+    ctxMediaCount: inboundMediaIndexes.length,
+    imageOrder: currentTurnImages.imageOrder,
+    imageSourceIndexes: promptMediaSourceIndexes,
   });
   const inputProvenance = ctx.InputProvenance ?? sessionCtx.InputProvenance;
   const userTurnTimestamp = normalizeMessageTimestampMs(ctx.Timestamp);
@@ -369,8 +382,6 @@ export async function executePreparedReplyRun(state: PreparedReplyRunAdmission) 
     ...(queuedFollowupAbortSignal ? { abortSignal: queuedFollowupAbortSignal } : {}),
     deliveryCorrelations: opts?.queuedDeliveryCorrelations,
     turnAdoptionLifecycle: opts?.turnAdoptionLifecycle,
-    hostWorkspaceStagingDir: opts?.hostWorkspaceStagingDir,
-    onReplyAdmissionWaitChange: opts?.onReplyAdmissionWaitChange,
     ...(opts?.onFollowupQueueDisposition
       ? { onQueueDisposition: opts.onFollowupQueueDisposition }
       : {}),
@@ -379,8 +390,10 @@ export async function executePreparedReplyRun(state: PreparedReplyRunAdmission) 
     ...(queuedToolsAllow !== undefined ? { toolsAllow: queuedToolsAllow } : {}),
     ...(opts?.disableTools !== undefined ? { disableTools: opts.disableTools } : {}),
     enqueuedAt: Date.now(),
+    currentTurnImagesPrepared: true as const,
     images: currentTurnImages.images,
     imageOrder: currentTurnImages.imageOrder,
+    mediaImageLayout: promptMediaImageLayout,
     media: promptMediaForRun,
     // Originating channel for reply routing.
     originatingChannel: replyRoute.channel,
@@ -433,6 +446,8 @@ export async function executePreparedReplyRun(state: PreparedReplyRunAdmission) 
       sessionFile: preparedSessionState.sessionFile,
       workspaceDir,
       cwd: normalizeOptionalString(state.sessionEntry?.spawnedCwd),
+      permissionMode: preparedSessionState.sessionEntry?.permissionMode,
+      sessionRoot: normalizeOptionalString(preparedSessionState.sessionEntry?.sessionRoot),
       config: cfg,
       toolOverrides: preparedSessionState.sessionEntry?.toolOverrides,
       skillsSnapshot,
@@ -541,8 +556,11 @@ export async function executePreparedReplyRun(state: PreparedReplyRunAdmission) 
     : undefined;
   const inheritedCronCreatorAuthorityCapability = opts?.cronCreatorAuthorityCapability;
   const createdCronCreatorAuthorityCapability =
-    !inheritedCronCreatorAuthorityCapability && authorityRunId
-      ? createCronCreatorAuthorityCapability(authorityRunId)
+    !inheritedCronCreatorAuthorityCapability && authorityRunId && messageProvider
+      ? createCronCreatorAuthorityCapability(authorityRunId, {
+          kind: "external",
+          channel: messageProvider,
+        })
       : undefined;
   const cronCreatorAuthorityCapability =
     inheritedCronCreatorAuthorityCapability ?? createdCronCreatorAuthorityCapability;
@@ -579,7 +597,6 @@ export async function executePreparedReplyRun(state: PreparedReplyRunAdmission) 
       runtimePolicySessionKey,
       storePath,
       defaultModel,
-      agentCfgContextTokens: agentCfg?.contextTokens,
       resolvedVerboseLevel: resolvedVerboseLevel ?? "off",
       toolProgressDetail:
         normalizeToolProgressDetail(agentCfg?.toolProgressDetail) ??
