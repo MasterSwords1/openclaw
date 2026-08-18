@@ -216,17 +216,17 @@ export async function executePreparedReplyRun(state: PreparedReplyRunAdmission) 
       : undefined);
   setChannelSourceTurnId(sessionCtx, sourceTurnId);
   const persistGroupSender = replyRoute.chatType === "group" || replyRoute.chatType === "channel";
+  const isStagedMediaFact = (fact: MediaFact): fact is MediaFactWithOriginal =>
+    "originalPath" in fact && typeof fact.originalPath === "string";
+
   const rawCtxMedia = (ctx.media ?? []).map((fact) => {
-    if ((fact as MediaFactWithOriginal).originalPath) {
-      const copy = Object.assign({}, fact) as MediaFactWithOriginal;
-      copy.path = copy.originalPath;
-      if (copy.originalUrl) {
-        copy.url = copy.originalUrl;
-        delete copy.originalUrl;
+    if (isStagedMediaFact(fact)) {
+      const { originalPath, originalUrl, workspaceDir, ...rest } = fact;
+      const copy: MediaFact = { ...rest, path: originalPath };
+      if (originalUrl) {
+        copy.url = originalUrl;
       }
-      delete copy.originalPath;
-      delete copy.workspaceDir;
-      return copy as MediaFact;
+      return copy;
     }
     return fact;
   });
@@ -242,7 +242,7 @@ export async function executePreparedReplyRun(state: PreparedReplyRunAdmission) 
     inboundMediaIndexes,
     unresolvedSourceIndexes,
   });
->>>>>>> upstream/main
+
   const mediaImageLayout = buildPersistedMediaImageLayout({
     ctx,
     media: userTurnMediaForPersistence,

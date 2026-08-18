@@ -40,6 +40,16 @@ vi.mock("./agent-runner-core.js", () => ({
   scheduleFollowupDrainAfterReplyOperationClear: vi.fn(),
 }));
 
+vi.mock("./reply-run-registry.js", () => ({
+  replyRunRegistry: {
+    get: vi.fn(),
+    resolveCurrentMessageInjectionTarget: vi.fn(() => ({})),
+  },
+  beginReplyMessageInjectionTarget: vi.fn(() => ({})),
+  finalizeReplyMessageInjectionAttempt: vi.fn(() => ({ status: "accepted", outcome: {} })),
+  runAfterReplyOperationClear: vi.fn(),
+}));
+
 const { runActiveReplySteer } = await import("./agent-runner-steer-adoption.js");
 
 describe("runActiveReplySteer", () => {
@@ -57,9 +67,9 @@ describe("runActiveReplySteer", () => {
     const followupRun = {
       hostWorkspaceStagingDir: "/tmp/steer-staging",
       turnAdoptionLifecycle: { onAdopted: vi.fn() },
-      run: { 
+      run: {
         sessionId: "steer-session",
-        messageProvenance: { Provider: "test-provider", Surface: "test-surface" }
+        messageProvenance: { Provider: "test-provider", Surface: "test-surface" },
       },
     };
 

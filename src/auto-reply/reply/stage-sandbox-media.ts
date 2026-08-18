@@ -197,11 +197,13 @@ export async function stageSandboxMedia(params: {
         workspaceDir: effectiveWorkspaceDir,
       };
       if (hostWorkspaceStagingDir) {
-        (nextMedia[index] as MediaFactWithOriginal).originalPath =
-          (fact as MediaFactWithOriginal).originalPath ?? fact.path;
+        Object.assign(nextMedia[index], {
+          originalPath: "originalPath" in fact ? Reflect.get(fact, "originalPath") : fact.path,
+        });
         if (stagedUrlAliases.has(index)) {
-          (nextMedia[index] as MediaFactWithOriginal).originalUrl =
-            (fact as MediaFactWithOriginal).originalUrl ?? fact.url;
+          Object.assign(nextMedia[index], {
+            originalUrl: "originalUrl" in fact ? Reflect.get(fact, "originalUrl") : fact.url,
+          });
         }
       }
     }
