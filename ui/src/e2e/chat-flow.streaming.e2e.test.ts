@@ -311,6 +311,85 @@ suite.define(() => {
     }
   });
 
+  it("defers and restores code highlighting across a streamed fence", async () => {
+    const artifactDir = process.env.OPENCLAW_UI_E2E_ARTIFACT_DIR?.trim();
+    const context = await suite.newBrowserContext({
+      ...(artifactDir
+        ? {
+            recordVideo: { dir: artifactDir, size: { width: 1280, height: 900 } },
+          }
+        : {}),
+      serviceWorkers: "block",
+      viewport: { height: 900, width: 1280 },
+    });
+    const page = await context.newPage();
+    const gateway = await installMockGateway(page);
+
+    try {
+      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.locator(".agent-chat__composer-combobox textarea").fill("stream a code fence");
+      await page.getByRole("button", { name: "Send message" }).click();
+      const sendRequest = await gateway.waitForRequest("chat.send");
+      const runId = requireString(
+        requireRecord(sendRequest.params).idempotencyKey,
+        "chat send idempotency key",
+      );
+      const openFence = "```typescript\nconst answer = 42;";
+      await gateway.emitGatewayEvent("chat", {
+        deltaText: openFence,
+        message: {
+          content: [{ text: openFence, type: "text" }],
+          role: "assistant",
+          timestamp: Date.now(),
+        },
+        runId,
+        seq: 1,
+        sessionKey: "main",
+        state: "delta",
+      });
+
+      const streamingCode = page.locator(".chat-bubble.streaming code");
+      await expect(streamingCode).toContainText("const answer = 42;");
+      const openState = await streamingCode.evaluate((element) => ({
+        className: element.className,
+        hasHljsClass: element.classList.contains("hljs"),
+      }));
+      expect(openState.hasHljsClass).toBe(false);
+      if (artifactDir) {
+        await mkdir(artifactDir, { recursive: true });
+        await page.screenshot({
+          fullPage: true,
+          path: path.join(artifactDir, "markdown-open-fence.png"),
+        });
+      }
+
+      await gateway.emitChatFinal({ runId, text: `${openFence}\n\n\`\`\`` });
+      const committedCode = page.locator(".chat-bubble:not(.streaming) code").last();
+      await expect(committedCode).toContainText("const answer = 42;");
+      await expect
+        .poll(() => committedCode.evaluate((element) => element.classList.contains("hljs")))
+        .toBe(true);
+      const closedState = await committedCode.evaluate((element) => ({
+        className: element.className,
+        hasHljsClass: element.classList.contains("hljs"),
+      }));
+      console.log(
+        `[markdown-stream-proof] ${JSON.stringify({
+          openFence: openState,
+          closedFence: closedState,
+        })}`,
+      );
+      if (artifactDir) {
+        await page.screenshot({
+          fullPage: true,
+          path: path.join(artifactDir, "markdown-closed-fence.png"),
+        });
+      }
+    } finally {
+      await suite.closeBrowserContext(context);
+    }
+  });
+
   it("normalizes Unicode line separators in streaming and final chat DOM", async () => {
     const context = await suite.newBrowserContext({
       locale: "en-US",
