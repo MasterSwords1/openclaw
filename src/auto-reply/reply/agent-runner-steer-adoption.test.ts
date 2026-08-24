@@ -1,5 +1,6 @@
 // Tests agent-runner-steer-adoption queue lifecycle ownership transfer.
 import { describe, expect, it, vi } from "vitest";
+import { parkSteerCandidate } from "./queue.js";
 
 const mocks = vi.hoisted(() => ({
   parkedConsume: vi.fn(),
@@ -104,5 +105,56 @@ describe("runActiveReplySteer", () => {
       hostWorkspaceStagingDir: "/tmp/steer-staging",
       turnAdoptionLifecycle: expect.any(Object),
     });
+  });
+
+  it("retains staging and delegates fallback when steer is rejected", async () => {
+    // Mock the injection attempt to reject
+    mocks.finalizeReplyMessageInjectionAttempt.mockResolvedValueOnce({
+      status: "rejected",
+      outcome: { reason: "steer rejected by model" },
+    });
+
+    const activeReplyOperation = {
+      completeThen: vi.fn(),
+      recordActivity: vi.fn(),
+      markAcceptedSteeredInboundAudio: vi.fn(),
+    };
+
+    const followupRun = {
+      hostWorkspaceStagingDir: "/tmp/steer-staging",
+      turnAdoptionLifecycle: { onAdopted: vi.fn() },
+      run: {
+        sessionId: "steer-session",
+        messageProvenance: { Provider: "test-provider", Surface: "test-surface" },
+      },
+    };
+
+    const fallbackMock = vi.fn();
+    vi.mocked(parkSteerCandidate).mockReturnValueOnce({
+      consume: mocks.parkedConsume,
+      admit: mocks.parkedAdmit,
+      fallback: fallbackMock,
+    } as any);
+
+    await runActiveReplySteer({
+      providedReplyOperation: activeReplyOperation as any,
+      followupRun: followupRun as any,
+      typing: { cleanup: mocks.typingCleanup } as any,
+      queueKey: "queue-1",
+      sessionKey: "session-1",
+      sessionCtx: { Provider: "telegram", AccountId: "default", MessageSid: "msg-1" } as any,
+      replyOperationRunState: {} as any,
+      touchActiveSessionEntry: mocks.touchActiveSessionEntry,
+      typingSignals: { shouldStartImmediately: false } as any,
+      releaseAdmissionTicket: vi.fn(),
+      resolvedQueue: { debounceMs: 100 } as any,
+    });
+
+    // Check that fallback was called
+    expect(fallbackMock).toHaveBeenCalled();
+
+    // Properties should NOT be removed if rejected, so fallback can consume them
+    expect(followupRun.hostWorkspaceStagingDir).toBe("/tmp/steer-staging");
+    expect(followupRun.turnAdoptionLifecycle).toBeDefined();
   });
 });

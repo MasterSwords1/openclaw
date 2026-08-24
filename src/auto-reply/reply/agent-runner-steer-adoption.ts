@@ -169,22 +169,6 @@ export async function runActiveReplySteer(params: ActiveReplySteerParams): Promi
     const hostStagingDir = followupRun.hostWorkspaceStagingDir;
     const turnAdoptionLifecycle = followupRun.turnAdoptionLifecycle;
 
-    if (activeReplyOperation && (hostStagingDir || turnAdoptionLifecycle)) {
-      delete followupRun.hostWorkspaceStagingDir;
-      delete followupRun.turnAdoptionLifecycle;
-      const cleanupAfterSettlement = () => {
-        completeFollowupRunLifecycle({
-          hostWorkspaceStagingDir: hostStagingDir,
-          turnAdoptionLifecycle,
-        });
-      };
-      if (activeReplyOperation.ownerSettlement) {
-        void activeReplyOperation.ownerSettlement.then(cleanupAfterSettlement);
-      } else {
-        runAfterReplyOperationClear(activeReplyOperation, cleanupAfterSettlement);
-      }
-    }
-
     const finalization = await finalizeReplyMessageInjectionAttempt({
       attempt: injectionAttempt,
       target: injectionTarget,
@@ -200,6 +184,22 @@ export async function runActiveReplySteer(params: ActiveReplySteerParams): Promi
 
     if (finalization.status === "rejected") {
       return await fallback(finalization.outcome.reason);
+    }
+
+    if (activeReplyOperation && (hostStagingDir || turnAdoptionLifecycle)) {
+      delete followupRun.hostWorkspaceStagingDir;
+      delete followupRun.turnAdoptionLifecycle;
+      const cleanupAfterSettlement = () => {
+        completeFollowupRunLifecycle({
+          hostWorkspaceStagingDir: hostStagingDir,
+          turnAdoptionLifecycle,
+        });
+      };
+      if (activeReplyOperation.ownerSettlement) {
+        void activeReplyOperation.ownerSettlement.then(cleanupAfterSettlement);
+      } else {
+        runAfterReplyOperationClear(activeReplyOperation, cleanupAfterSettlement);
+      }
     }
 
     parked.consume();
