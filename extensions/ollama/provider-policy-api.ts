@@ -24,7 +24,7 @@ const OLLAMA_REASONING_THINKING_PROFILE = {
 } satisfies ProviderThinkingProfile;
 
 const OLLAMA_NON_REASONING_THINKING_PROFILE = {
-  levels: [{ id: "off" }, { id: "adaptive" }],
+  levels: [{ id: "off" }],
   defaultLevel: "off",
 } satisfies ProviderThinkingProfile;
 

@@ -2541,7 +2541,7 @@ describe("ollama plugin", () => {
         reasoning: false,
       }),
     ).toEqual({
-      levels: [{ id: "off" }, { id: "adaptive" }],
+      levels: [{ id: "off" }],
       defaultLevel: "off",
     });
 

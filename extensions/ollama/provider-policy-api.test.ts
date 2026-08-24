@@ -123,7 +123,7 @@ describe("ollama provider policy public artifact", () => {
     expect(
       resolveThinkingProfile({ provider: "ollama", modelId: "llama3.2", reasoning: false }),
     ).toEqual({
-      levels: [{ id: "off" }, { id: "adaptive" }],
+      levels: [{ id: "off" }],
       defaultLevel: "off",
     });
   });
@@ -147,7 +147,6 @@ describe("ollama provider policy public artifact", () => {
     (modelId) => {
       expect(resolveThinkingProfile({ provider: "ollama-cloud", modelId }).levels).toEqual([
         { id: "off" },
-        { id: "adaptive" },
       ]);
     },
   );
@@ -159,20 +158,18 @@ describe("ollama provider policy public artifact", () => {
         modelId: "glm-5.2",
         reasoning: false,
       }).levels,
-    ).toEqual([{ id: "off" }, { id: "adaptive" }]);
+    ).toEqual([{ id: "off" }]);
   });
 
   it("does not infer thinking support for unknown models without catalog metadata", () => {
     expect(resolveThinkingProfile({ provider: "ollama", modelId: "llama3.2" }).levels).toEqual([
       { id: "off" },
-      { id: "adaptive" },
     ]);
   });
 
   it("does not apply cloud catalog facts to an unqualified local model", () => {
     expect(resolveThinkingProfile({ provider: "ollama", modelId: "glm-5.2" }).levels).toEqual([
       { id: "off" },
-      { id: "adaptive" },
     ]);
   });
 });
