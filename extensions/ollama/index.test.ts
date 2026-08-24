@@ -2541,7 +2541,7 @@ describe("ollama plugin", () => {
         reasoning: false,
       }),
     ).toEqual({
-      levels: [{ id: "off" }],
+      levels: [{ id: "off" }, { id: "adaptive" }],
       defaultLevel: "off",
     });
 
@@ -2552,7 +2552,14 @@ describe("ollama plugin", () => {
         reasoning: true,
       }),
     ).toEqual({
-      levels: [{ id: "off" }, { id: "low" }, { id: "medium" }, { id: "high" }, { id: "max" }],
+      levels: [
+        { id: "off" },
+        { id: "low" },
+        { id: "medium" },
+        { id: "high" },
+        { id: "adaptive" },
+        { id: "max" },
+      ],
       defaultLevel: "off",
     });
   });
