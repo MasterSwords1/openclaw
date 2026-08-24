@@ -518,6 +518,81 @@ module.exports = {
     );
   });
 
+  it("loads state-backed bundled plugins through their no-op cli-metadata entry without dereferencing runtime.state", async () => {
+    // Mirrors the diffs plugin: its full entry allocates an artifact store from
+    // `runtime.state.openBlobStore`, which is absent on the empty runtime the CLI
+    // metadata loader supplies. A co-located no-op cli-metadata entry must keep
+    // CLI metadata capture from reaching that full entry.
+    const bundledRoot = makePluginLoaderTempDir();
+    const pluginDir = path.join(bundledRoot, "bundled-state-plugin");
+    const fullMarker = path.join(pluginDir, "full-loaded.txt");
+
+    fs.mkdirSync(pluginDir, { recursive: true });
+    process.env.OPENCLAW_BUNDLED_PLUGINS_DIR = bundledRoot;
+
+    fs.writeFileSync(
+      path.join(pluginDir, "package.json"),
+      JSON.stringify(
+        {
+          name: "@openclaw/bundled-state-plugin",
+          openclaw: { extensions: ["./index.cjs"] },
+        },
+        null,
+        2,
+      ),
+      "utf-8",
+    );
+    fs.writeFileSync(
+      path.join(pluginDir, "openclaw.plugin.json"),
+      JSON.stringify(
+        {
+          id: "bundled-state-plugin",
+          configSchema: EMPTY_PLUGIN_SCHEMA,
+        },
+        null,
+        2,
+      ),
+      "utf-8",
+    );
+    fs.writeFileSync(
+      path.join(pluginDir, "index.cjs"),
+      `require("node:fs").writeFileSync(${JSON.stringify(fullMarker)}, "loaded", "utf-8");
+module.exports = {
+  id: "bundled-state-plugin",
+  register(api) {
+    api.runtime.state.openBlobStore({ namespace: "x", maxEntries: 1, maxBytesPerEntry: 1, maxBytesPerNamespace: 1, overflowPolicy: "reject-new" });
+  },
+};`,
+      "utf-8",
+    );
+    fs.writeFileSync(
+      path.join(pluginDir, "cli-metadata.cjs"),
+      `module.exports = {
+  id: "bundled-state-plugin",
+  register() {},
+};`,
+      "utf-8",
+    );
+
+    const registry = await loadOpenClawPluginCliRegistry({
+      config: {
+        plugins: {
+          allow: ["bundled-state-plugin"],
+          entries: {
+            "bundled-state-plugin": {
+              enabled: true,
+            },
+          },
+        },
+      },
+    });
+
+    expect(fs.existsSync(fullMarker)).toBe(false);
+    expect(registry.plugins.find((entry) => entry.id === "bundled-state-plugin")?.status).toBe(
+      "loaded",
+    );
+  });
+
   it("collects channel CLI metadata during full plugin loads", () => {
     useNoBundledPlugins();
     const pluginDir = makePluginLoaderTempDir();
