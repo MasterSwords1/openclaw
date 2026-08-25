@@ -36,7 +36,57 @@ describe("parseSpawnInput", () => {
     expect(parsed).toEqual({
       ok: false,
       error:
-        "Use either --thread or --bind for /acp spawn, not both. Usage: /acp spawn [harness-id] [--mode persistent|oneshot] [--thread auto|here|off] [--bind here|off] [--cwd <path>] [--label <label>].",
+        "Use either --thread or --bind for /acp spawn, not both. Usage: /acp spawn [harness-id] [--mode persistent|oneshot] [--thread auto|here|off] [--bind here|off] [--cwd <path>] [--label <label>] [--model <model-id>] [--thinking <level>].",
+    });
+  });
+
+  it("parses --model and --thinking options", () => {
+    const parsed = parseSpawnInput(
+      {
+        cfg: {},
+        ctx: {},
+        command: {},
+      } as never,
+      ["codex", "--model", "ollama/gpt-oss:20b", "--thinking", "off"],
+    );
+
+    expect(parsed).toEqual({
+      ok: true,
+      value: {
+        agentId: "codex",
+        mode: "persistent",
+        thread: "off",
+        bind: "off",
+        cwd: undefined,
+        label: undefined,
+        model: "ollama/gpt-oss:20b",
+        thinking: "off",
+      },
+    });
+  });
+
+  it("parses positional model and thinking arguments", () => {
+    const parsed = parseSpawnInput(
+      {
+        cfg: {},
+        ctx: {},
+        command: {},
+      } as never,
+      ["codex", "ollama/gpt-oss:20b", "off"],
+    );
+
+    expect(parsed).toEqual({
+      ok: true,
+      value: {
+        agentId: "codex",
+        mode: "persistent",
+        thread: "off",
+        bind: "off",
+        cwd: undefined,
+        label: undefined,
+        model: "ollama/gpt-oss:20b",
+        thinking: "off",
+      },
     });
   });
 });

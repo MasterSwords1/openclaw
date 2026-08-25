@@ -16,7 +16,7 @@ import { resolveAcpCommandChannel, resolveAcpCommandThreadId } from "./context.j
 
 export const COMMAND = "/acp";
 const ACP_SPAWN_USAGE =
-  "Usage: /acp spawn [harness-id] [--mode persistent|oneshot] [--thread auto|here|off] [--bind here|off] [--cwd <path>] [--label <label>].";
+  "Usage: /acp spawn [harness-id] [--mode persistent|oneshot] [--thread auto|here|off] [--bind here|off] [--cwd <path>] [--label <label>] [--model <model-id>] [--thinking <level>].";
 const ACP_STEER_USAGE =
   "Usage: /acp steer [--session <session-key|session-id|session-label>] <instruction>";
 export const ACP_SET_MODE_USAGE =
@@ -64,6 +64,8 @@ type ParsedSpawnInput = {
   bind: AcpSpawnBindMode;
   cwd?: string;
   label?: string;
+  model?: string;
+  thinking?: string;
 };
 
 type ParsedSteerInput = {
@@ -186,6 +188,8 @@ export function parseSpawnInput(
   let cwd: string | undefined;
   let label: string | undefined;
   let rawAgentId: string | undefined;
+  let rawModel: string | undefined;
+  let rawThinking: string | undefined;
 
   for (let i = 0; i < normalizedTokens.length;) {
     const token = normalizedTokens[i] ?? "";
@@ -313,6 +317,8 @@ export function parseSpawnInput(
       bind,
       cwd,
       label,
+      model: normalizeOptionalString(rawModel),
+      thinking: normalizeOptionalString(rawThinking),
     },
   };
 }
@@ -426,7 +432,7 @@ export function resolveAcpHelpText(): string {
   return [
     "ACP commands:",
     "-----",
-    "/acp spawn [harness-id] [--mode persistent|oneshot] [--thread auto|here|off] [--bind here|off] [--cwd <path>] [--label <label>]",
+    "/acp spawn [harness-id] [--mode persistent|oneshot] [--thread auto|here|off] [--bind here|off] [--cwd <path>] [--label <label>] [--model <model-id>] [--thinking <level>]",
     "/acp cancel [session-key|session-id|session-label]",
     "/acp steer [--session <session-key|session-id|session-label>] <instruction>",
     "/acp close [session-key|session-id|session-label]",

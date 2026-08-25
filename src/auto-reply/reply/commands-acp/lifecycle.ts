@@ -4,6 +4,8 @@ import { normalizeOptionalString } from "@openclaw/normalization-core/string-coe
 import { truncateUtf16Safe } from "@openclaw/normalization-core/utf16-slice";
 import { getAcpSessionManager } from "../../../acp/control-plane/manager.js";
 import { resolveAcpSessionResolutionError } from "../../../acp/control-plane/manager.utils.js";
+import { resolveThinkingDefault } from "../../../agents/model-selection.js";
+import { splitModelRef } from "../../../agents/subagents/spawn/subagent-spawn-plan.js";
 import {
   cleanupFailedAcpSpawn,
   type AcpSpawnRuntimeCloseHandle,
@@ -145,6 +147,26 @@ export async function handleAcpSpawnAction(
     );
   }
 
+  // Resolve thinking default for ACP session initialization
+  // Following the same pattern as subagent ACP spawn in src/agents/subagents/spawn/acp-spawn-runtime.ts
+  const modelExplicit = normalizeOptionalString(spawn.model) !== undefined;
+  const model = modelExplicit
+    ? spawn.model
+    : (normalizeOptionalString(params.cfg.acp?.defaultModel) ?? "");
+
+  let thinking = spawn.thinking; // Use explicit thinking if provided
+  if (!thinking && model) {
+    // Split model ref to get provider and model ID for thinking default resolution
+    const { provider, model: modelId } = splitModelRef(model);
+    if (provider && modelId) {
+      thinking = resolveThinkingDefault({
+        cfg: params.cfg,
+        provider,
+        model: modelId,
+      });
+    }
+  }
+
   const acpManager = getAcpSessionManager();
   const sessionKey = `agent:${spawn.agentId}:acp:${randomUUID()}`;
   const resolvedCwd = resolveSpawnedWorkspaceInheritance({
@@ -179,6 +201,7 @@ export async function handleAcpSpawnAction(
       agent: spawn.agentId,
       mode: spawn.mode,
       cwd: runtimeCwd,
+      runtimeOptions: thinking ? { thinking } : undefined,
     });
     initializedRuntime = {
       runtime: initialized.runtime,
