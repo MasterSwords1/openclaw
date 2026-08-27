@@ -160,7 +160,6 @@ async function runHostModeStagingCleanupProof(): Promise<void> {
     ctx.media = [{ ...ctx.media?.[0], contentType: "image/png" }];
     ctx.Body = "Please inspect this attached image";
     ctx.SessionKey = sessionKey;
-    ctx.SessionId = sessionKey;
 
     const replyPromise = getReplyFromConfig(ctx, undefined, cfg);
 
@@ -183,30 +182,32 @@ async function runHostModeStagingCleanupProof(): Promise<void> {
       });
     }
 
-    if (preStagingDirs.length > 0) {
-      const activeStagingDirPath = path.join(workspaceMediaInbound, preStagingDirs[0]!);
-      const stagedFiles = await fs.readdir(activeStagingDirPath);
-      assert.ok(
-        stagedFiles.length >= 1,
-        `Expected staged files in ${activeStagingDirPath}, found ${stagedFiles.length}`,
-      );
-      const stagedFilePath = path.join(activeStagingDirPath, stagedFiles[0]!);
-      const stagedStat = await fs.stat(stagedFilePath);
-      assert.ok(stagedStat.size > 0, "Staged media attachment must be readable and non-empty");
-      console.log(
-        `  -> Active staging directory verified readable before settlement: dir=${preStagingDirs[0]}, files=${stagedFiles.join(",")}, size=${stagedStat.size} bytes`,
-      );
-    }
-
-    // Scenario 3: Await auto-reply settlement and verify post-settlement cleanup
-    console.log(
-      "\n[4/4] Awaiting auto-reply completion and verifying host staging directory removal...",
+    assert.ok(
+      preStagingDirs.length >= 1,
+      `Expected at least 1 active host-mode staging directory during active run, found ${preStagingDirs.length}`,
     );
+
+    const activeStagingDirPath = path.join(workspaceMediaInbound, preStagingDirs[0]!);
+    const stagedFiles = await fs.readdir(activeStagingDirPath);
+    assert.ok(
+      stagedFiles.length >= 1,
+      `Expected staged files in ${activeStagingDirPath}, found ${stagedFiles.length}`,
+    );
+    const stagedFilePath = path.join(activeStagingDirPath, stagedFiles[0]!);
+    const stagedStat = await fs.stat(stagedFilePath);
+    assert.ok(stagedStat.size > 0, "Staged media attachment must be readable and non-empty");
+    console.log(
+      `  -> Active staging directory verified readable before settlement: dir=${preStagingDirs[0]}, files=${stagedFiles.join(",")}, size=${stagedStat.size} bytes`,
+    );
+
+    // Scenario 3: Await auto-reply settlement and verify persisted media retention
+    console.log("\n[4/4] Awaiting auto-reply completion and verifying persisted staged media...");
     const replyResult = await replyPromise;
     assert.ok(replyResult !== undefined, "getReplyFromConfig must return a valid reply result");
     console.log("  -> Auto-reply settled successfully.");
 
-    // Wait for directory removal
+    // Successful staging is persisted into the transcript and must remain readable
+    // for subsequent turns; only empty producer-owned directories are removable.
     let stagingDirectories: string[] = [];
     for (let attempt = 0; attempt < 40; attempt++) {
       try {
@@ -215,7 +216,7 @@ async function runHostModeStagingCleanupProof(): Promise<void> {
       } catch {
         stagingDirectories = [];
       }
-      if (stagingDirectories.length === 0) {
+      if (stagingDirectories.length > 0) {
         break;
       }
       await new Promise<void>((resolve) => {
@@ -224,12 +225,22 @@ async function runHostModeStagingCleanupProof(): Promise<void> {
     }
 
     console.log(
-      `  -> Remaining openclaw-staged-* directories: count=${stagingDirectories.length} (expected=0)`,
+      `  -> Remaining openclaw-staged-* directories: count=${stagingDirectories.length} (expected=1 persisted)`,
     );
     assert.equal(
       stagingDirectories.length,
-      0,
-      "All openclaw-staged-* directories must be removed after settlement",
+      1,
+      "Successful staged media directory must remain after settlement",
+    );
+    const persistedStagedFilePath = path.join(
+      workspaceMediaInbound,
+      stagingDirectories[0]!,
+      stagedFiles[0]!,
+    );
+    const persistedStagedStat = await fs.stat(persistedStagedFilePath);
+    assert.ok(persistedStagedStat.size > 0, "Persisted staged media must remain readable");
+    console.log(
+      `  -> Persisted staged media remains readable after settlement: size=${persistedStagedStat.size} bytes`,
     );
 
     // Clean up gateway
