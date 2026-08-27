@@ -14,25 +14,8 @@ import {
 } from "./queue/types.js";
 import { stageSandboxMedia } from "./stage-sandbox-media.js";
 
-async function waitForDirectoryRemoval(dirPath: string, timeoutMs = 2000): Promise<boolean> {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    const exists = await fs
-      .stat(dirPath)
-      .then(() => true)
-      .catch(() => false);
-    if (!exists) {
-      return true;
-    }
-    await new Promise((resolve) => {
-      setTimeout(resolve, 5);
-    });
-  }
-  return false;
-}
-
 describe("stageSandboxMedia host staging lifecycle cleanup", () => {
-  it("returns hostWorkspaceStagingDir and cleans up staging directory on completeFollowupRunLifecycle", async () => {
+  it("returns hostWorkspaceStagingDir and staged files remain readable after completeFollowupRunLifecycle (non-empty dir preserved)", async () => {
     await withSandboxMediaTempHome("staging-cleanup-test", async (home) => {
       const mediaDir = path.join(home, ".openclaw", "media", "inbound");
       await fs.mkdir(mediaDir, { recursive: true });
@@ -65,23 +48,73 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
       const stagingDir = result.hostWorkspaceStagingDir!;
       expect(stagingDir).toContain("openclaw-staged-");
 
-      // Verify directory and staged file exist and are readable before cleanup
+      // Verify staged file is readable before lifecycle
       const stagedFilePath = Array.from(result.staged.values())[0]!;
       const fileContent = await fs.readFile(stagedFilePath, "utf-8");
       expect(fileContent).toBe("test-media-content");
 
-      // Simulate followup run holding the staging directory reference
       const followupRun: Partial<FollowupRun> = {
         hostWorkspaceStagingDir: stagingDir,
       };
 
-      // Trigger lifecycle completion
+      // Lifecycle cleanup: non-empty dir is preserved (staged files serve subsequent turns)
       completeFollowupRunLifecycle(followupRun as unknown as FollowupRun);
 
-      // Verify directory has been completely cleaned up via observable polling helper
-      const removed = await waitForDirectoryRemoval(stagingDir);
-      expect(removed).toBe(true);
+      // Reference is cleared immediately
       expect(followupRun.hostWorkspaceStagingDir).toBeUndefined();
+
+      // Allow the async rmdir attempt to settle
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, 50);
+      });
+
+      // Non-empty staging directory must still exist — staged files are needed for transcript replay
+      const exists = await fs
+        .stat(stagingDir)
+        .then(() => true)
+        .catch(() => false);
+      expect(exists).toBe(true);
+
+      // The staged file itself must remain readable
+      const afterContent = await fs.readFile(stagedFilePath, "utf-8");
+      expect(afterContent).toBe("test-media-content");
+    });
+  });
+
+  it("cleans up empty staging directory when all copies fail (producer-owned residue removed at source)", async () => {
+    await withSandboxMediaTempHome("failed-copy-cleanup-test", async (home) => {
+      const mediaDir = path.join(home, ".openclaw", "media", "inbound");
+      await fs.mkdir(mediaDir, { recursive: true });
+      // A directory at the attachment path makes the producer reach copyIn,
+      // which can create an empty destination parent before rejecting it.
+      const mediaUri = `media://inbound/missing.jpg`;
+      await fs.mkdir(path.join(mediaDir, "missing.jpg"));
+      const { ctx, sessionCtx } = createSandboxMediaContexts(mediaUri);
+      const cfg = {
+        ...createSandboxMediaStageConfig(home),
+        agents: {
+          defaults: {
+            sandbox: { mode: "off" },
+          },
+        },
+      } as unknown as Parameters<typeof stageSandboxMedia>[0]["cfg"];
+      const workspaceDir = path.join(home, "openclaw");
+
+      const result = await stageSandboxMedia({
+        ctx,
+        sessionCtx,
+        cfg,
+        sessionKey: "session-fail",
+        workspaceDir,
+      });
+
+      // No successful stages → no cleanup owner exposed and no producer residue.
+      expect(result.staged.size).toBe(0);
+      expect(result.hostWorkspaceStagingDir).toBeUndefined();
+      const stagingEntries = await fs
+        .readdir(path.join(workspaceDir, "media", "inbound"))
+        .catch(() => []);
+      expect(stagingEntries.filter((entry) => entry.startsWith("openclaw-staged-")).length).toBe(0);
     });
   });
 
@@ -119,12 +152,17 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
         hostWorkspaceStagingDir: stagingDir,
       };
 
-      // Simulate active-run drop disposition triggering completeFollowupRunLifecycle directly
       completeFollowupRunLifecycle(followupRun as unknown as FollowupRun);
 
-      const removed = await waitForDirectoryRemoval(stagingDir);
-      expect(removed).toBe(true);
+      // Reference cleared immediately on drop
       expect(followupRun.hostWorkspaceStagingDir).toBeUndefined();
+      // Staged file content is preserved (drop does not delete file data)
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, 50);
+      });
+      const stagedFilePath = Array.from(result.staged.values())[0]!;
+      const content = await fs.readFile(stagedFilePath, "utf-8").catch(() => null);
+      expect(content).toBe("dropped-turn-media-content");
     });
   });
 
@@ -167,13 +205,19 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
         } as unknown as FollowupRun["turnAdoptionLifecycle"],
       };
 
-      // Direct terminal cleanup removes staging directory without triggering queue abandonment
+      // Direct cleanup (no queue involvement) clears the reference but preserves the file
       cleanHostWorkspaceStaging(followupRun as unknown as FollowupRun);
 
-      const removed = await waitForDirectoryRemoval(stagingDir);
-      expect(removed).toBe(true);
       expect(followupRun.hostWorkspaceStagingDir).toBeUndefined();
       expect(onAbandoned).not.toHaveBeenCalled();
+
+      // Staged files are preserved — non-empty dir is not deleted
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, 50);
+      });
+      const stagedFilePath = Array.from(result.staged.values())[0]!;
+      const content = await fs.readFile(stagedFilePath, "utf-8").catch(() => null);
+      expect(content).toBe("direct-turn-media-content");
     });
   });
 
@@ -223,19 +267,24 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
         completeFollowupRunLifecycle({ hostWorkspaceStagingDir: hostStagingDir } as FollowupRun);
       });
 
-      // Verify directory exists before settlement
+      // Staged file must still be readable before settlement
+      const stagedFilePath = Array.from(result.staged.values())[0]!;
+      const content = await fs.readFile(stagedFilePath, "utf-8");
+      expect(content).toBe("preaccepted-turn-media-content");
+
+      // Settle active operation — cleanup fires, but non-empty dir stays (files preserved)
+      resolveSettlement!();
+      await ownerSettlement;
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, 50);
+      });
+
+      // Dir still exists because staging was successful (non-empty)
       const exists = await fs
         .stat(stagingDir)
         .then(() => true)
         .catch(() => false);
       expect(exists).toBe(true);
-
-      // Settle active operation
-      resolveSettlement!();
-      await ownerSettlement;
-
-      const removed = await waitForDirectoryRemoval(stagingDir);
-      expect(removed).toBe(true);
     });
   });
 
@@ -273,12 +322,16 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
         hostWorkspaceStagingDir: stagingDir,
       };
 
-      // Simulate skipped admission preparation exit calling completeFollowupRunLifecycle
       completeFollowupRunLifecycle(followupRun as unknown as FollowupRun);
 
-      const removed = await waitForDirectoryRemoval(stagingDir);
-      expect(removed).toBe(true);
       expect(followupRun.hostWorkspaceStagingDir).toBeUndefined();
+      // Staged files preserved even on skipped admission
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, 50);
+      });
+      const stagedFilePath = Array.from(result.staged.values())[0]!;
+      const content = await fs.readFile(stagedFilePath, "utf-8").catch(() => null);
+      expect(content).toBe("skipped-admission-media-content");
     });
   });
 
@@ -350,14 +403,17 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
       } as unknown as Parameters<typeof runPreparedReply>[0]);
 
       expect(emptyReply).toBeDefined();
-      const removed = await waitForDirectoryRemoval(stagingDir);
-      expect(removed).toBe(true);
+      // opts reference cleared after early exit (short-circuit path owns cleanup)
       expect(runOpts.hostWorkspaceStagingDir).toBeUndefined();
+      // Staged files themselves are preserved
+      const stagedFilePath = Array.from(result.staged.values())[0]!;
+      const content = await fs.readFile(stagedFilePath, "utf-8").catch(() => null);
+      expect(content).toBe("short-circuit-media-content");
     });
   });
 
-  it("cleans up staging directory when reply preparation rejects before lifecycle handoff", async () => {
-    await withSandboxMediaTempHome("staging-cleanup-rejection-test", async (home) => {
+  it("onHostStagingDelegated clears outer opts reference so post-handoff errors cannot delete active staged media", async () => {
+    await withSandboxMediaTempHome("post-handoff-safety-test", async (home) => {
       const mediaDir = path.join(home, ".openclaw", "media", "inbound");
       await fs.mkdir(mediaDir, { recursive: true });
       const sampleFile = path.join(mediaDir, "sample.jpg");
@@ -379,30 +435,57 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
         ctx,
         sessionCtx,
         cfg,
-        sessionKey: "session-rejection-test",
+        sessionKey: "session-handoff-test",
         workspaceDir,
       });
 
       const stagingDir = result.hostWorkspaceStagingDir!;
       expect(stagingDir).toBeDefined();
 
-      const runOpts: { hostWorkspaceStagingDir?: string } = {
+      // Model the exact shape wired in get-reply.ts
+      const outerOpts: {
+        hostWorkspaceStagingDir?: string;
+        onHostStagingDelegated?: () => void;
+      } = {
         hostWorkspaceStagingDir: stagingDir,
+        onHostStagingDelegated: () => {
+          delete outerOpts.hostWorkspaceStagingDir;
+        },
       };
 
-      // Simulating rejection during preparation phase before lifecycle handoff
-      try {
-        if (runOpts.hostWorkspaceStagingDir) {
-          cleanHostWorkspaceStaging(runOpts);
-        }
-        throw new Error("Simulated async preparation failure");
-      } catch (err) {
-        expect((err as Error).message).toBe("Simulated async preparation failure");
-      }
+      // Simulate executePreparedReplyRun taking ownership and calling the handoff callback
+      const followupRun: Partial<FollowupRun> = {
+        hostWorkspaceStagingDir: outerOpts.hostWorkspaceStagingDir,
+      };
+      outerOpts.onHostStagingDelegated?.();
 
-      const removed = await waitForDirectoryRemoval(stagingDir);
-      expect(removed).toBe(true);
-      expect(runOpts.hostWorkspaceStagingDir).toBeUndefined();
+      // After handoff: outer reference is cleared, followupRun owns the dir
+      expect(outerOpts.hostWorkspaceStagingDir).toBeUndefined();
+      expect(followupRun.hostWorkspaceStagingDir).toBe(stagingDir);
+
+      // Simulate a post-handoff error in the outer caller
+      const caughtErr = await (async () => {
+        try {
+          if (outerOpts.hostWorkspaceStagingDir) {
+            cleanHostWorkspaceStaging(outerOpts);
+          }
+          throw new Error("post-handoff error");
+        } catch (err) {
+          return err as Error;
+        }
+      })();
+      expect(caughtErr.message).toBe("post-handoff error");
+
+      // Staged file must still be readable — outer catch had no reference to delete it
+      const stagedFilePath = Array.from(result.staged.values())[0]!;
+      const content = await fs.readFile(stagedFilePath, "utf-8");
+      expect(content).toBe("test-media-content");
+
+      // Lifecycle owner can still clean up (empty-dir rmdir attempt on non-empty dir is a no-op)
+      completeFollowupRunLifecycle(followupRun as unknown as FollowupRun);
+      expect(followupRun.hostWorkspaceStagingDir).toBeUndefined();
+      const afterContent = await fs.readFile(stagedFilePath, "utf-8");
+      expect(afterContent).toBe("test-media-content");
     });
   });
 });

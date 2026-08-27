@@ -521,6 +521,10 @@ export async function executePreparedReplyRun(state: PreparedReplyRunAdmission) 
         : {}),
     },
   };
+  if (opts?.hostWorkspaceStagingDir) {
+    opts.onHostStagingDelegated?.();
+    delete opts.hostWorkspaceStagingDir;
+  }
   const sourceReplyDeliveryRuntimeOptions = opts as SourceReplyDeliveryRuntimeOptions | undefined;
   if (sourceReplyDeliveryRuntimeOptions?.sourceReplyDeliveryModeOrigin) {
     const sourceReplyDeliveryRuntime = createSourceReplyDeliveryRuntime({

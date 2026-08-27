@@ -257,6 +257,28 @@ export async function runReplyAgent(
     if (replyOperationRunState) {
       replyOperationRunState.admission = { status: "accepted", mode: "steer" };
     }
+<<<<<<< HEAD
+=======
+    if (activeReplyOperation && (followupRun.hostWorkspaceStagingDir || turnAdoptionLifecycle)) {
+      const hostStagingDir = followupRun.hostWorkspaceStagingDir;
+      delete followupRun.hostWorkspaceStagingDir;
+      delete followupRun.turnAdoptionLifecycle;
+      // Notify the producer that ownership has transferred so the outer error handler
+      // no longer sees the directory and cannot delete media owned by the active operation.
+      opts?.onHostStagingDelegated?.();
+      const cleanupAfterSettlement = () => {
+        completeFollowupRunLifecycle({
+          hostWorkspaceStagingDir: hostStagingDir,
+          turnAdoptionLifecycle,
+        });
+      };
+      if (activeReplyOperation.ownerSettlement) {
+        void activeReplyOperation.ownerSettlement.then(cleanupAfterSettlement);
+      } else {
+        runAfterReplyOperationClear(activeReplyOperation, cleanupAfterSettlement);
+      }
+    }
+>>>>>>> e1d28b18c (fix(auto-reply): preserve staged media ownership)
     releaseAdmissionTicket();
     typing.cleanup();
     return undefined;
@@ -327,6 +349,9 @@ export async function runReplyAgent(
     if (replyOperationRunState) {
       replyOperationRunState.admission = { status: "accepted", mode: "followup" };
     }
+    // followupRun now owns hostWorkspaceStagingDir; notify the producer so
+    // the outer error handler no longer deletes media owned by the queued turn.
+    opts?.onHostStagingDelegated?.();
     // The queue must stay dormant while the active owner can still collect
     // messages. Registering after enqueue closes the owner-clear race.
     const queuedOperationOwner = replyRunRegistry.get(queueKey) ?? activeReplyOperation;

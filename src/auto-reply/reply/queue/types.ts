@@ -329,6 +329,30 @@ export async function admitFollowupRunLifecycle(run: FollowupLifecycleRun): Prom
   }
 }
 
+<<<<<<< HEAD
+=======
+export function cleanHostWorkspaceStaging(run: Pick<FollowupRun, "hostWorkspaceStagingDir">): void {
+  const hostWorkspaceStagingDir = run.hostWorkspaceStagingDir;
+  if (hostWorkspaceStagingDir) {
+    delete run.hostWorkspaceStagingDir;
+    // Remove only if empty: staged files are persisted into the transcript and
+    // re-read by history hydration on subsequent turns. Recursive deletion
+    // would destroy attachments still needed by the running session.
+    void fs.rmdir(hostWorkspaceStagingDir).catch((err: unknown) => {
+      // ENOTEMPTY is expected when staging succeeded; ENOENT is fine on double-call.
+      if (
+        err instanceof Error &&
+        !("code" in err && (err.code === "ENOTEMPTY" || err.code === "ENOENT"))
+      ) {
+        logVerbose(
+          `Failed to clean host workspace staging directory: ${hostWorkspaceStagingDir} (${err.message})`,
+        );
+      }
+    });
+  }
+}
+
+>>>>>>> e1d28b18c (fix(auto-reply): preserve staged media ownership)
 export function completeFollowupRunLifecycle(run: FollowupLifecycleRun): void {
   run.steerPending?.settle(false);
   const lifecycle = run.turnAdoptionLifecycle;
