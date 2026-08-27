@@ -1,55 +1,55 @@
 // Implements ACP lifecycle commands for start, stop, reset, and resume.
-import { randomUUID } from "node:crypto";
-import { normalizeOptionalString } from "@openclaw/normalization-core/string-coerce";
-import { truncateUtf16Safe } from "@openclaw/normalization-core/utf16-slice";
-import { getAcpSessionManager } from "../../../acp/control-plane/manager.js";
-import { resolveAcpSessionResolutionError } from "../../../acp/control-plane/manager.utils.js";
-import { resolveThinkingDefault } from "../../../agents/model-selection.js";
-import { splitModelRef } from "../../../agents/subagents/spawn/subagent-spawn-plan.js";
+import { randomUUID } = from "node:crypto";
+import { normalizeOptionalString } = from "@openclaw/normalization-core/string-coerce";
+import { truncateUtf16Safe } = from "@openclaw/normalization-core/utf16-slice";
+import { getAcpSessionManager } = from "../../../acp/control-plane/manager.js";
+import { resolveAcpSessionResolutionError } = from "../../../acp/control-plane/manager.utils.js";
+import { resolveThinkingDefault } = from "../../../agents/model-selection.js";
+import { splitModelRef } = from "../../../agents/subagents/spawn/subagent-spawn-plan.js";
 import {
   cleanupFailedAcpSpawn,
   type AcpSpawnRuntimeCloseHandle,
-} from "../../../acp/control-plane/spawn.js";
+} = from "../../../acp/control-plane/spawn.js";
 import {
   isAcpEnabledByPolicy,
   resolveAcpAgentPolicyError,
   resolveAcpDispatchPolicyError,
   resolveAcpDispatchPolicyMessage,
-} from "../../../acp/policy.js";
-import { resolveSessionStorePathForAcp } from "../../../acp/runtime/session-meta.js";
+} = from "../../../acp/policy.js";
+import { resolveSessionStorePathForAcp } = from "../../../acp/runtime/session-meta.js";
 import {
   closeAdmittedRunDelegatedAuthority,
   createOperationalRunInstanceRef,
   prepareAgentRunAdmission,
-} from "../../../agents/admitted-run-context.js";
-import { resolveSpawnedWorkspaceInheritance } from "../../../agents/spawned-context.js";
+} = from "../../../agents/admitted-run-context.js";
+import { resolveSpawnedWorkspaceInheritance } = from "../../../agents/spawned-context.js";
 import {
   resolveAcpSpawnRuntimePolicyError,
   resolveRuntimeCwdForAcpSpawn,
-} from "../../../agents/subagents/spawn/acp-spawn.js";
+} = from "../../../agents/subagents/spawn/acp-spawn.js";
 import {
   readChannelContextAdmissionEvidence,
   type ChannelAdmissionEvidence,
-} from "../../../channels/message-access/admission-evidence.js";
-import { updateSessionEntry } from "../../../config/sessions/session-accessor.js";
-import type { SessionAcpMeta } from "../../../config/sessions/types.js";
-import type { OpenClawConfig } from "../../../config/types.openclaw.js";
-import { formatErrorMessage } from "../../../infra/errors.js";
+} = from "../../../channels/message-access/admission-evidence.js";
+import { updateSessionEntry } = from "../../../config/sessions/session-accessor.js";
+import type { SessionAcpMeta } = from "../../../config/sessions/types.js";
+import type { OpenClawConfig } = from "../../../config/types.openclaw.js";
+import { formatErrorMessage } = from "../../../infra/errors.js";
 import {
   getSessionBindingService,
   type SessionBindingRecord,
-} from "../../../infra/outbound/session-binding-service.js";
-import { resolveAgentIdFromSessionKey } from "../../../routing/session-key.js";
-import { consumeChannelRunAdmission } from "../channel-run-admission.js";
-import { commandReply } from "../command-gates.js";
-import type { CommandHandlerResult, HandleCommandsParams } from "../commands-types.js";
+} = from "../../../infra/outbound/session-binding-service.js";
+import { resolveAgentIdFromSessionKey } = from "../../../routing/session-key.js";
+import { consumeChannelRunAdmission } = from "../channel-run-admission.js";
+import { commandReply } = from "../command-gates.js";
+import type { CommandHandlerResult, HandleCommandsParams } = from "../commands-types.js";
 import {
   resolveAcpBindingLabelNoun,
   resolveBoundReplyPayload,
   bindSpawnedAcpSessionToCurrentConversation,
   bindSpawnedAcpSessionToThread,
-} from "./bindings.js";
-import { resolveAcpCommandConversationId, resolveAcpCommandThreadId } from "./context.js";
+} = from "./bindings.js";
+import { resolveAcpCommandConversationId, resolveAcpCommandThreadId } = from "./context.js";
 import {
   ACP_STEER_OUTPUT_LIMIT,
   collectAcpErrorText,
@@ -57,14 +57,14 @@ import {
   parseSteerInput,
   resolveCommandRequestId,
   withAcpCommandErrorBoundary,
-} from "./shared.js";
-import { resolveAcpTargetSessionKey } from "./targets.js";
+} = from "./shared.js";
+import { resolveAcpTargetSessionKey } = from "./targets.js";
 async function cleanupFailedSpawn(params: {
   cfg: OpenClawConfig;
   sessionKey: string;
   shouldDeleteSession: boolean;
   initializedRuntime?: AcpSpawnRuntimeCloseHandle;
-}) {
+}): Promise<void> {
   await cleanupFailedAcpSpawn({
     cfg: params.cfg,
     sessionKey: params.sessionKey,
@@ -152,7 +152,7 @@ export async function handleAcpSpawnAction(
   const modelExplicit = normalizeOptionalString(spawn.model) !== undefined;
   const model = modelExplicit
     ? spawn.model
-    : (normalizeOptionalString(params.cfg.acp?.defaultModel) ?? "");
+    : (normalizeOptionalString(params.cfg.acp?.defaultAgent) ?? "");
 
   let thinking = spawn.thinking; // Use explicit thinking if provided
   if (!thinking && model) {
@@ -201,7 +201,10 @@ export async function handleAcpSpawnAction(
       agent: spawn.agentId,
       mode: spawn.mode,
       cwd: runtimeCwd,
-      runtimeOptions: thinking ? { thinking } : undefined,
+      runtimeOptions: {
+        ...(model ? { model } : {}),
+        ...(thinking ? { thinking } : {}),
+      },
     });
     initializedRuntime = {
       runtime: initialized.runtime,
@@ -323,7 +326,7 @@ export async function handleAcpSpawnAction(
   return commandReply(parts.join(" "));
 }
 
-function resolveAcpSessionForCommandOrStop(params: {
+async function resolveAcpSessionForCommandOrStop(params: {
   acpManager: ReturnType<typeof getAcpSessionManager>;
   cfg: OpenClawConfig;
   sessionKey: string;
@@ -409,7 +412,7 @@ export async function handleAcpCancelAction(
         fallbackMessage: "ACP cancel failed before completion.",
         onSuccess: () => commandReply(`✅ Cancel requested for ACP session ${sessionKey}.`),
       }),
-  });
+  );
 }
 
 async function runAcpSteer(params: {
@@ -446,7 +449,7 @@ async function runAcpSteer(params: {
       provenance: "agent",
       text: params.instruction,
       mode: "steer",
-      requestId: params.requestId,
+      requestId: `${resolveCommandRequestId(params)}:steer`,
       onEvent: (event) => {
         if (event.type !== "text_delta") {
           return;
@@ -563,5 +566,5 @@ export async function handleAcpCloseAction(
         `✅ Closed ACP session ${sessionKey}${runtimeNotice}. Removed ${removedBindings.length} binding${removedBindings.length === 1 ? "" : "s"}.`,
       );
     },
-  });
+  );
 }
