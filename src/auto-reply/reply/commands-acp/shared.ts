@@ -270,6 +270,26 @@ export function parseSpawnInput(
       continue;
     }
 
+    const modelOption = readOptionValue({ tokens: normalizedTokens, index: i, flag: "--model" });
+    if (modelOption.matched) {
+      if (modelOption.error) {
+        return { ok: false, error: `${modelOption.error}. ${ACP_SPAWN_USAGE}` };
+      }
+      rawModel = normalizeOptionalString(modelOption.value);
+      i = modelOption.nextIndex;
+      continue;
+    }
+
+    const thinkingOption = readOptionValue({ tokens: normalizedTokens, index: i, flag: "--thinking" });
+    if (thinkingOption.matched) {
+      if (thinkingOption.error) {
+        return { ok: false, error: `${thinkingOption.error}. ${ACP_SPAWN_USAGE}` };
+      }
+      rawThinking = normalizeOptionalString(thinkingOption.value);
+      i = thinkingOption.nextIndex;
+      continue;
+    }
+
     if (token.startsWith("--")) {
       return {
         ok: false,
@@ -282,10 +302,23 @@ export function parseSpawnInput(
       i += 1;
       continue;
     }
+  }
 
+  // Handle positional model and thinking arguments
+  if (!rawModel && i < normalizedTokens.length) {
+    rawModel = normalizeOptionalString(normalizedTokens[i]);
+    i += 1;
+  }
+  if (!rawThinking && i < normalizedTokens.length) {
+    rawThinking = normalizeOptionalString(normalizedTokens[i]);
+    i += 1;
+  }
+
+  // Check for any remaining unexpected arguments
+  if (i < normalizedTokens.length) {
     return {
       ok: false,
-      error: `Unexpected argument: ${token}. ${ACP_SPAWN_USAGE}`,
+      error: `Unexpected argument: ${normalizedTokens[i]}. ${ACP_SPAWN_USAGE}`,
     };
   }
 
