@@ -72,6 +72,7 @@ import type {
   InternalGetReplyOptions as BaseInternalGetReplyOptions,
   ReplySessionBinding,
 } from "./get-reply.types.js";
+import { cleanHostWorkspaceStaging } from "./queue.js";
 import { finalizeInboundContext } from "./inbound-context.js";
 import {
   hasInboundAudio,
@@ -1303,7 +1304,7 @@ export async function getReplyFromConfig(
   }
 
   logResolverTiming("milestone", "before_run_prepared_reply");
-  const replyResult = await traceGetReplyPhase("reply.run_prepared_reply", () =>
+  const runPreparedReplyPromise = traceGetReplyPhase("reply.run_prepared_reply", () =>
     runPreparedReply({
       ctx,
       sessionCtx,
@@ -1358,6 +1359,16 @@ export async function getReplyFromConfig(
       autoFallbackPrimaryProbe: runAutoFallbackPrimaryProbe,
     }),
   );
+
+  let replyResult: ReplyPayload | ReplyPayload[] | undefined;
+  try {
+    replyResult = await runPreparedReplyPromise;
+  } catch (err) {
+    if (resolvedOpts.hostWorkspaceStagingDir) {
+      cleanHostWorkspaceStaging(resolvedOpts);
+    }
+    throw err;
+  }
   logResolverTiming("completed", "prepared_reply");
   return replyResult;
 }
