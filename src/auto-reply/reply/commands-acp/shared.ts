@@ -84,8 +84,7 @@ type ParsedSetCommandInput = {
   sessionToken?: string;
 };
 
-const ACP_UNICODE_DASH_PREFIX_RE =
-  /^[\u2010\u2011\u2012\u2013\u2014\u2015\u2212\uFE58\uFE63\uFF0D]+/;
+const ACP_UNICODE_DASH_PREFIX_RE = /^[‐‑‒–—―−﹘﹣－]+/;
 
 export function resolveAcpAction(tokens: string[]): AcpAction {
   const action = normalizeOptionalLowercaseString(tokens[0]);
@@ -148,7 +147,7 @@ function readOptionValue(params: { tokens: string[]; index: number; flag: string
     }
     return {
       matched: true,
-      value,
+      value: value,
       nextIndex: params.index + 1,
     };
   }
@@ -191,7 +190,18 @@ export function parseSpawnInput(
   let rawModel: string | undefined;
   let rawThinking: string | undefined;
 
-  for (let i = 0; i < normalizedTokens.length;) {
+  let i = 0;
+
+  // If the first token is not an option, it's the agentId.
+  if (i < normalizedTokens.length && !normalizedTokens[i].startsWith("--")) {
+    rawAgentId = normalizeOptionalString(normalizedTokens[i]);
+    i++;
+  }
+
+  // Then, process the rest of the tokens.
+  let modelCount = 0;
+  let thinkingCount = 0;
+  for (; i < normalizedTokens.length;) {
     const token = normalizedTokens[i] ?? "";
 
     const modeOption = readOptionValue({ tokens: normalizedTokens, index: i, flag: "--mode" });
@@ -280,7 +290,11 @@ export function parseSpawnInput(
       continue;
     }
 
-    const thinkingOption = readOptionValue({ tokens: normalizedTokens, index: i, flag: "--thinking" });
+    const thinkingOption = readOptionValue({
+      tokens: normalizedTokens,
+      index: i,
+      flag: "--thinking",
+    });
     if (thinkingOption.matched) {
       if (thinkingOption.error) {
         return { ok: false, error: `${thinkingOption.error}. ${ACP_SPAWN_USAGE}` };
@@ -297,28 +311,24 @@ export function parseSpawnInput(
       };
     }
 
-    if (!rawAgentId) {
-      rawAgentId = normalizeOptionalString(token);
-      i += 1;
+    // If we get here, we have a non-option token.
+    if (modelCount === 0) {
+      rawModel = normalizeOptionalString(token);
+      modelCount++;
+      i++;
       continue;
     }
-  }
 
-  // Handle positional model and thinking arguments
-  if (!rawModel && i < normalizedTokens.length) {
-    rawModel = normalizeOptionalString(normalizedTokens[i]);
-    i += 1;
-  }
-  if (!rawThinking && i < normalizedTokens.length) {
-    rawThinking = normalizeOptionalString(normalizedTokens[i]);
-    i += 1;
-  }
+    if (thinkingCount === 0) {
+      rawThinking = normalizeOptionalString(token);
+      thinkingCount++;
+      i++;
+      continue;
+    }
 
-  // Check for any remaining unexpected arguments
-  if (i < normalizedTokens.length) {
     return {
       ok: false,
-      error: `Unexpected argument: ${normalizedTokens[i]}. ${ACP_SPAWN_USAGE}`,
+      error: `Unexpected argument: ${token}. ${ACP_SPAWN_USAGE}`,
     };
   }
 
@@ -394,8 +404,8 @@ export function parseSteerInput(tokens: string[]): Result<ParsedSteerInput, stri
   return {
     ok: true,
     value: {
-      sessionToken,
-      instruction,
+      sessionToken: sessionToken,
+      instruction: instruction,
     },
   };
 }
@@ -415,8 +425,8 @@ export function parseSingleValueCommandInput(
   return {
     ok: true,
     value: {
-      value,
-      sessionToken,
+      value: value,
+      sessionToken: sessionToken,
     },
   };
 }
@@ -559,7 +569,7 @@ export async function withAcpCommandErrorBoundary<T>(params: {
   } catch (error) {
     return commandReply(
       collectAcpErrorText({
-        error,
+        error: error,
         fallbackCode: params.fallbackCode,
         fallbackMessage: params.fallbackMessage,
       }),

@@ -1,6 +1,6 @@
 // Tests shared ACP command helpers for formatting and identifiers.
 import { describe, expect, it } from "vitest";
-import { parseSpawnInput, parseSteerInput } from "./shared.js";
+import { parseSpawnInput, parseSteerInput } from "./shared.ts";
 
 describe("parseSteerInput", () => {
   it("preserves non-option instruction tokens while normalizing unicode-dash flags", () => {
