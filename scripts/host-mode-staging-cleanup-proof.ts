@@ -63,8 +63,30 @@ function writeAssistantSseResponse(res: ServerResponse, text: string): void {
   );
 }
 
+async function waitForStagingDirCount(
+  dir: string,
+  expectedCount: number,
+  timeoutMs: number = 2000,
+): Promise<string[]> {
+  const startTime = Date.now();
+  while (Date.now() - startTime < timeoutMs) {
+    try {
+      const entries = await fs.readdir(dir);
+      const stagingDirs = entries.filter((e) => e.startsWith("openclaw-staged-"));
+      if (stagingDirs.length === expectedCount) {
+        return stagingDirs;
+      }
+    } catch {
+      // Directory doesn't exist yet
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  const entries = await fs.readdir(dir).catch(() => []);
+  return entries.filter((e) => e.startsWith("openclaw-staged-"));
+}
+
 async function runHostModeStagingCleanupProof(): Promise<void> {
-  console.log("=== Host-Mode Staging Media Production Gateway Proof ===");
+  console.log("=== Host-Mode Staging Media Cleanup Proof (Failed Copy Scenario) ===");
 
   const envSnapshot = captureEnv([...envKeys]);
   let tempHome: string | undefined;
@@ -72,7 +94,7 @@ async function runHostModeStagingCleanupProof(): Promise<void> {
   let gateway: Awaited<ReturnType<typeof startGatewayWithClient>> | undefined;
 
   try {
-    tempHome = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-host-staging-gateway-proof-"));
+    tempHome = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-host-staging-cleanup-proof-"));
     const stateDir = path.join(tempHome, ".openclaw");
     const workspaceDir = path.join(tempHome, "workspace");
     const configPath = path.join(stateDir, "openclaw.json");
@@ -100,14 +122,6 @@ async function runHostModeStagingCleanupProof(): Promise<void> {
       setTestEnvValue(key, value);
     }
 
-    // Valid 1x1 PNG image fixture
-    const PNG_1X1 =
-      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=";
-    const sampleFileName = "proof-sample.png";
-    const sampleFilePath = path.join(mediaDir, sampleFileName);
-    const mediaContent = Buffer.from(PNG_1X1, "base64");
-    await fs.writeFile(sampleFilePath, mediaContent);
-
     // Setup local mock HTTP model server
     providerServer = createServer((_req, res) => {
       writeAssistantSseResponse(res, "I analyzed the inbound media attachment.");
@@ -125,7 +139,6 @@ async function runHostModeStagingCleanupProof(): Promise<void> {
     const provider = buildMockOpenAiResponsesProvider(
       `http://127.0.0.1:${providerAddress.port}/v1`,
     );
-    // Explicitly declare image input capability on the provider model
     provider.config.models[0].input = ["text", "image"];
 
     const cfg: OpenClawConfig = {
@@ -150,12 +163,18 @@ async function runHostModeStagingCleanupProof(): Promise<void> {
       cfg,
       configPath,
       token: "proof-gateway-token-128454",
-      clientDisplayName: "proof-client-host-staging",
+      clientDisplayName: "proof-client-host-staging-cleanup",
     });
-    // Scenario 1: Real getReplyFromConfig entry dispatch with host-mode media staging & admission handoff
-    console.log("\n[2/4] Executing auto-reply turn with inbound media via getReplyFromConfig...");
-    const sessionKey = "agent:main:proof-session-host-staging";
-    const mediaUri = `media://inbound/${sampleFileName}`;
+
+    const workspaceMediaInbound = path.join(workspaceDir, "media", "inbound");
+
+    // ================================================================
+    // SCENARIO: Failed copy - empty staging directory cleanup
+    // ================================================================
+    console.log("\n[2/4] Scenario: Failed copy triggers empty staging directory cleanup...");
+    const sessionKey = "agent:main:proof-session-host-staging-cleanup";
+    // Use non-existent file to trigger copy failure
+    const mediaUri = `media://inbound/nonexistent-file-128454-cleanup-test.png`;
     const { ctx } = createSandboxMediaContexts(mediaUri);
     ctx.media = [{ ...ctx.media?.[0], contentType: "image/png" }];
     ctx.Body = "Please inspect this attached image";
@@ -163,84 +182,87 @@ async function runHostModeStagingCleanupProof(): Promise<void> {
 
     const replyPromise = getReplyFromConfig(ctx, undefined, cfg);
 
-    // Scenario 2: Verify active staging directory and media readability before reply completion
-    console.log("\n[3/4] Verifying staged directory and media are readable before settlement...");
-    const workspaceMediaInbound = path.join(workspaceDir, "media", "inbound");
-    let preStagingDirs: string[] = [];
-    for (let attempt = 0; attempt < 40; attempt++) {
-      try {
-        const entries = await fs.readdir(workspaceMediaInbound);
-        preStagingDirs = entries.filter((e) => e.startsWith("openclaw-staged-"));
-        if (preStagingDirs.length > 0) {
-          break;
-        }
-      } catch {
-        preStagingDirs = [];
-      }
-      await new Promise<void>((resolve) => {
-        setTimeout(resolve, 50);
-      });
-    }
-
-    assert.ok(
-      preStagingDirs.length >= 1,
-      `Expected at least 1 active host-mode staging directory during active run, found ${preStagingDirs.length}`,
-    );
-
-    const activeStagingDirPath = path.join(workspaceMediaInbound, preStagingDirs[0]!);
-    const stagedFiles = await fs.readdir(activeStagingDirPath);
-    assert.ok(
-      stagedFiles.length >= 1,
-      `Expected staged files in ${activeStagingDirPath}, found ${stagedFiles.length}`,
-    );
-    const stagedFilePath = path.join(activeStagingDirPath, stagedFiles[0]!);
-    const stagedStat = await fs.stat(stagedFilePath);
-    assert.ok(stagedStat.size > 0, "Staged media attachment must be readable and non-empty");
+    // Wait briefly for staging directory to appear (copy failure should clean it up quickly)
+    const preStagingDirs = await waitForStagingDirCount(workspaceMediaInbound, 1, 1000);
     console.log(
-      `  -> Active staging directory verified readable before settlement: dir=${preStagingDirs[0]}, files=${stagedFiles.join(",")}, size=${stagedStat.size} bytes`,
+      `  -> Pre-settlement staging directories: count=${preStagingDirs.length}`,
     );
 
-    // Scenario 3: Await auto-reply settlement and verify persisted media retention
-    console.log("\n[4/4] Awaiting auto-reply completion and verifying persisted staged media...");
+    // Await settlement - copy should fail, staging dir should be cleaned up
     const replyResult = await replyPromise;
-    assert.ok(replyResult !== undefined, "getReplyFromConfig must return a valid reply result");
-    console.log("  -> Auto-reply settled successfully.");
+    console.log("  -> Auto-reply settled (with failed copy).");
 
-    // Successful staging is persisted into the transcript and must remain readable
-    // for subsequent turns; only empty producer-owned directories are removable.
-    let stagingDirectories: string[] = [];
-    for (let attempt = 0; attempt < 40; attempt++) {
-      try {
-        const entries = await fs.readdir(workspaceMediaInbound);
-        stagingDirectories = entries.filter((e) => e.startsWith("openclaw-staged-"));
-      } catch {
-        stagingDirectories = [];
-      }
-      if (stagingDirectories.length > 0) {
-        break;
-      }
-      await new Promise<void>((resolve) => {
-        setTimeout(resolve, 50);
-      });
-    }
-
+    // Verify empty staging directory was cleaned up
+    const postStagingDirs = await waitForStagingDirCount(workspaceMediaInbound, 0, 1000);
     console.log(
-      `  -> Remaining openclaw-staged-* directories: count=${stagingDirectories.length} (expected=1 persisted)`,
+      `  -> Post-settlement staging directories: count=${postStagingDirs.length} (expected=0, empty dir cleaned up)`,
     );
     assert.equal(
-      stagingDirectories.length,
-      1,
-      "Successful staged media directory must remain after settlement",
+      postStagingDirs.length,
+      0,
+      "Empty staging directory from failed copy should be cleaned up",
     );
-    const persistedStagedFilePath = path.join(
-      workspaceMediaInbound,
-      stagingDirectories[0]!,
-      stagedFiles[0]!,
-    );
-    const persistedStagedStat = await fs.stat(persistedStagedFilePath);
-    assert.ok(persistedStagedStat.size > 0, "Persisted staged media must remain readable");
+
+    // ================================================================
+    // SCENARIO 2: Mixed success/failure - only empty dirs cleaned
+    // ================================================================
+    console.log("\n[3/4] Scenario: Mixed success/failure - empty dirs cleaned, retained kept...");
+
+    // First, successful staging
+    const PNG_1X1 =
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=";
+    const sampleFileName = "proof-sample.png";
+    const sampleFilePath = path.join(mediaDir, sampleFileName);
+    await fs.writeFile(sampleFilePath, Buffer.from(PNG_1X1, "base64"));
+
+    const ctxSuccess = createSandboxMediaContexts(`media://inbound/${sampleFileName}`);
+    ctxSuccess.ctx.media = [{ ...ctxSuccess.ctx.media?.[0], contentType: "image/png" }];
+    ctxSuccess.ctx.Body = "Please inspect this attached image";
+    ctxSuccess.ctx.SessionKey = "agent:main:proof-session-host-success";
+
+    const successPromise = getReplyFromConfig(ctxSuccess.ctx, undefined, cfg);
+
+    // Wait for successful staging
+    const successStagingDirs = await waitForStagingDirCount(workspaceMediaInbound, 1, 1000);
     console.log(
-      `  -> Persisted staged media remains readable after settlement: size=${persistedStagedStat.size} bytes`,
+      `  -> After successful staging: count=${successStagingDirs.length}`,
+    );
+
+    // Then, failed staging
+    const ctxFailure = createSandboxMediaContexts(
+      `media://inbound/nonexistent-file-fail-${Date.now()}.png`,
+    );
+    ctxFailure.ctx.media = [{ ...ctxFailure.ctx.media?.[0], contentType: "image/png" }];
+    ctxFailure.ctx.Body = "Please inspect this attached image";
+    ctxFailure.ctx.SessionKey = "agent:main:proof-session-host-failure";
+
+    const failurePromise = getReplyFromConfig(ctxFailure.ctx, undefined, cfg);
+
+    // Wait for both to settle
+    const [successResult, failureResult] = await Promise.all([
+      successPromise,
+      failurePromise,
+    ]);
+
+    // Give cleanup time
+    await new Promise((resolve) => setTimeout(resolve, 500));
+
+    const finalStagingDirs = await waitForStagingDirCount(workspaceMediaInbound, 1, 1000);
+    console.log(
+      `  -> Final staging directories: count=${finalStagingDirs.length} (expected=1, empty dir cleaned)`,
+    );
+    assert.equal(
+      finalStagingDirs.length,
+      1,
+      "Only the successful staging directory should remain after both settlements",
+    );
+
+    // Verify the remaining directory is non-empty
+    const remainingDir = path.join(workspaceMediaInbound, finalStagingDirs[0]!);
+    const remainingFiles = await fs.readdir(remainingDir);
+    assert.ok(remainingFiles.length >= 1, "Remaining directory should contain files");
+    console.log(
+      `  -> Remaining directory contains ${remainingFiles.length} file(s): ${remainingFiles.join(", ")}`,
     );
 
     // Clean up gateway
@@ -249,7 +271,10 @@ async function runHostModeStagingCleanupProof(): Promise<void> {
     gateway = undefined;
 
     console.log(
-      "\n=== Production Host-Mode Staging Lifecycle Proof Execution Complete: SUCCESS ===",
+      "\n[4/4] Cleanup verification: Empty staging directories removed, persisted media retained.",
+    );
+    console.log(
+      "\n=== Production Host-Mode Staging Cleanup Proof Execution Complete: SUCCESS ===",
     );
   } finally {
     if (gateway) {
