@@ -1136,6 +1136,12 @@ export function createOverflowSummaryRetrySource(source: FollowupRun): FollowupR
     abortSignal: source.abortSignal,
     turnAdoptionLifecycle: source.turnAdoptionLifecycle,
     queuedFollowupReplyDisposition: source.queuedFollowupReplyDisposition,
+    // Preserve the host-mode staging directory so the cloned retry's terminal
+    // settlement removes the original empty staging directory instead of
+    // orphaning it.
+    ...(source.hostWorkspaceStagingDir
+      ? { hostWorkspaceStagingDir: source.hostWorkspaceStagingDir }
+      : {}),
     ...(source.currentInboundEventKind === "room_event"
       ? { currentInboundEventKind: "room_event" }
       : {}),
