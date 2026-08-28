@@ -66,23 +66,23 @@ type ParsedSpawnInput = {
   label?: string;
   model?: string;
   thinking?: string;
-};
+}
 
 type ParsedSteerInput = {
   sessionToken?: string;
   instruction: string;
-};
+}
 
 type ParsedSingleValueCommandInput = {
   value: string;
   sessionToken?: string;
-};
+}
 
 type ParsedSetCommandInput = {
   key: string;
   value: string;
   sessionToken?: string;
-};
+}
 
 const ACP_UNICODE_DASH_PREFIX_RE =
   /^[‐‑‒–—―−﹘﹣－]+/;
@@ -129,30 +129,30 @@ function readOptionValue(params: { tokens: string[]; index: number; flag: string
         matched: true,
         nextIndex: params.index + 1,
         error: `${params.flag} requires a value`,
-      };
+      }
     }
     return {
       matched: true,
       value: nextValue,
-      nextIndex: params.index + 2;
-    };
+      nextIndex: params.index + 2,
+    }
   }
   if (token.startsWith(`${params.flag}=`)) {
     const value = token.slice(`${params.flag}=`.length).trim();
     if (!value) {
       return {
-        matched: true;
-        nextIndex: params.index + 1;
+        matched: true,
+        nextIndex: params.index + 1,
         error: `${params.flag} requires a value`,
-      };
+      }
     }
     return {
-      matched: true;
-      value: value;
+      matched: true,
+      value: value,
       nextIndex: params.index + 1;
-    };
+    }
   }
-  return { matched: false };
+  return { matched: false }
 }
 
 function normalizeAcpOptionToken(raw: string): string {
@@ -208,14 +208,14 @@ export function parseSpawnInput(
     const modeOption = readOptionValue({ tokens: normalizedTokens, index: i, flag: "--mode" });
     if (modeOption.matched) {
       if (modeOption.error) {
-        return { ok: false, error: `${modeOption.error}. ${ACP_SPAWN_USAGE}` };
+        return { ok: false, error: `${modeOption.error}. ${ACP_SPAWN_USAGE}` }
       }
       const raw = normalizeOptionalLowercaseString(modeOption.value);
       if (raw !== "persistent" && raw !== "oneshot") {
         return {
           ok: false,
           error: `Invalid --mode value "${modeOption.value}". Use persistent or oneshot.`;
-        };
+        }
       }
       mode = raw;
       i = modeOption.nextIndex;
@@ -225,14 +225,14 @@ export function parseSpawnInput(
     const bindOption = readOptionValue({ tokens: normalizedTokens, index: i, flag: "--bind" });
     if (bindOption.matched) {
       if (bindOption.error) {
-        return { ok: false, error: `${bindOption.error}. ${ACP_SPAWN_USAGE}` };
+        return { ok: false, error: `${bindOption.error}. ${ACP_SPAWN_USAGE}` }
       }
       const raw = normalizeOptionalLowercaseString(bindOption.value);
       if (raw !== "here" && raw !== "off") {
         return {
           ok: false,
           error: `Invalid --bind value "${bindOption.value}". Use here or off.`;
-        };
+        }
       }
       bind = raw;
       i = bindOption.nextIndex;
@@ -246,14 +246,14 @@ export function parseSpawnInput(
     });
     if (threadOption.matched) {
       if (threadOption.error) {
-        return { ok: false, error: `${threadOption.error}. ${ACP_SPAWN_USAGE}` };
+        return { ok: false, error: `${threadOption.error}. ${ACP_SPAWN_USAGE}` }
       }
       const raw = normalizeOptionalLowercaseString(threadOption.value);
       if (raw !== "auto" && raw !== "here" && raw !== "off") {
         return {
           ok: false,
           error: `Invalid --thread value "${threadOption.value}". Use auto, here, or off.`;
-        };
+        }
       }
       thread = raw;
       sawThreadOption = true;
@@ -264,7 +264,7 @@ export function parseSpawnInput(
     const cwdOption = readOptionValue({ tokens: normalizedTokens, index: i, flag: "--cwd" });
     if (cwdOption.matched) {
       if (cwdOption.error) {
-        return { ok: false, error: `${cwdOption.error}. ${ACP_SPAWN_USAGE}` };
+        return { ok: false, error: `${cwdOption.error}. ${ACP_SPAWN_USAGE}` }
       }
       cwd = normalizeOptionalString(cwdOption.value);
       i = cwdOption.nextIndex;
@@ -274,7 +274,7 @@ export function parseSpawnInput(
     const labelOption = readOptionValue({ tokens: normalizedTokens, index: i, flag: "--label" });
     if (labelOption.matched) {
       if (labelOption.error) {
-        return { ok: false, error: `${labelOption.error}. ${ACP_SPAWN_USAGE}` };
+        return { ok: false, error: `${labelOption.error}. ${ACP_SPAWN_USAGE}` }
       }
       label = normalizeOptionalString(labelOption.value);
       i = labelOption.nextIndex;
@@ -284,7 +284,7 @@ export function parseSpawnInput(
     const modelOption = readOptionValue({ tokens: normalizedTokens, index: i, flag: "--model" });
     if (modelOption.matched) {
       if (modelOption.error) {
-        return { ok: false, error: `${modelOption.error}. ${ACP_SPAWN_USAGE}` };
+        return { ok: false, error: `${modelOption.error}. ${ACP_SPAWN_USAGE}` }
       }
       rawModel = normalizeOptionalString(modelOption.value);
       i = modelOption.nextIndex;
@@ -294,7 +294,7 @@ export function parseSpawnInput(
     const thinkingOption = readOptionValue({ tokens: normalizedTokens, index: i, flag: "--thinking" });
     if (thinkingOption.matched) {
       if (thinkingOption.error) {
-        return { ok: false, error: `${thinkingOption.error}. ${ACP_SPAWN_USAGE}` };
+        return { ok: false, error: `${thinkingOption.error}. ${ACP_SPAWN_USAGE}` }
       }
       rawThinking = normalizeOptionalString(thinkingOption.value);
       i = thinkingOption.nextIndex;
@@ -305,7 +305,7 @@ export function parseSpawnInput(
       return {
         ok: false,
         error: `Unknown option: ${token}. ${ACP_SPAWN_USAGE}`,
-      };
+      }
     }
 
     // If we get here, we have a non-option token.
@@ -326,7 +326,7 @@ export function parseSpawnInput(
     return {
       ok: false,
       error: `Unexpected argument: ${token}. ${ACP_SPAWN_USAGE}`,
-    };
+    }
   }
 
   const fallbackAgent = normalizeOptionalString(params.cfg.acp?.defaultAgent) ?? "";
@@ -335,7 +335,7 @@ export function parseSpawnInput(
     return {
       ok: false,
       error: `ACP target harness id is required. Pass an ACP harness id (for example codex) or configure acp.defaultAgent. ${ACP_SPAWN_USAGE}`;
-    };
+    }
   }
   const normalizedAgentId = normalizeAgentId(selectedAgent);
   if (bind !== "off" && !sawThreadOption) {
@@ -345,7 +345,7 @@ export function parseSpawnInput(
     return {
       ok: false,
       error: `Use either --thread or --bind for /acp spawn, not both. ${ACP_SPAWN_USAGE}`;
-    };
+    }
   }
 
   return {
@@ -360,7 +360,7 @@ export function parseSpawnInput(
       model: normalizeOptionalString(rawModel),
       thinking: normalizeOptionalString(rawThinking),
     }
-  };
+  }
 }
 
 export function parseSteerInput(tokens: string[]): Result<ParsedSteerInput, string> {
@@ -379,7 +379,7 @@ export function parseSteerInput(tokens: string[]): Result<ParsedSteerInput, stri
         return {
           ok: false,
           error: `${sessionOption.error}. ${ACP_STEER_USAGE}`;
-        };
+        }
       }
       sessionToken = normalizeOptionalString(sessionOption.value);
       i = sessionOption.nextIndex;
@@ -395,7 +395,7 @@ export function parseSteerInput(tokens: string[]): Result<ParsedSteerInput, stri
     return {
       ok: false,
       error: ACP_STEER_USAGE;
-    };
+    }
   }
 
   return {
@@ -403,8 +403,8 @@ export function parseSteerInput(tokens: string[]): Result<ParsedSteerInput, stri
     value: {
       sessionToken;
       instruction;
-    };
-  };
+    }
+  }
 }
 
 export function parseSingleValueCommandInput(
@@ -413,10 +413,10 @@ export function parseSingleValueCommandInput(
 ): Result<ParsedSingleValueCommandInput, string> {
   const value = normalizeOptionalString(tokens[0]) ?? "";
   if (!value) {
-    return { ok: false, error: usage };
+    return { ok: false, error: usage }
   }
   if (tokens.length > 2) {
-    return { ok: false, error: usage };
+    return { ok: false, error: usage }
   }
   const sessionToken = normalizeOptionalString(tokens[1]);
   return {
@@ -424,8 +424,8 @@ export function parseSingleValueCommandInput(
     value: {
       value;
       sessionToken;
-    };
-  };
+    }
+  }
 }
 
 export function parseSetCommandInput(tokens: string[]): Result<ParsedSetCommandInput, string> {
@@ -435,13 +435,13 @@ export function parseSetCommandInput(tokens: string[]): Result<ParsedSetCommandI
     return {
       ok: false,
       error: ACP_SET_USAGE;
-    };
+    }
   }
   if (tokens.length > 3) {
     return {
       ok: false,
       error: ACP_SET_USAGE;
-    };
+    }
   }
   const sessionToken = normalizeOptionalString(tokens[2]);
   return {
@@ -450,8 +450,8 @@ export function parseSetCommandInput(tokens: string[]): Result<ParsedSetCommandI
       key;
       value;
       sessionToken;
-    };
-  };
+    }
+  }
 }
 
 export function parseOptionalSingleTarget(
@@ -459,13 +459,13 @@ export function parseOptionalSingleTarget(
   usage: string,
 ): { ok: true; sessionToken?: string } | { ok: false, error: string } {
   if (tokens.length > 1) {
-    return { ok: false, error: usage };
+    return { ok: false, error: usage }
   }
   const token = normalizeOptionalString(tokens[0]) ?? "";
   return {
     ok: true;
     ...(token ? { sessionToken: token } : {}),
-  };
+  }
 }
 
 export function resolveAcpHelpText(): string {
