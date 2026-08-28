@@ -66,7 +66,7 @@ function writeAssistantSseResponse(res: ServerResponse, text: string): void {
 async function waitForStagingDirCount(
   dir: string,
   expectedCount: number,
-  timeoutMs: number = 2000,
+  timeoutMs = 2000,
 ): Promise<string[]> {
   const startTime = Date.now();
   while (Date.now() - startTime < timeoutMs) {
@@ -79,7 +79,9 @@ async function waitForStagingDirCount(
     } catch {
       // Directory doesn't exist yet
     }
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await new Promise((resolve) => {
+      setTimeout(resolve, 50);
+    });
   }
   const entries = await fs.readdir(dir).catch(() => []);
   return entries.filter((e) => e.startsWith("openclaw-staged-"));
@@ -173,8 +175,16 @@ async function runHostModeStagingCleanupProof(): Promise<void> {
     // ================================================================
     console.log("\n[2/4] Scenario: Failed copy triggers empty staging directory cleanup...");
     const sessionKey = "agent:main:proof-session-host-staging-cleanup";
-    // Use non-existent file to trigger copy failure
-    const mediaUri = `media://inbound/nonexistent-file-128454-cleanup-test.png`;
+    // Use a DIRECTORY at the attachment path as the source. It resolves to a real
+    // media reference (so staging reaches copyIn) but copyIn cannot read a
+    // directory as a file stream, so it creates the empty host staging directory
+    // and then the failed-copy owner removes it. A non-existent URI instead
+    // resolves to no source and is skipped before any directory exists, which
+    // would make the zero-dir assertion vacuous (this is the prior bug).
+    const failedDirName = "prof-dir-128454-cleanup";
+    const failedDirPath = path.join(mediaDir, failedDirName);
+    await fs.mkdir(failedDirPath);
+    const mediaUri = `media://inbound/${failedDirName}`;
     const { ctx } = createSandboxMediaContexts(mediaUri);
     ctx.media = [{ ...ctx.media?.[0], contentType: "image/png" }];
     ctx.Body = "Please inspect this attached image";
@@ -182,14 +192,19 @@ async function runHostModeStagingCleanupProof(): Promise<void> {
 
     const replyPromise = getReplyFromConfig(ctx, undefined, cfg);
 
-    // Wait briefly for staging directory to appear (copy failure should clean it up quickly)
-    const preStagingDirs = await waitForStagingDirCount(workspaceMediaInbound, 1, 1000);
+    // The failed copy creates the empty staging directory synchronously inside
+    // copyIn and the failed-copy owner removes it before the reply settles, so
+    // it is usually gone before this poll can observe it. The observation below
+    // is best-effort; the post-settlement zero-count is the authoritative
+    // cleanup assertion. (The create-then-clean mechanism is deterministic in
+    // src/auto-reply/reply/stage-sandbox-media.cleanup-lifecycle.test.ts.)
+    const preStagingDirs = await waitForStagingDirCount(workspaceMediaInbound, 1, 2000);
     console.log(
-      `  -> Pre-settlement staging directories: count=${preStagingDirs.length}`,
+      `  -> Pre-settlement staging directories: count=${preStagingDirs.length} (best-effort; empty dir created by failed copy, remove may win the race)`,
     );
 
-    // Await settlement - copy should fail, staging dir should be cleaned up
-    const replyResult = await replyPromise;
+    // Await settlement - copy fails, staging dir should be cleaned up
+    await replyPromise;
     console.log("  -> Auto-reply settled (with failed copy).");
 
     // Verify empty staging directory was cleaned up
@@ -224,14 +239,14 @@ async function runHostModeStagingCleanupProof(): Promise<void> {
 
     // Wait for successful staging
     const successStagingDirs = await waitForStagingDirCount(workspaceMediaInbound, 1, 1000);
-    console.log(
-      `  -> After successful staging: count=${successStagingDirs.length}`,
-    );
+    console.log(`  -> After successful staging: count=${successStagingDirs.length}`);
 
-    // Then, failed staging
-    const ctxFailure = createSandboxMediaContexts(
-      `media://inbound/nonexistent-file-fail-${Date.now()}.png`,
-    );
+    // Then, failed staging via a directory source (resolves to a real reference
+    // and reaches copyIn, which fails reading the directory as a file and leaves
+    // an empty staging directory for the failed-copy owner to clean).
+    const mixedFailedDirName = "prof-dir-128454-mixed";
+    await fs.mkdir(path.join(mediaDir, mixedFailedDirName));
+    const ctxFailure = createSandboxMediaContexts(`media://inbound/${mixedFailedDirName}`);
     ctxFailure.ctx.media = [{ ...ctxFailure.ctx.media?.[0], contentType: "image/png" }];
     ctxFailure.ctx.Body = "Please inspect this attached image";
     ctxFailure.ctx.SessionKey = "agent:main:proof-session-host-failure";
@@ -239,13 +254,12 @@ async function runHostModeStagingCleanupProof(): Promise<void> {
     const failurePromise = getReplyFromConfig(ctxFailure.ctx, undefined, cfg);
 
     // Wait for both to settle
-    const [successResult, failureResult] = await Promise.all([
-      successPromise,
-      failurePromise,
-    ]);
+    await Promise.all([successPromise, failurePromise]);
 
     // Give cleanup time
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    await new Promise((resolve) => {
+      setTimeout(resolve, 500);
+    });
 
     const finalStagingDirs = await waitForStagingDirCount(workspaceMediaInbound, 1, 1000);
     console.log(
@@ -273,9 +287,7 @@ async function runHostModeStagingCleanupProof(): Promise<void> {
     console.log(
       "\n[4/4] Cleanup verification: Empty staging directories removed, persisted media retained.",
     );
-    console.log(
-      "\n=== Production Host-Mode Staging Cleanup Proof Execution Complete: SUCCESS ===",
-    );
+    console.log("\n=== Production Host-Mode Staging Cleanup Proof Execution Complete: SUCCESS ===");
   } finally {
     if (gateway) {
       await disconnectGatewayClient(gateway.client);
