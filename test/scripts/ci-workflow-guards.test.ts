@@ -3037,7 +3037,7 @@ NODE
     expect(action).toContain("docs_only=false");
     expect(action).toContain("docs_changed=false");
     expect(action).toContain("test/fixtures/*)");
-    expect(action).toContain("docs/* | *.md | *.mdx)");
+    expect(action).toContain("docs/* | *.md | *.mdx | config/markdownlint*.jsonc)");
   });
 
   it("bounds matrix fan-out for runner-registration pressure", () => {
