@@ -35,6 +35,8 @@ const SCP_STDERR_TAIL_CHARS = 16_384;
 // partial failures without matching rewritten strings back to source paths.
 export type StageSandboxMediaResult = {
   staged: ReadonlyMap<number, string>;
+  /** Host workspace staging directory (full path) for cleanup on early exit. */
+  hostWorkspaceStagingDir?: string;
 };
 
 const EMPTY_STAGE_RESULT: StageSandboxMediaResult = { staged: new Map() };
@@ -90,7 +92,9 @@ export async function stageSandboxMedia(params: {
   const usedNames = new Set<string>();
   const staged = new Map<number, string>();
   const stagedUrlAliases = new Set<number>();
+  // Use staged-inputs architecture: unique directory identity with .gitignore ownership marker
   const inputDirectory = stagedInputDirectory(crypto.randomUUID());
+  const hostWorkspaceStagingDir = path.join(effectiveWorkspaceDir, inputDirectory);
   let stagingReady = false;
 
   for (const entry of pathEntries) {
@@ -165,6 +169,10 @@ export async function stageSandboxMedia(params: {
   }
 
   if (staged.size === 0) {
+    // No successful stages - clean up the empty staging directory if it was created
+    if (stagingReady) {
+      await fs.rmdir(hostWorkspaceStagingDir).catch(() => {});
+    }
     return { staged };
   }
 
@@ -186,7 +194,10 @@ export async function stageSandboxMedia(params: {
     applyStagedMediaContext(sessionCtx, nextMedia);
   }
 
-  return { staged };
+  return {
+    staged,
+    hostWorkspaceStagingDir,
+  };
 }
 
 async function removeFailedStageDestination(params: {

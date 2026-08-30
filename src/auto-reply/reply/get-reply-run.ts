@@ -25,6 +25,10 @@ export async function runPreparedReply(
 ): Promise<ReplyPayload | ReplyPayload[] | undefined> {
   const context = await prepareReplyRunContext(params);
   if (context.kind === "reply") {
+    // Short-circuit: clean up host workspace staging directory if present
+    if (params.opts?.hostWorkspaceStagingDir) {
+      delete params.opts.hostWorkspaceStagingDir;
+    }
     return context.reply;
   }
 

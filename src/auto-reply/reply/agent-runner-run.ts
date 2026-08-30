@@ -257,8 +257,6 @@ export async function runReplyAgent(
     if (replyOperationRunState) {
       replyOperationRunState.admission = { status: "accepted", mode: "steer" };
     }
-<<<<<<< HEAD
-=======
     if (activeReplyOperation && (followupRun.hostWorkspaceStagingDir || turnAdoptionLifecycle)) {
       const hostStagingDir = followupRun.hostWorkspaceStagingDir;
       delete followupRun.hostWorkspaceStagingDir;
@@ -278,7 +276,6 @@ export async function runReplyAgent(
         runAfterReplyOperationClear(activeReplyOperation, cleanupAfterSettlement);
       }
     }
->>>>>>> e1d28b18c (fix(auto-reply): preserve staged media ownership)
     releaseAdmissionTicket();
     typing.cleanup();
     return undefined;
