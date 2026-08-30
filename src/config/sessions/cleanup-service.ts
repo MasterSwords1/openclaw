@@ -8,6 +8,7 @@ import { normalizeAgentId, parseAgentSessionKey } from "../../routing/session-ke
 import type { OpenClawConfig } from "../types.openclaw.js";
 import {
   createSessionsCleanupFailure,
+  SessionsCleanupFailureError,
   type SessionCleanupSummary,
   type SessionsCleanupFailure,
 } from "./cleanup-result.js";
@@ -51,6 +52,7 @@ export {
   createSessionsCleanupFailure,
   isSessionsCleanupPartialResult,
   serializeSessionCleanupResult,
+  SessionsCleanupFailureError,
   type SessionCleanupSummary,
   type SessionsCleanupFailure,
   type SessionsCleanupPartialErrorDetail,
@@ -530,10 +532,12 @@ export async function runSessionsCleanup(params: {
 
   const appliedSummaries: SessionCleanupSummary[] = [];
   let failingTarget: SessionStoreTarget | undefined;
+  let failingTargetLifecycleCommitted = false;
   try {
     if (!opts.dryRun) {
       for (const target of targets) {
         failingTarget = target;
+        failingTargetLifecycleCommitted = false;
         const applyStore = loadCleanupSessionStore(target, { createIfMissing: true });
         const missingRemovals: SessionEntryLifecycleRemoval[] = [];
         const dmScopeRetiredRemovals: SessionEntryLifecycleRemoval[] = [];
@@ -578,6 +582,9 @@ export async function runSessionsCleanup(params: {
           maintenanceOverride: {
             ...maintenance,
             mode,
+          },
+          onLifecycleCommitted: () => {
+            failingTargetLifecycleCommitted = true;
           },
         });
         const postApplyStore = loadCleanupSessionStore(target, { createIfMissing: true });
@@ -654,14 +661,22 @@ export async function runSessionsCleanup(params: {
   } catch (cause) {
     // A first-store failure preserves the existing rejection contract. Once a
     // store commits, the owner must return its summary with the later failure.
-    if (!failingTarget || appliedSummaries.length === 0) {
+    if (!failingTarget) {
       throw cause;
+    }
+    const failure = createSessionsCleanupFailure(
+      failingTarget,
+      cause,
+      failingTargetLifecycleCommitted,
+    );
+    if (appliedSummaries.length === 0) {
+      throw new SessionsCleanupFailureError(failure, cause);
     }
     return {
       mode,
       previewResults,
       appliedSummaries,
-      failure: createSessionsCleanupFailure(failingTarget, cause),
+      failure,
     };
   }
 

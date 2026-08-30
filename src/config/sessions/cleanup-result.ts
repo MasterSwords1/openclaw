@@ -31,22 +31,36 @@ export type SessionCleanupSummary = {
 export type SessionsCleanupFailure = {
   target: SessionStoreTarget;
   message: string;
+  lifecycleCommitted: boolean;
 };
 
 export function createSessionsCleanupFailure(
   target: SessionStoreTarget,
   cause: unknown,
+  lifecycleCommitted: boolean,
 ): SessionsCleanupFailure {
   return {
     target,
     message: `Session cleanup failed for agent '${target.agentId}': ${formatErrorMessage(cause)}`,
+    lifecycleCommitted,
   };
+}
+
+export class SessionsCleanupFailureError extends Error {
+  constructor(
+    readonly failure: SessionsCleanupFailure,
+    cause: unknown,
+  ) {
+    super(failure.message, { cause });
+    this.name = "SessionsCleanupFailureError";
+  }
 }
 
 export type SessionsCleanupPartialErrorDetail = {
   failingAgentId: string;
   failingStorePath: string;
   message: string;
+  lifecycleCommitted: boolean;
 };
 
 type SessionsCleanupAggregateResult = {
@@ -97,6 +111,7 @@ export function serializeSessionCleanupResult(params: {
               { agentId: params.failure.target.agentId },
             ).path,
             message: params.failure.message,
+            lifecycleCommitted: params.failure.lifecycleCommitted,
           },
         }
       : {}),
@@ -142,6 +157,7 @@ export function isSessionsCleanupPartialResult(
     value.stores.every(isSessionCleanupSummary) &&
     typeof value.partialError.failingAgentId === "string" &&
     typeof value.partialError.failingStorePath === "string" &&
-    typeof value.partialError.message === "string"
+    typeof value.partialError.message === "string" &&
+    typeof value.partialError.lifecycleCommitted === "boolean"
   );
 }

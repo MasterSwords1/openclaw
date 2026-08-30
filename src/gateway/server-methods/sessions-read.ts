@@ -530,7 +530,7 @@ export const sessionReadHandlers: GatewayRequestHandlers = {
           );
         }
       }
-      if (failure) {
+      if (failure?.lifecycleCommitted) {
         emitSessionsChanged(context, { reason: "cleanup", sessionKey: undefined });
       }
     } catch (error) {

@@ -10,6 +10,7 @@ import type { OpenClawConfig } from "../types.openclaw.js";
 
 const cleanupRace = vi.hoisted(() => ({
   afterPreview: undefined as (() => void) | undefined,
+  postCommitFailureStorePath: undefined as string | undefined,
 }));
 
 vi.mock("./disk-budget.js", async (importOriginal) => {
@@ -22,6 +23,9 @@ vi.mock("./disk-budget.js", async (importOriginal) => {
         const afterPreview = cleanupRace.afterPreview;
         cleanupRace.afterPreview = undefined;
         afterPreview();
+      }
+      if (!params.dryRun && cleanupRace.postCommitFailureStorePath === params.storePath) {
+        throw new Error("injected post-commit artifact failure");
       }
       return result;
     }),
@@ -42,6 +46,7 @@ const tempDirs = useAutoCleanupTempDirTracker(afterEach);
 describe("sessions cleanup applied summary", () => {
   afterEach(() => {
     cleanupRace.afterPreview = undefined;
+    cleanupRace.postCommitFailureStorePath = undefined;
     closeOpenClawAgentDatabasesForTest();
   });
 
@@ -123,53 +128,68 @@ describe("sessions cleanup applied summary", () => {
     expect(loadSessionEntry({ sessionKey, storePath })).toMatchObject({ sessionId });
   });
 
-  it("returns earlier committed summaries when a later store rejects", async () => {
-    const rootDir = tempDirs.make("openclaw-cleanup-partial-");
-    const main = {
-      agentId: "main",
-      sessionId: "main-message-free",
-      sessionKey: "agent:main:message-free",
-      storePath: path.join(rootDir, "agents", "main", "sessions", "sessions.json"),
-    };
-    const failing = {
-      agentId: "work",
-      sessionId: "work-message-free",
-      sessionKey: "agent:work:message-free",
-      storePath: path.join(rootDir, "agents", "work", "sessions", "sessions.json"),
-    };
-    const stores = [main, failing];
-    for (const store of stores) {
-      await replaceSessionEntry(store, {
-        sessionId: store.sessionId,
-        updatedAt: Date.now() - 100_000_000,
+  it.each([
+    { fault: "before commit", lifecycleCommitted: false },
+    { fault: "after commit", lifecycleCommitted: true },
+  ])(
+    "returns earlier committed summaries when a later store fails $fault",
+    async ({ lifecycleCommitted }) => {
+      const rootDir = tempDirs.make("openclaw-cleanup-partial-");
+      const main = {
+        agentId: "main",
+        sessionId: "main-message-free",
+        sessionKey: "agent:main:message-free",
+        storePath: path.join(rootDir, "agents", "main", "sessions", "sessions.json"),
+      };
+      const failing = {
+        agentId: "work",
+        sessionId: "work-message-free",
+        sessionKey: "agent:work:message-free",
+        storePath: path.join(rootDir, "agents", "work", "sessions", "sessions.json"),
+      };
+      const stores = [main, failing];
+      for (const store of stores) {
+        await replaceSessionEntry(store, {
+          sessionId: store.sessionId,
+          updatedAt: Date.now() - 100_000_000,
+        });
+        appendTranscriptEventSync(store, { type: "proof", content: store.agentId });
+      }
+      const failingSqlitePath = resolveSqliteTargetFromSessionStorePath(failing.storePath, {
+        agentId: failing.agentId,
+      }).path;
+      if (lifecycleCommitted) {
+        cleanupRace.postCommitFailureStorePath = failing.storePath;
+      } else {
+        openOpenClawAgentDatabase({ agentId: failing.agentId, path: failingSqlitePath }).db.exec(`
+          CREATE TRIGGER fail_second_store_delete
+          BEFORE DELETE ON session_windows
+          WHEN OLD.session_id = '${failing.sessionId}'
+          BEGIN
+            SELECT RAISE(ABORT, 'injected second-store lifecycle failure');
+          END;
+        `);
+      }
+
+      const outcome = await runSessionsCleanup({
+        cfg: {},
+        opts: { enforce: true, fixMissing: true },
+        targets: stores,
       });
-      appendTranscriptEventSync(store, { type: "proof", content: store.agentId });
-    }
-    const failingSqlitePath = resolveSqliteTargetFromSessionStorePath(failing.storePath, {
-      agentId: failing.agentId,
-    }).path;
-    openOpenClawAgentDatabase({ agentId: failing.agentId, path: failingSqlitePath }).db.exec(`
-      CREATE TRIGGER fail_second_store_delete
-      BEFORE DELETE ON session_windows
-      WHEN OLD.session_id = '${failing.sessionId}'
-      BEGIN
-        SELECT RAISE(ABORT, 'injected second-store lifecycle failure');
-      END;
-    `);
 
-    const outcome = await runSessionsCleanup({
-      cfg: {},
-      opts: { enforce: true, fixMissing: true },
-      targets: stores,
-    });
-
-    expect(loadSessionEntry(main)).toBeUndefined();
-    expect(loadSessionEntry(failing)).toMatchObject({ sessionId: failing.sessionId });
-    expect(outcome).toMatchObject({
-      appliedSummaries: [expect.objectContaining({ agentId: "main", applied: true })],
-      failure: expect.objectContaining({
-        target: expect.objectContaining({ agentId: "work" }),
-      }),
-    });
-  });
+      expect(loadSessionEntry(main)).toBeUndefined();
+      if (lifecycleCommitted) {
+        expect(loadSessionEntry(failing)).toBeUndefined();
+      } else {
+        expect(loadSessionEntry(failing)).toMatchObject({ sessionId: failing.sessionId });
+      }
+      expect(outcome).toMatchObject({
+        appliedSummaries: [expect.objectContaining({ agentId: "main", applied: true })],
+        failure: expect.objectContaining({
+          target: expect.objectContaining({ agentId: "work" }),
+          lifecycleCommitted,
+        }),
+      });
+    },
+  );
 });

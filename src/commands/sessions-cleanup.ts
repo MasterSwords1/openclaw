@@ -289,9 +289,11 @@ export async function sessionsCleanupCommand(opts: SessionsCleanupOptions, runti
   if (gatewayCleanup.delegated) {
     // The Gateway owns this path. Preserve its syntax because resolving a remote
     // Windows path on a POSIX client (or vice versa) would fabricate a local path.
+    const partialError =
+      "partialError" in gatewayCleanup.result ? gatewayCleanup.result.partialError : undefined;
     if (opts.json) {
       writeRuntimeJson(runtime, gatewayCleanup.result);
-      if ("partialError" in gatewayCleanup.result) {
+      if (partialError) {
         process.exitCode = 1;
       }
       return;
@@ -302,8 +304,8 @@ export async function sessionsCleanupCommand(opts: SessionsCleanupOptions, runti
       runtime,
       locallyOwned: false,
     });
-    if ("partialError" in gatewayCleanup.result) {
-      runtime.error(`[error] ${gatewayCleanup.result.partialError.message}`);
+    if (partialError) {
+      runtime.error(`[error] ${partialError.message}`);
       process.exitCode = 1;
     }
     return;

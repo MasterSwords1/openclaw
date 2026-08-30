@@ -3,6 +3,7 @@ import {
   createSessionsCleanupFailure,
   resolveSessionCleanupAction,
   runSessionsCleanup,
+  SessionsCleanupFailureError,
   type SessionStoreTarget,
   type SessionsCleanupOptions,
 } from "../config/sessions.js";
@@ -129,7 +130,10 @@ export async function runLocalSessionsCleanup(
       if (results.length === 0) {
         throw cause;
       }
-      failure = createSessionsCleanupFailure(target, cause);
+      failure =
+        cause instanceof SessionsCleanupFailureError
+          ? cause.failure
+          : createSessionsCleanupFailure(target, cause, false);
       break;
     }
     warnUnavailableCleanupOwners(owners, result, runtime);

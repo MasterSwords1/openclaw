@@ -310,6 +310,7 @@ describe("sessionsCleanupCommand", () => {
         failingAgentId: "work",
         failingStorePath: "/gateway/work/openclaw-agent.sqlite",
         message: "Session cleanup failed for agent 'work': injected failure",
+        lifecycleCommitted: false,
       },
     };
     mocks.callGateway.mockRejectedValue(Object.assign(new Error("request failed"), { details }));

@@ -93,6 +93,7 @@ describe("runLocalSessionsCleanup", () => {
     expect(result.appliedSummaries).toEqual([mainSummary]);
     expect(result.failure).toMatchObject({
       target: { agentId: "work", storePath: "/tmp/work/sessions.json" },
+      lifecycleCommitted: false,
     });
   });
 });
