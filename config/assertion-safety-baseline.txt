@@ -2670,7 +2670,7 @@ src/config/schema.hints.ts	15
 src/config/schema.tags.ts	1
 src/config/schema.ts	3
 src/config/sessions/archive-compression.ts	1
-src/config/sessions/cleanup-service.ts	4
+src/config/sessions/cleanup-service.ts	3
 src/config/sessions/conversation-delivery-store.ts	2
 src/config/sessions/group.ts	1
 src/config/sessions/legacy-main-session-migration-operations.ts	1
