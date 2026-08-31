@@ -26,8 +26,11 @@ export function unregisterStagingDirectory(directoryPath: string): void {
   producerMintedStagingDirectories.delete(path.resolve(directoryPath));
 }
 
-export function getRegisteredStagingDirectoriesCount(): number {
-  return producerMintedStagingDirectories.size;
+if (process.env.NODE_ENV === "test" || process.env.VITEST) {
+  // SAFETY: Test API registration on globalThis in test environment
+  (globalThis as Record<PropertyKey, unknown>)[Symbol.for("openclaw.stagedInputsTestApi")] = {
+    getRegisteredStagingDirectoriesCount: () => producerMintedStagingDirectories.size,
+  };
 }
 
 /** A directory basename is only a candidate if it matches the owned staging format. */

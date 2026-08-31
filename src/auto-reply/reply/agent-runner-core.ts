@@ -36,12 +36,8 @@ import { resolveEffectiveReplyRoute } from "./effective-reply-route.js";
 import type { InternalGetReplyOptions } from "./get-reply.types.js";
 import { normalizeReplyPayload } from "./normalize-reply.js";
 import { sanitizePendingFinalDeliveryText } from "./pending-final-delivery.js";
-import {
-  cleanHostWorkspaceStaging,
-  type FollowupRun,
-  type QueueSettings,
-  scheduleFollowupDrain,
-} from "./queue.js";
+import { type FollowupRun, type QueueSettings, scheduleFollowupDrain } from "./queue.js";
+import { cleanHostWorkspaceStaging } from "./queue/types.js";
 import { normalizeReplyPayloadDirectives } from "./reply-delivery.js";
 import { isReplyOperationSuperseded } from "./reply-operation-abort.js";
 import { type ReplyOperation, runAfterReplyOperationClear } from "./reply-run-registry.js";

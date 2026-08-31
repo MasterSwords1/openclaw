@@ -318,8 +318,8 @@ export async function getReplyFromConfig(
   opts?: GetReplyOptions,
   configOverride?: OpenClawConfig,
 ): Promise<ReplyPayload | ReplyPayload[] | undefined> {
-  if (opts && "hostWorkspaceStagingDir" in opts) {
-    delete (opts as Record<string, unknown>).hostWorkspaceStagingDir;
+  if (opts && typeof opts === "object") {
+    Reflect.deleteProperty(opts, "hostWorkspaceStagingDir");
   }
   const isFastTestEnv = isFastTestRuntimeEnv();
   const preparedReplyDispatchRuntime = configOverride

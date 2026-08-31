@@ -2,10 +2,16 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
-  getRegisteredStagingDirectoriesCount,
   registerProducedStagingDirectory,
   STAGED_INPUT_GITIGNORE,
 } from "../../media/staged-inputs.js";
+
+function getRegisteredStagingDirectoriesCount(): number {
+  const api = (globalThis as Record<PropertyKey, unknown>)[
+    Symbol.for("openclaw.stagedInputsTestApi")
+  ] as { getRegisteredStagingDirectoriesCount?: () => number } | undefined;
+  return api?.getRegisteredStagingDirectoriesCount?.() ?? 0;
+}
 import {
   createSandboxMediaContexts,
   createSandboxMediaStageConfig,
