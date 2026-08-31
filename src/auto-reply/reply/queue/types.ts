@@ -24,6 +24,10 @@ import type { GroupToolPolicyConfig } from "../../../config/types.tools.js";
 import { logVerbose } from "../../../globals.js";
 import type { MediaFact } from "../../../media/media-facts.js";
 import type { PromptImageOrderEntry } from "../../../media/prompt-image-order.js";
+import {
+  isOwnedStagedInputDirectoryName,
+  STAGED_INPUT_GITIGNORE,
+} from "../../../media/staged-inputs.js";
 import type { PluginHookChannelContext } from "../../../plugins/hook-types.js";
 import type { RuntimePluginToolGrant } from "../../../plugins/runtime/tool-grant.js";
 import type { InputProvenance } from "../../../sessions/input-provenance.js";
@@ -342,6 +346,10 @@ export function cleanHostWorkspaceStaging(run: Pick<FollowupRun, "hostWorkspaceS
   const hostWorkspaceStagingDir = run.hostWorkspaceStagingDir;
   if (hostWorkspaceStagingDir) {
     delete run.hostWorkspaceStagingDir;
+    const dirName = path.basename(hostWorkspaceStagingDir);
+    if (!isOwnedStagedInputDirectoryName(dirName)) {
+      return;
+    }
     // Remove only if empty (or marker-only): staged files are persisted into the transcript and
     // re-read by history hydration on subsequent turns. Recursive deletion
     // would destroy attachments still needed by the running session.
@@ -350,7 +358,18 @@ export function cleanHostWorkspaceStaging(run: Pick<FollowupRun, "hostWorkspaceS
         const files = await fs.readdir(hostWorkspaceStagingDir);
         if (files.length === 0 || (files.length === 1 && files[0] === ".gitignore")) {
           if (files.length === 1) {
-            await fs.rm(path.join(hostWorkspaceStagingDir, ".gitignore"), { force: true });
+            const markerPath = path.join(hostWorkspaceStagingDir, ".gitignore");
+            const markerContent = await fs.readFile(markerPath, "utf8").catch(() => null);
+            if (
+              markerContent !== null &&
+              (markerContent.trim() === "*" ||
+                markerContent.includes("Raw task inputs remain private") ||
+                markerContent === STAGED_INPUT_GITIGNORE)
+            ) {
+              await fs.rm(markerPath, { force: true });
+            } else {
+              return;
+            }
           }
           await fs.rmdir(hostWorkspaceStagingDir);
         }

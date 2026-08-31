@@ -5,12 +5,25 @@ import type { MediaFact } from "./media-facts.js";
 
 const STAGED_INPUT_DIRECTORY_PREFIX = "media/inbound/openclaw-staged-";
 export const STAGED_INPUT_GIT_PATHSPEC = `:(glob)${STAGED_INPUT_DIRECTORY_PREFIX}*/**`;
-const STAGED_INPUT_GITIGNORE =
+export const STAGED_INPUT_GITIGNORE =
   "# Raw task inputs remain private; copy outputs into the project to publish.\n*\n";
 
 const STAGED_INPUT_GITIGNORE_SHA256 = createHash("sha256")
   .update(STAGED_INPUT_GITIGNORE)
   .digest("hex");
+
+/** A directory basename is only a candidate if it matches the owned staging format. */
+export function isOwnedStagedInputDirectoryName(name: string): boolean {
+  if (!name.startsWith("openclaw-staged-")) {
+    return false;
+  }
+  const identity = name.slice("openclaw-staged-".length);
+  const match =
+    /^(?:[a-f0-9]{64}|[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12})$/u.exec(
+      identity,
+    );
+  return match?.[0] === identity;
+}
 
 /** A producer-shaped name is only a candidate; the marker establishes ownership. */
 export function stagedInputPathDirectory(relativePath: string): string | undefined {

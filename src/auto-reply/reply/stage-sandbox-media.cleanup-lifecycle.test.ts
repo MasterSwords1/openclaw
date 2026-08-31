@@ -14,6 +14,39 @@ import {
 } from "./queue/types.js";
 import { stageSandboxMedia } from "./stage-sandbox-media.js";
 
+async function waitForPathAbsence(targetPath: string, timeoutMs = 2000): Promise<boolean> {
+  const startTime = Date.now();
+  while (Date.now() - startTime < timeoutMs) {
+    const exists = await fs
+      .stat(targetPath)
+      .then(() => true)
+      .catch(() => false);
+    if (!exists) {
+      return true;
+    }
+    await new Promise((resolve) => {
+      setTimeout(resolve, 10);
+    });
+  }
+  return false;
+}
+
+async function waitForCondition(
+  predicate: () => Promise<boolean>,
+  timeoutMs = 2000,
+): Promise<boolean> {
+  const startTime = Date.now();
+  while (Date.now() - startTime < timeoutMs) {
+    if (await predicate()) {
+      return true;
+    }
+    await new Promise((resolve) => {
+      setTimeout(resolve, 10);
+    });
+  }
+  return false;
+}
+
 describe("stageSandboxMedia host staging lifecycle cleanup", () => {
   it("returns hostWorkspaceStagingDir and staged files remain readable after completeFollowupRunLifecycle (non-empty dir preserved)", async () => {
     await withSandboxMediaTempHome("staging-cleanup-test", async (home) => {
@@ -63,16 +96,13 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
       // Reference is cleared immediately
       expect(followupRun.hostWorkspaceStagingDir).toBeUndefined();
 
-      // Allow the async rmdir attempt to settle
-      await new Promise<void>((resolve) => {
-        setTimeout(resolve, 50);
-      });
-
       // Non-empty staging directory must still exist — staged files are needed for transcript replay
-      const exists = await fs
-        .stat(stagingDir)
-        .then(() => true)
-        .catch(() => false);
+      const exists = await waitForCondition(async () => {
+        return await fs
+          .stat(stagingDir)
+          .then(() => true)
+          .catch(() => false);
+      });
       expect(exists).toBe(true);
 
       // The staged file itself must remain readable
@@ -157,12 +187,12 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
       // Reference cleared immediately on drop
       expect(followupRun.hostWorkspaceStagingDir).toBeUndefined();
       // Staged file content is preserved (drop does not delete file data)
-      await new Promise<void>((resolve) => {
-        setTimeout(resolve, 50);
-      });
       const stagedFilePath = Array.from(result.staged.values())[0]!;
-      const content = await fs.readFile(stagedFilePath, "utf-8").catch(() => null);
-      expect(content).toBe("dropped-turn-media-content");
+      const content = await waitForCondition(async () => {
+        const text = await fs.readFile(stagedFilePath, "utf-8").catch(() => null);
+        return text === "dropped-turn-media-content";
+      });
+      expect(content).toBe(true);
     });
   });
 
@@ -212,12 +242,12 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
       expect(onAbandoned).not.toHaveBeenCalled();
 
       // Staged files are preserved — non-empty dir is not deleted
-      await new Promise<void>((resolve) => {
-        setTimeout(resolve, 50);
-      });
       const stagedFilePath = Array.from(result.staged.values())[0]!;
-      const content = await fs.readFile(stagedFilePath, "utf-8").catch(() => null);
-      expect(content).toBe("direct-turn-media-content");
+      const content = await waitForCondition(async () => {
+        const text = await fs.readFile(stagedFilePath, "utf-8").catch(() => null);
+        return text === "direct-turn-media-content";
+      });
+      expect(content).toBe(true);
     });
   });
 
@@ -275,15 +305,14 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
       // Settle active operation — cleanup fires, but non-empty dir stays (files preserved)
       resolveSettlement!();
       await ownerSettlement;
-      await new Promise<void>((resolve) => {
-        setTimeout(resolve, 50);
-      });
 
       // Dir still exists because staging was successful (non-empty)
-      const exists = await fs
-        .stat(stagingDir)
-        .then(() => true)
-        .catch(() => false);
+      const exists = await waitForCondition(async () => {
+        return await fs
+          .stat(stagingDir)
+          .then(() => true)
+          .catch(() => false);
+      });
       expect(exists).toBe(true);
     });
   });
@@ -326,12 +355,12 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
 
       expect(followupRun.hostWorkspaceStagingDir).toBeUndefined();
       // Staged files preserved even on skipped admission
-      await new Promise<void>((resolve) => {
-        setTimeout(resolve, 50);
-      });
       const stagedFilePath = Array.from(result.staged.values())[0]!;
-      const content = await fs.readFile(stagedFilePath, "utf-8").catch(() => null);
-      expect(content).toBe("skipped-admission-media-content");
+      const content = await waitForCondition(async () => {
+        const text = await fs.readFile(stagedFilePath, "utf-8").catch(() => null);
+        return text === "skipped-admission-media-content";
+      });
+      expect(content).toBe(true);
     });
   });
 
@@ -496,7 +525,7 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
         workspaceDir,
         "media",
         "inbound",
-        "openclaw-staged-empty-test",
+        "openclaw-staged-11111111-1111-4111-8111-111111111111",
       );
       await fs.mkdir(emptyStagingDir, { recursive: true });
       await fs.writeFile(path.join(emptyStagingDir, ".gitignore"), "*\n");
@@ -549,17 +578,9 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
       expect(emptyReply).toBeDefined();
       expect(runOpts.hostWorkspaceStagingDir).toBeUndefined();
 
-      // Allow async rmdir to settle
-      await new Promise<void>((resolve) => {
-        setTimeout(resolve, 50);
-      });
-
       // The empty staging directory must be completely removed from disk
-      const exists = await fs
-        .stat(emptyStagingDir)
-        .then(() => true)
-        .catch(() => false);
-      expect(exists).toBe(false);
+      const removed = await waitForPathAbsence(emptyStagingDir);
+      expect(removed).toBe(true);
     });
   });
 
@@ -618,6 +639,110 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
       // Settle lifecycle
       completeFollowupRunLifecycle(followupRun as unknown as FollowupRun);
       expect(followupRun.hostWorkspaceStagingDir).toBeUndefined();
+    });
+  });
+
+  it("rejects foreign caller-supplied hostWorkspaceStagingDir in options and leaves foreign directory untouched", async () => {
+    await withSandboxMediaTempHome("foreign-opts-rejection-test", async (home) => {
+      const foreignDir = path.join(home, "foreign-user-dir");
+      await fs.mkdir(foreignDir, { recursive: true });
+      const userGitignore = path.join(foreignDir, ".gitignore");
+      await fs.writeFile(userGitignore, "node_modules/\n.env\n");
+
+      const runOpts: { hostWorkspaceStagingDir?: string } = {
+        hostWorkspaceStagingDir: foreignDir,
+      };
+
+      const cfg = {
+        ...createSandboxMediaStageConfig(home),
+        agents: {
+          defaults: {
+            sandbox: { mode: "off" },
+          },
+        },
+      } as unknown as Parameters<typeof runPreparedReply>[0]["cfg"];
+
+      // Run an early return reply (e.g. empty body)
+      const emptyReply = await runPreparedReply({
+        ctx: { Body: "" },
+        sessionCtx: { Body: "", media: undefined, MediaPath: undefined },
+        cfg,
+        agentId: "main",
+        agentDir: path.join(home, "agent"),
+        agentCfg: {},
+        sessionCfg: undefined,
+        commandAuthorized: true,
+        command: { commandBodyNormalized: "" },
+        allowTextCommands: true,
+        directives: {
+          hasThinkDirective: false,
+          hasVerboseDirective: false,
+          hasFastDirective: false,
+          hasReasoningDirective: false,
+          hasElevatedDirective: false,
+          hasExecDirective: false,
+          hasModelDirective: false,
+          hasQueueDirective: false,
+          hasTraceDirective: false,
+          hasStatusDirective: false,
+        },
+        defaultActivation: "always",
+        resolvedThinkLevel: "off",
+        typing: {
+          cleanup: () => {},
+          onReplyStart: async () => {},
+        },
+        opts: runOpts,
+      } as unknown as Parameters<typeof runPreparedReply>[0]);
+
+      expect(emptyReply).toBeDefined();
+
+      // Foreign directory and its contents must remain completely intact
+      const foreignDirExists = await fs
+        .stat(foreignDir)
+        .then(() => true)
+        .catch(() => false);
+      expect(foreignDirExists).toBe(true);
+      const gitignoreContent = await fs.readFile(userGitignore, "utf-8");
+      expect(gitignoreContent).toBe("node_modules/\n.env\n");
+    });
+  });
+
+  it("cleanHostWorkspaceStaging rejects non-staging directory names and non-marker .gitignore files", async () => {
+    await withSandboxMediaTempHome("cleaner-validation-test", async (home) => {
+      // 1. Non-staging directory name
+      const nonStagingDir = path.join(home, "arbitrary-folder");
+      await fs.mkdir(nonStagingDir, { recursive: true });
+      await fs.writeFile(path.join(nonStagingDir, ".gitignore"), "*\n");
+
+      cleanHostWorkspaceStaging({ hostWorkspaceStagingDir: nonStagingDir });
+
+      const nonStagingExists = await fs
+        .stat(nonStagingDir)
+        .then(() => true)
+        .catch(() => false);
+      expect(nonStagingExists).toBe(true);
+
+      // 2. Staging-shaped name but custom (non-marker) .gitignore
+      const stagingDirWithCustomGitignore = path.join(
+        home,
+        "openclaw-staged-22222222-2222-4222-8222-222222222222",
+      );
+      await fs.mkdir(stagingDirWithCustomGitignore, { recursive: true });
+      const customGitignorePath = path.join(stagingDirWithCustomGitignore, ".gitignore");
+      await fs.writeFile(customGitignorePath, "build/\ndist/\n");
+
+      cleanHostWorkspaceStaging({ hostWorkspaceStagingDir: stagingDirWithCustomGitignore });
+
+      const customExists = await waitForCondition(async () => {
+        return await fs
+          .stat(stagingDirWithCustomGitignore)
+          .then(() => true)
+          .catch(() => false);
+      });
+      expect(customExists).toBe(true);
+      const customContent = await fs.readFile(customGitignorePath, "utf-8");
+      expect(customContent).toBe("build/\ndist/\n");
     });
   });
 });
