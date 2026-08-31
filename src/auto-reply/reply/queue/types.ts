@@ -284,7 +284,7 @@ const retiredTurnAdoptionCancellationLifecycles = new WeakSet<TurnAdoptionLifecy
 const completedTurnAdoptionLifecycles = new WeakSet<TurnAdoptionLifecycle>();
 const completedTurnAdoptionLifecycleCallbacks = new WeakSet<TurnAdoptionLifecycle>();
 
-export type FollowupLifecycleRun = Pick<
+type FollowupLifecycleRun = Pick<
   FollowupRun,
   "steerPending" | "turnAdoptionLifecycle" | "hostWorkspaceStagingDir"
 >;

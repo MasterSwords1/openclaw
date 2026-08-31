@@ -197,14 +197,14 @@ export async function runActiveReplySteer(params: ActiveReplySteerParams): Promi
         completeFollowupRunLifecycle({
           hostWorkspaceStagingDir: hostStagingDir,
           turnAdoptionLifecycle,
-        } as FollowupLifecycleRun);
+        });
       });
     } else if (activeReplyOperation) {
       runAfterReplyOperationClear(activeReplyOperation, () => {
         completeFollowupRunLifecycle({
           hostWorkspaceStagingDir: hostStagingDir,
           turnAdoptionLifecycle,
-        } as FollowupLifecycleRun);
+        });
       });
     }
     const transcriptCommitUnconfirmed =
