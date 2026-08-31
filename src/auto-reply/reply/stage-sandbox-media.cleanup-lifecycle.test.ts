@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
+  getRegisteredStagingDirectoriesCount,
   registerProducedStagingDirectory,
   STAGED_INPUT_GITIGNORE,
 } from "../../media/staged-inputs.js";
@@ -817,6 +818,45 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
         .then(() => true)
         .catch(() => false);
       expect(markerExists).toBe(true);
+    });
+  });
+
+  it("direct and non-auto-reply stageSandboxMedia callers do not leak registry entries", async () => {
+    await withSandboxMediaTempHome("no-registry-leak-test", async (home) => {
+      const initialCount = getRegisteredStagingDirectoriesCount();
+
+      const mediaDir = path.join(home, ".openclaw", "media", "inbound");
+      await fs.mkdir(mediaDir, { recursive: true });
+      const sampleFile = path.join(mediaDir, "sample.jpg");
+      await fs.writeFile(sampleFile, "sibling-media-content");
+
+      const mediaUri = `media://inbound/sample.jpg`;
+      const { ctx, sessionCtx } = createSandboxMediaContexts(mediaUri);
+      const cfg = {
+        ...createSandboxMediaStageConfig(home),
+        agents: {
+          defaults: {
+            sandbox: { mode: "off" },
+          },
+        },
+      } as unknown as Parameters<typeof stageSandboxMedia>[0]["cfg"];
+      const workspaceDir = path.join(home, "openclaw");
+
+      // Repeatedly stage through non-auto-reply caller
+      for (let i = 0; i < 5; i++) {
+        const { ctx, sessionCtx } = createSandboxMediaContexts(mediaUri);
+        const result = await stageSandboxMedia({
+          ctx,
+          sessionCtx,
+          cfg,
+          sessionKey: `sibling-session-${i}`,
+          workspaceDir,
+        });
+        expect(result.hostWorkspaceStagingDir).toBeDefined();
+      }
+
+      // No entries should be added to the registry
+      expect(getRegisteredStagingDirectoriesCount()).toBe(initialCount);
     });
   });
 });

@@ -33,6 +33,7 @@ import { createSubsystemLogger } from "../../logging/subsystem.js";
 import type { ApplyMediaUnderstandingResult } from "../../media-understanding/apply.js";
 import type { ExtractedFileImage } from "../../media-understanding/extracted-file-images.js";
 import { hasStagedMediaFacts, normalizeMediaFacts } from "../../media/media-facts.js";
+import { registerProducedStagingDirectory } from "../../media/staged-inputs.js";
 import { defaultRuntime } from "../../runtime.js";
 import {
   isModelSelectionLocked,
@@ -1283,6 +1284,7 @@ export async function getReplyFromConfig(
     stagedAttachmentPaths = stageResult.staged;
     if (stageResult.hostWorkspaceStagingDir) {
       hostWorkspaceStagingDir = stageResult.hostWorkspaceStagingDir;
+      registerProducedStagingDirectory(hostWorkspaceStagingDir);
     }
   }
 

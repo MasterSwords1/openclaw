@@ -26,6 +26,10 @@ export function unregisterStagingDirectory(directoryPath: string): void {
   producerMintedStagingDirectories.delete(path.resolve(directoryPath));
 }
 
+export function getRegisteredStagingDirectoriesCount(): number {
+  return producerMintedStagingDirectories.size;
+}
+
 /** A directory basename is only a candidate if it matches the owned staging format. */
 export function isOwnedStagedInputDirectoryName(name: string): boolean {
   if (!name.startsWith("openclaw-staged-")) {
