@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { shouldAdmitFreshChannelOwnerCronAuthority } from "../../agents/cron-creator-authority-context.js";
+import { registerProducedStagingDirectory } from "../../media/staged-inputs.js";
 import type { PreparedReplyRunAdmission } from "./get-reply-run-admission.js";
 import { executePreparedReplyRun } from "./get-reply-run-execute.js";
 
@@ -35,7 +36,9 @@ describe("fresh channel owner cron authority admission", () => {
 
 describe("executePreparedReplyRun staging lifecycle handoff", () => {
   it("carries hostWorkspaceStagingDir from opts into the production followupRun", async () => {
-    let capturedFollowupRun: any;
+    let capturedFollowupRun: any = undefined;
+    const stagingDir = "/tmp/openclaw-staged-12345678-1234-4234-8234-1234567890ab";
+    registerProducedStagingDirectory(stagingDir);
 
     const mockState = {
       context: {
@@ -59,7 +62,7 @@ describe("executePreparedReplyRun staging lifecycle handoff", () => {
           requestedRouteResolution: {},
           typing: {},
           opts: {
-            hostWorkspaceStagingDir: "/tmp/fake-staging-dir-12345",
+            hostWorkspaceStagingDir: stagingDir,
           },
         },
         resolvedVerboseLevel: "off",
@@ -110,6 +113,6 @@ describe("executePreparedReplyRun staging lifecycle handoff", () => {
     await executePreparedReplyRun(mockState);
 
     expect(capturedFollowupRun).toBeDefined();
-    expect(capturedFollowupRun.hostWorkspaceStagingDir).toBe("/tmp/fake-staging-dir-12345");
+    expect(capturedFollowupRun.hostWorkspaceStagingDir).toBe(stagingDir);
   });
 });

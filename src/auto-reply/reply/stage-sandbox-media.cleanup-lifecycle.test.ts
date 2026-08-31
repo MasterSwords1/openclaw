@@ -2,11 +2,16 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
+  registerProducedStagingDirectory,
+  STAGED_INPUT_GITIGNORE,
+} from "../../media/staged-inputs.js";
+import {
   createSandboxMediaContexts,
   createSandboxMediaStageConfig,
   withSandboxMediaTempHome,
 } from "../stage-sandbox-media.test-harness.js";
 import { runPreparedReply } from "./get-reply-run.js";
+import { getReplyFromConfig } from "./get-reply.js";
 import {
   cleanHostWorkspaceStaging,
   completeFollowupRunLifecycle,
@@ -528,7 +533,8 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
         "openclaw-staged-11111111-1111-4111-8111-111111111111",
       );
       await fs.mkdir(emptyStagingDir, { recursive: true });
-      await fs.writeFile(path.join(emptyStagingDir, ".gitignore"), "*\n");
+      await fs.writeFile(path.join(emptyStagingDir, ".gitignore"), STAGED_INPUT_GITIGNORE);
+      registerProducedStagingDirectory(emptyStagingDir);
 
       const runOpts: { hostWorkspaceStagingDir?: string } = {
         hostWorkspaceStagingDir: emptyStagingDir,
@@ -743,6 +749,74 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
       expect(customExists).toBe(true);
       const customContent = await fs.readFile(customGitignorePath, "utf-8");
       expect(customContent).toBe("build/\ndist/\n");
+
+      // 3. Staging-shaped name with canonical marker but NOT producer-minted
+      const unmintedStagingDir = path.join(
+        home,
+        "openclaw-staged-44444444-4444-4444-8444-444444444444",
+      );
+      await fs.mkdir(unmintedStagingDir, { recursive: true });
+      const canonicalMarkerPath = path.join(unmintedStagingDir, ".gitignore");
+      await fs.writeFile(canonicalMarkerPath, STAGED_INPUT_GITIGNORE);
+
+      cleanHostWorkspaceStaging({ hostWorkspaceStagingDir: unmintedStagingDir });
+
+      const unmintedExists = await waitForCondition(async () => {
+        return await fs
+          .stat(unmintedStagingDir)
+          .then(() => true)
+          .catch(() => false);
+      });
+      expect(unmintedExists).toBe(true);
+      const markerStillExists = await fs
+        .stat(canonicalMarkerPath)
+        .then(() => true)
+        .catch(() => false);
+      expect(markerStillExists).toBe(true);
+    });
+  });
+
+  it("getReplyFromConfig rejects caller-supplied hostWorkspaceStagingDir options even if shaped like UUID with canonical marker", async () => {
+    await withSandboxMediaTempHome("public-opts-forged-test", async (home) => {
+      const forgedDir = path.join(home, "openclaw-staged-55555555-5555-4555-8555-555555555555");
+      await fs.mkdir(forgedDir, { recursive: true });
+      const markerPath = path.join(forgedDir, ".gitignore");
+      await fs.writeFile(markerPath, STAGED_INPUT_GITIGNORE);
+
+      const cfg = {
+        ...createSandboxMediaStageConfig(home),
+        agents: {
+          defaults: {
+            sandbox: { mode: "off" },
+          },
+        },
+      } as unknown as Parameters<typeof getReplyFromConfig>[2];
+
+      const ctx = {
+        Body: "test forged options",
+        SessionKey: "forged-opts-session",
+      } as Parameters<typeof getReplyFromConfig>[0];
+
+      // Pass forged hostWorkspaceStagingDir via GetReplyOptions
+      const opts = {
+        hostWorkspaceStagingDir: forgedDir,
+      } as unknown as Parameters<typeof getReplyFromConfig>[1];
+
+      await getReplyFromConfig(ctx, opts, cfg).catch(() => {});
+
+      // Forged directory must remain completely untouched
+      const forgedExists = await waitForCondition(async () => {
+        return await fs
+          .stat(forgedDir)
+          .then(() => true)
+          .catch(() => false);
+      });
+      expect(forgedExists).toBe(true);
+      const markerExists = await fs
+        .stat(markerPath)
+        .then(() => true)
+        .catch(() => false);
+      expect(markerExists).toBe(true);
     });
   });
 });

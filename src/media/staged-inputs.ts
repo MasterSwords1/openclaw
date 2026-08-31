@@ -12,6 +12,20 @@ const STAGED_INPUT_GITIGNORE_SHA256 = createHash("sha256")
   .update(STAGED_INPUT_GITIGNORE)
   .digest("hex");
 
+const producerMintedStagingDirectories = new Set<string>();
+
+export function registerProducedStagingDirectory(directoryPath: string): void {
+  producerMintedStagingDirectories.add(path.resolve(directoryPath));
+}
+
+export function isRegisteredStagingDirectory(directoryPath: string): boolean {
+  return producerMintedStagingDirectories.has(path.resolve(directoryPath));
+}
+
+export function unregisterStagingDirectory(directoryPath: string): void {
+  producerMintedStagingDirectories.delete(path.resolve(directoryPath));
+}
+
 /** A directory basename is only a candidate if it matches the owned staging format. */
 export function isOwnedStagedInputDirectoryName(name: string): boolean {
   if (!name.startsWith("openclaw-staged-")) {

@@ -19,8 +19,10 @@ import { normalizeMediaFacts, type MediaFact } from "../../media/media-facts.js"
 import { resolveInboundMediaReference } from "../../media/media-reference.js";
 import {
   ensureStagedInputDirectory,
+  registerProducedStagingDirectory,
   stagedInputDirectory,
   stagedInputFileName,
+  unregisterStagingDirectory,
 } from "../../media/staged-inputs.js";
 import { getMediaDir } from "../../media/store.js";
 import { runCommandWithTimeout } from "../../process/exec.js";
@@ -120,6 +122,7 @@ export async function stageSandboxMedia(params: {
     try {
       if (!stagingReady) {
         await ensureStagedInputDirectory(effectiveWorkspaceDir, inputDirectory);
+        registerProducedStagingDirectory(hostWorkspaceStagingDir);
         stagingReady = true;
       }
       if (ctx.MediaRemoteHost) {
@@ -145,6 +148,7 @@ export async function stageSandboxMedia(params: {
       // remove only its destination and then the empty host staging directory.
       await removeFailedStageDestination({ rootDir: effectiveWorkspaceDir, dest });
       if (hostWorkspaceStagingDir) {
+        unregisterStagingDirectory(hostWorkspaceStagingDir);
         await fs.rmdir(hostWorkspaceStagingDir).catch(() => {});
       }
       if (err instanceof FsSafeError && err.code === "too-large") {
@@ -173,6 +177,7 @@ export async function stageSandboxMedia(params: {
   if (staged.size === 0) {
     // No successful stages - clean up the marker-only staging directory if it was created
     if (stagingReady) {
+      unregisterStagingDirectory(hostWorkspaceStagingDir);
       await fs
         .rm(path.join(hostWorkspaceStagingDir, ".gitignore"), { force: true })
         .catch(() => {});

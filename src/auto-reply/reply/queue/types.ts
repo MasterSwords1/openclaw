@@ -26,7 +26,9 @@ import type { MediaFact } from "../../../media/media-facts.js";
 import type { PromptImageOrderEntry } from "../../../media/prompt-image-order.js";
 import {
   isOwnedStagedInputDirectoryName,
+  isRegisteredStagingDirectory,
   STAGED_INPUT_GITIGNORE,
+  unregisterStagingDirectory,
 } from "../../../media/staged-inputs.js";
 import type { PluginHookChannelContext } from "../../../plugins/hook-types.js";
 import type { RuntimePluginToolGrant } from "../../../plugins/runtime/tool-grant.js";
@@ -346,6 +348,11 @@ export function cleanHostWorkspaceStaging(run: Pick<FollowupRun, "hostWorkspaceS
   const hostWorkspaceStagingDir = run.hostWorkspaceStagingDir;
   if (hostWorkspaceStagingDir) {
     delete run.hostWorkspaceStagingDir;
+    // Must be a producer-minted staging directory registered by stageSandboxMedia
+    if (!isRegisteredStagingDirectory(hostWorkspaceStagingDir)) {
+      return;
+    }
+    unregisterStagingDirectory(hostWorkspaceStagingDir);
     const dirName = path.basename(hostWorkspaceStagingDir);
     if (!isOwnedStagedInputDirectoryName(dirName)) {
       return;
@@ -362,9 +369,9 @@ export function cleanHostWorkspaceStaging(run: Pick<FollowupRun, "hostWorkspaceS
             const markerContent = await fs.readFile(markerPath, "utf8").catch(() => null);
             if (
               markerContent !== null &&
-              (markerContent.trim() === "*" ||
-                markerContent.includes("Raw task inputs remain private") ||
-                markerContent === STAGED_INPUT_GITIGNORE)
+              (markerContent === STAGED_INPUT_GITIGNORE ||
+                markerContent === "*\n" ||
+                markerContent === "*")
             ) {
               await fs.rm(markerPath, { force: true });
             } else {
