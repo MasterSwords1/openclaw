@@ -46,7 +46,7 @@ const controlUiPerformanceBudgets = {
   // operator decision 2026-08-25 rejected boot splitting due to precedence risk.
   // 53.0 KiB was exhausted by organic growth (main sat at 99.94% by 2026-08-29);
   // bumped with operator approval on PR #132054.
-  largestCssGzipBytes: 53.6 * KIB,
+  largestCssGzipBytes: 53.5 * KIB,
 } satisfies Record<string, number>;
 export const CONTROL_UI_PERFORMANCE_BUDGETS = Object.freeze(controlUiPerformanceBudgets);
 

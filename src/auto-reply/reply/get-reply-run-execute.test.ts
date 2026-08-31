@@ -92,9 +92,11 @@ describe("executePreparedReplyRun staging lifecycle handoff", () => {
       embeddedAgentRuntime: {},
       resolveActiveEmbeddedSessionId: () => undefined,
       resolvePreparedSessionState: () => ({ sessionFile: { id: "test" } }),
-      runReplyAgent: async (args: any) => {
+      runReplyAgent: async (
+        args: Parameters<typeof import("./agent-runner.js").runReplyAgent>[0],
+      ) => {
         capturedFollowupRun = args.followupRun;
-        return undefined as any;
+        return undefined as never;
       },
       queueKey: "queue-1",
       shouldSteer: false,
