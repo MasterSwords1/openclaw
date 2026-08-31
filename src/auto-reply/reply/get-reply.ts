@@ -1257,7 +1257,7 @@ export async function getReplyFromConfig(
   let stagedAttachmentPaths = hasStagedMediaFacts(finalized.media)
     ? collectStagedAttachmentPaths(finalized)
     : new Map<number, string>();
-  let hostWorkspaceStagingDir: string | undefined;
+  let hostWorkspaceStagingDir: string | undefined = resolvedOpts?.hostWorkspaceStagingDir;
   // Already-staged facts or SDK projections must remain a single-stage contract.
   if (
     !useFastTestBootstrap &&
