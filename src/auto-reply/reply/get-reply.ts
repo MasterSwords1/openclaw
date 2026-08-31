@@ -1257,6 +1257,7 @@ export async function getReplyFromConfig(
   let stagedAttachmentPaths = hasStagedMediaFacts(finalized.media)
     ? collectStagedAttachmentPaths(finalized)
     : new Map<number, string>();
+  let hostWorkspaceStagingDir: string | undefined;
   // Already-staged facts or SDK projections must remain a single-stage contract.
   if (
     !useFastTestBootstrap &&
@@ -1277,8 +1278,8 @@ export async function getReplyFromConfig(
       }),
     );
     stagedAttachmentPaths = stageResult.staged;
-    if (stageResult.hostWorkspaceStagingDir && internalResolvedOpts) {
-      internalResolvedOpts.hostWorkspaceStagingDir = stageResult.hostWorkspaceStagingDir;
+    if (stageResult.hostWorkspaceStagingDir) {
+      hostWorkspaceStagingDir = stageResult.hostWorkspaceStagingDir;
     }
   }
 
@@ -1348,10 +1349,9 @@ export async function getReplyFromConfig(
         ...(queueModeOverride
           ? { ...withExtractedFileImages(resolvedOpts, extractedFileImages), queueModeOverride }
           : withExtractedFileImages(resolvedOpts, extractedFileImages)),
+        ...(hostWorkspaceStagingDir ? { hostWorkspaceStagingDir } : {}),
         onHostStagingDelegated: () => {
-          if (resolvedOpts) {
-            delete resolvedOpts.hostWorkspaceStagingDir;
-          }
+          hostWorkspaceStagingDir = undefined;
         },
       },
       defaultModel,
@@ -1375,8 +1375,8 @@ export async function getReplyFromConfig(
   try {
     replyResult = await runPreparedReplyPromise;
   } catch (err) {
-    if (resolvedOpts?.hostWorkspaceStagingDir) {
-      cleanHostWorkspaceStaging(resolvedOpts);
+    if (hostWorkspaceStagingDir) {
+      cleanHostWorkspaceStaging({ hostWorkspaceStagingDir });
     }
     throw err;
   }

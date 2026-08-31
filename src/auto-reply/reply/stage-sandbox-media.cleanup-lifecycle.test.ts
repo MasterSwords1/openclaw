@@ -488,4 +488,136 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
       expect(afterContent).toBe("test-media-content");
     });
   });
+
+  it("removes empty staging directory on prepared reply early admission / queue-state short-circuit exit", async () => {
+    await withSandboxMediaTempHome("empty-short-circuit-cleanup-test", async (home) => {
+      const workspaceDir = path.join(home, "openclaw");
+      const emptyStagingDir = path.join(
+        workspaceDir,
+        "media",
+        "inbound",
+        "openclaw-staged-empty-test",
+      );
+      await fs.mkdir(emptyStagingDir, { recursive: true });
+      await fs.writeFile(path.join(emptyStagingDir, ".gitignore"), "*\n");
+
+      const runOpts: { hostWorkspaceStagingDir?: string } = {
+        hostWorkspaceStagingDir: emptyStagingDir,
+      };
+
+      const cfg = {
+        ...createSandboxMediaStageConfig(home),
+        agents: {
+          defaults: {
+            sandbox: { mode: "off" },
+          },
+        },
+      } as unknown as Parameters<typeof runPreparedReply>[0]["cfg"];
+
+      const emptyReply = await runPreparedReply({
+        ctx: { Body: "" },
+        sessionCtx: { Body: "", media: undefined, MediaPath: undefined },
+        cfg,
+        agentId: "main",
+        agentDir: path.join(home, "agent"),
+        agentCfg: {},
+        sessionCfg: undefined,
+        commandAuthorized: true,
+        command: { commandBodyNormalized: "" },
+        allowTextCommands: true,
+        directives: {
+          hasThinkDirective: false,
+          hasVerboseDirective: false,
+          hasFastDirective: false,
+          hasReasoningDirective: false,
+          hasElevatedDirective: false,
+          hasExecDirective: false,
+          hasModelDirective: false,
+          hasQueueDirective: false,
+          hasTraceDirective: false,
+          hasStatusDirective: false,
+        },
+        defaultActivation: "always",
+        resolvedThinkLevel: "off",
+        typing: {
+          cleanup: () => {},
+          onReplyStart: async () => {},
+        },
+        opts: runOpts,
+      } as unknown as Parameters<typeof runPreparedReply>[0]);
+
+      expect(emptyReply).toBeDefined();
+      expect(runOpts.hostWorkspaceStagingDir).toBeUndefined();
+
+      // Allow async rmdir to settle
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, 50);
+      });
+
+      // The empty staging directory must be completely removed from disk
+      const exists = await fs
+        .stat(emptyStagingDir)
+        .then(() => true)
+        .catch(() => false);
+      expect(exists).toBe(false);
+    });
+  });
+
+  it("carries hostWorkspaceStagingDir to queue lifecycle on optionless reply handoff", async () => {
+    await withSandboxMediaTempHome("optionless-handoff-test", async (home) => {
+      const mediaDir = path.join(home, ".openclaw", "media", "inbound");
+      await fs.mkdir(mediaDir, { recursive: true });
+      const sampleFile = path.join(mediaDir, "sample-optionless.jpg");
+      await fs.writeFile(sampleFile, "optionless-media-content");
+
+      const mediaUri = `media://inbound/sample-optionless.jpg`;
+      const { ctx, sessionCtx } = createSandboxMediaContexts(mediaUri);
+      const cfg = {
+        ...createSandboxMediaStageConfig(home),
+        agents: {
+          defaults: {
+            sandbox: { mode: "off" },
+          },
+        },
+      } as unknown as Parameters<typeof stageSandboxMedia>[0]["cfg"];
+      const workspaceDir = path.join(home, "openclaw");
+
+      const stageResult = await stageSandboxMedia({
+        ctx,
+        sessionCtx,
+        cfg,
+        sessionKey: "session-optionless",
+        workspaceDir,
+      });
+
+      const stagingDir = stageResult.hostWorkspaceStagingDir!;
+      expect(stagingDir).toBeDefined();
+
+      // When resolvedOpts is undefined (caller provided no opts), runner opts still inherits hostWorkspaceStagingDir
+      let hostWorkspaceStagingDir: string | undefined = stageResult.hostWorkspaceStagingDir;
+      const runnerOpts: {
+        hostWorkspaceStagingDir?: string;
+        onHostStagingDelegated?: () => void;
+      } = {
+        ...(hostWorkspaceStagingDir ? { hostWorkspaceStagingDir } : {}),
+        onHostStagingDelegated: () => {
+          hostWorkspaceStagingDir = undefined;
+        },
+      };
+
+      expect(runnerOpts.hostWorkspaceStagingDir).toBe(stagingDir);
+
+      const followupRun: Partial<FollowupRun> = {
+        hostWorkspaceStagingDir: runnerOpts.hostWorkspaceStagingDir,
+      };
+      runnerOpts.onHostStagingDelegated?.();
+
+      expect(hostWorkspaceStagingDir).toBeUndefined();
+      expect(followupRun.hostWorkspaceStagingDir).toBe(stagingDir);
+
+      // Settle lifecycle
+      completeFollowupRunLifecycle(followupRun as unknown as FollowupRun);
+      expect(followupRun.hostWorkspaceStagingDir).toBeUndefined();
+    });
+  });
 });

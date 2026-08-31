@@ -7,12 +7,16 @@ import { prepareReplyRunContext } from "./get-reply-run-context.js";
 import { executePreparedReplyRun } from "./get-reply-run-execute.js";
 import type { RunPreparedReplyParams } from "./get-reply-run.types.js";
 import { getPreparedReplyDispatchRuntime } from "./prepared-reply-dispatch-context.js";
+import { cleanHostWorkspaceStaging } from "./queue.js";
 
 async function executePreparedReplyContext(
   context: Exclude<Awaited<ReturnType<typeof prepareReplyRunContext>>, { kind: "reply" }>,
 ) {
   const admission = await prepareReplyRunAdmission(context);
   if (admission.kind === "reply") {
+    if (context.params.opts?.hostWorkspaceStagingDir) {
+      cleanHostWorkspaceStaging(context.params.opts);
+    }
     return admission.reply;
   }
 
@@ -27,7 +31,7 @@ export async function runPreparedReply(
   if (context.kind === "reply") {
     // Short-circuit: clean up host workspace staging directory if present
     if (params.opts?.hostWorkspaceStagingDir) {
-      delete params.opts.hostWorkspaceStagingDir;
+      cleanHostWorkspaceStaging(params.opts);
     }
     return context.reply;
   }
