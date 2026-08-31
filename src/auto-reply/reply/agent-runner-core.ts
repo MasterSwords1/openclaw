@@ -36,7 +36,12 @@ import { resolveEffectiveReplyRoute } from "./effective-reply-route.js";
 import type { InternalGetReplyOptions } from "./get-reply.types.js";
 import { normalizeReplyPayload } from "./normalize-reply.js";
 import { sanitizePendingFinalDeliveryText } from "./pending-final-delivery.js";
-import { type FollowupRun, type QueueSettings, scheduleFollowupDrain } from "./queue.js";
+import {
+  cleanHostWorkspaceStaging,
+  type FollowupRun,
+  type QueueSettings,
+  scheduleFollowupDrain,
+} from "./queue.js";
 import { normalizeReplyPayloadDirectives } from "./reply-delivery.js";
 import { isReplyOperationSuperseded } from "./reply-operation-abort.js";
 import { type ReplyOperation, runAfterReplyOperationClear } from "./reply-run-registry.js";
@@ -375,6 +380,7 @@ export async function handleReplyAgentRunError(
 export async function cleanupReplyAgentRun(context: {
   blockReplyPipeline: BlockReplyPipeline | null;
   clearRestartRecoveryDeliveryClaim: () => Promise<void>;
+  followupRun?: FollowupRun | undefined;
   providedReplyOperation: ReplyOperation | undefined;
   queueKey: string;
   replyOperation: ReplyOperation;
@@ -386,6 +392,7 @@ export async function cleanupReplyAgentRun(context: {
   const {
     blockReplyPipeline,
     clearRestartRecoveryDeliveryClaim,
+    followupRun,
     providedReplyOperation,
     queueKey,
     replyOperation,
@@ -394,6 +401,10 @@ export async function cleanupReplyAgentRun(context: {
     shouldDrainQueuedFollowupsAfterClear,
     typing,
   } = context;
+
+  if (followupRun) {
+    cleanHostWorkspaceStaging(followupRun);
+  }
 
   try {
     await clearRestartRecoveryDeliveryClaim();

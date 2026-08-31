@@ -11,6 +11,7 @@ import {
   createSandboxMediaStageConfig,
   withSandboxMediaTempHome,
 } from "../stage-sandbox-media.test-harness.js";
+import { cleanupReplyAgentRun } from "./agent-runner-core.js";
 import { runPreparedReply } from "./get-reply-run.js";
 import { getReplyFromConfig } from "./get-reply.js";
 import {
@@ -831,7 +832,6 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
       await fs.writeFile(sampleFile, "sibling-media-content");
 
       const mediaUri = `media://inbound/sample.jpg`;
-      const { ctx, sessionCtx } = createSandboxMediaContexts(mediaUri);
       const cfg = {
         ...createSandboxMediaStageConfig(home),
         agents: {
@@ -857,6 +857,54 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
 
       // No entries should be added to the registry
       expect(getRegisteredStagingDirectoriesCount()).toBe(initialCount);
+    });
+  });
+
+  it("direct reply execution releases staging directory from registry and cleans empty directory", async () => {
+    await withSandboxMediaTempHome("direct-reply-registry-test", async (home) => {
+      const initialCount = getRegisteredStagingDirectoriesCount();
+
+      const stagingDir = path.join(home, "openclaw-staged-11111111-2222-4333-8444-555555555555");
+      await fs.mkdir(stagingDir, { recursive: true });
+      await fs.writeFile(path.join(stagingDir, ".gitignore"), STAGED_INPUT_GITIGNORE);
+      registerProducedStagingDirectory(stagingDir);
+
+      expect(getRegisteredStagingDirectoriesCount()).toBe(initialCount + 1);
+
+      const followupRun: FollowupRun = {
+        prompt: "test direct reply",
+        hostWorkspaceStagingDir: stagingDir,
+        enqueuedAt: Date.now(),
+        run: {
+          sessionId: "direct-session-1",
+        } as FollowupRun["run"],
+      };
+
+      await cleanupReplyAgentRun({
+        blockReplyPipeline: null,
+        clearRestartRecoveryDeliveryClaim: async () => {},
+        followupRun,
+        providedReplyOperation: undefined,
+        queueKey: "main",
+        replyOperation: { complete: vi.fn() } as unknown as Parameters<
+          typeof cleanupReplyAgentRun
+        >[0]["replyOperation"],
+        runFollowupTurn: async () => {},
+        sessionKey: "session-direct",
+        shouldDrainQueuedFollowupsAfterClear: false,
+        typing: {
+          markRunComplete: vi.fn(),
+          markDispatchIdle: vi.fn(),
+          cleanup: vi.fn(),
+        } as unknown as Parameters<typeof cleanupReplyAgentRun>[0]["typing"],
+      });
+
+      // Registry entry must be released
+      expect(getRegisteredStagingDirectoriesCount()).toBe(initialCount);
+
+      // Empty staging directory must be removed
+      const absent = await waitForPathAbsence(stagingDir);
+      expect(absent).toBe(true);
     });
   });
 });
