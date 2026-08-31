@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import path from "node:path";
 import type { FastMode } from "@openclaw/normalization-core/string-coerce";
 // Shared queue type contracts for admission, drain, and fallback handling.
 import type { QueueMode } from "../../../../packages/gateway-protocol/src/schema/logs-chat.js";
@@ -340,20 +341,30 @@ export function cleanHostWorkspaceStaging(run: Pick<FollowupRun, "hostWorkspaceS
   const hostWorkspaceStagingDir = run.hostWorkspaceStagingDir;
   if (hostWorkspaceStagingDir) {
     delete run.hostWorkspaceStagingDir;
-    // Remove only if empty: staged files are persisted into the transcript and
+    // Remove only if empty (or marker-only): staged files are persisted into the transcript and
     // re-read by history hydration on subsequent turns. Recursive deletion
     // would destroy attachments still needed by the running session.
-    void fs.rmdir(hostWorkspaceStagingDir).catch((err: unknown) => {
-      // ENOTEMPTY is expected when staging succeeded; ENOENT is fine on double-call.
-      if (
-        err instanceof Error &&
-        !("code" in err && (err.code === "ENOTEMPTY" || err.code === "ENOENT"))
-      ) {
-        logVerbose(
-          `Failed to clean host workspace staging directory: ${hostWorkspaceStagingDir} (${err.message})`,
-        );
+    void (async () => {
+      try {
+        const files = await fs.readdir(hostWorkspaceStagingDir);
+        if (files.length === 0 || (files.length === 1 && files[0] === ".gitignore")) {
+          if (files.length === 1) {
+            await fs.rm(path.join(hostWorkspaceStagingDir, ".gitignore"), { force: true });
+          }
+          await fs.rmdir(hostWorkspaceStagingDir);
+        }
+      } catch (err: unknown) {
+        // ENOTEMPTY is expected when staging succeeded; ENOENT is fine on double-call.
+        if (
+          err instanceof Error &&
+          !("code" in err && (err.code === "ENOTEMPTY" || err.code === "ENOENT"))
+        ) {
+          logVerbose(
+            `Failed to clean host workspace staging directory: ${hostWorkspaceStagingDir} (${err.message})`,
+          );
+        }
       }
-    });
+    })();
   }
 }
 

@@ -1177,7 +1177,6 @@ export async function getReplyFromConfig(
   cleanedBody = inlineActionResult.cleanedBody;
   const explicitSkillSelections = inlineActionResult.explicitSkillSelections;
   const queueModeOverride = inlineActionResult.queueModeOverride;
-  const preparedReplyOpts = withExtractedFileImages(resolvedOpts, extractedFileImages);
   abortedLastRun = inlineActionResult.abortedLastRun ?? abortedLastRun;
   const runAutoFallbackPrimaryProbe = directives.hasModelDirective
     ? undefined
@@ -1278,6 +1277,9 @@ export async function getReplyFromConfig(
       }),
     );
     stagedAttachmentPaths = stageResult.staged;
+    if (stageResult.hostWorkspaceStagingDir && internalResolvedOpts) {
+      internalResolvedOpts.hostWorkspaceStagingDir = stageResult.hostWorkspaceStagingDir;
+    }
   }
 
   if (

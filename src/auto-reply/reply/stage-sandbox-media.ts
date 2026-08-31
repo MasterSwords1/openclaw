@@ -171,8 +171,11 @@ export async function stageSandboxMedia(params: {
   }
 
   if (staged.size === 0) {
-    // No successful stages - clean up the empty staging directory if it was created
+    // No successful stages - clean up the marker-only staging directory if it was created
     if (stagingReady) {
+      await fs
+        .rm(path.join(hostWorkspaceStagingDir, ".gitignore"), { force: true })
+        .catch(() => {});
       await fs.rmdir(hostWorkspaceStagingDir).catch(() => {});
     }
     return { staged };
