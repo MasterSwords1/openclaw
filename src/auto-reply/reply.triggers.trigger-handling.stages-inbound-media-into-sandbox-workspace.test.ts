@@ -589,7 +589,9 @@ describe("stageSandboxMedia", () => {
 
       const inboundDir = join(sandboxDir, "media", "inbound");
       const directories = await fs.readdir(inboundDir).catch((e) => {
-        if (e.code === "ENOENT") return [];
+        if (e.code === "ENOENT") {
+          return [];
+        }
         throw e;
       });
       expect(directories).toEqual([]);

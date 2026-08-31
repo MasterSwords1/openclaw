@@ -13,7 +13,6 @@ import {
   parkSteerCandidate,
   resolveFollowupAbortSignal,
   scheduleFollowupDrain,
-  type FollowupLifecycleRun,
   type FollowupRun,
 } from "./queue.js";
 import type { ReplyOperationRunState } from "./reply-operation-run-state.js";
