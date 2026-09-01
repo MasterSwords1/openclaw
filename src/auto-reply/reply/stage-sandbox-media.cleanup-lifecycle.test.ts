@@ -776,11 +776,55 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
           .catch(() => false);
       });
       expect(unmintedExists).toBe(true);
-      const markerStillExists = await fs
-        .stat(canonicalMarkerPath)
+      // 4. Producer-registered directory whose marker is altered to bare wildcard "*"
+      const registeredBareStarDir = path.join(
+        home,
+        "openclaw-staged-66666666-6666-4666-8666-666666666666",
+      );
+      await fs.mkdir(registeredBareStarDir, { recursive: true });
+      const bareStarMarkerPath = path.join(registeredBareStarDir, ".gitignore");
+      await fs.writeFile(bareStarMarkerPath, "*");
+      registerProducedStagingDirectory(registeredBareStarDir);
+
+      cleanHostWorkspaceStaging({ hostWorkspaceStagingDir: registeredBareStarDir });
+
+      const bareStarExists = await waitForCondition(async () => {
+        return await fs
+          .stat(registeredBareStarDir)
+          .then(() => true)
+          .catch(() => false);
+      });
+      expect(bareStarExists).toBe(true);
+      const bareStarMarkerStillExists = await fs
+        .stat(bareStarMarkerPath)
         .then(() => true)
         .catch(() => false);
-      expect(markerStillExists).toBe(true);
+      expect(bareStarMarkerStillExists).toBe(true);
+
+      // 5. Producer-registered directory whose marker is altered to "*\n"
+      const registeredBareStarNewlineDir = path.join(
+        home,
+        "openclaw-staged-77777777-7777-4777-8777-777777777777",
+      );
+      await fs.mkdir(registeredBareStarNewlineDir, { recursive: true });
+      const bareStarNewlineMarkerPath = path.join(registeredBareStarNewlineDir, ".gitignore");
+      await fs.writeFile(bareStarNewlineMarkerPath, "*\n");
+      registerProducedStagingDirectory(registeredBareStarNewlineDir);
+
+      cleanHostWorkspaceStaging({ hostWorkspaceStagingDir: registeredBareStarNewlineDir });
+
+      const bareStarNewlineExists = await waitForCondition(async () => {
+        return await fs
+          .stat(registeredBareStarNewlineDir)
+          .then(() => true)
+          .catch(() => false);
+      });
+      expect(bareStarNewlineExists).toBe(true);
+      const bareStarNewlineMarkerStillExists = await fs
+        .stat(bareStarNewlineMarkerPath)
+        .then(() => true)
+        .catch(() => false);
+      expect(bareStarNewlineMarkerStillExists).toBe(true);
     });
   });
 

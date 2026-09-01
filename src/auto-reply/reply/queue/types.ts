@@ -367,12 +367,7 @@ export function cleanHostWorkspaceStaging(run: Pick<FollowupRun, "hostWorkspaceS
           if (files.length === 1) {
             const markerPath = path.join(hostWorkspaceStagingDir, ".gitignore");
             const markerContent = await fs.readFile(markerPath, "utf8").catch(() => null);
-            if (
-              markerContent !== null &&
-              (markerContent === STAGED_INPUT_GITIGNORE ||
-                markerContent === "*\n" ||
-                markerContent === "*")
-            ) {
+            if (markerContent !== null && markerContent === STAGED_INPUT_GITIGNORE) {
               await fs.rm(markerPath, { force: true });
             } else {
               return;
