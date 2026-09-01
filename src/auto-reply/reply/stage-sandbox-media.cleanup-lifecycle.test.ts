@@ -825,6 +825,60 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
         .then(() => true)
         .catch(() => false);
       expect(bareStarNewlineMarkerStillExists).toBe(true);
+      // 6. Registered staging path is a symlink pointing to an external directory with canonical marker
+      const externalTargetDir = path.join(home, "external-target-dir");
+      await fs.mkdir(externalTargetDir, { recursive: true });
+      const externalMarkerPath = path.join(externalTargetDir, ".gitignore");
+      await fs.writeFile(externalMarkerPath, STAGED_INPUT_GITIGNORE);
+
+      const symlinkStagingDir = path.join(
+        home,
+        "openclaw-staged-88888888-8888-4888-8888-888888888888",
+      );
+      await fs.symlink(externalTargetDir, symlinkStagingDir, "dir");
+      registerProducedStagingDirectory(symlinkStagingDir);
+
+      cleanHostWorkspaceStaging({ hostWorkspaceStagingDir: symlinkStagingDir });
+
+      const symlinkStillExists = await waitForCondition(async () => {
+        return await fs
+          .lstat(symlinkStagingDir)
+          .then((s) => s.isSymbolicLink())
+          .catch(() => false);
+      });
+      expect(symlinkStillExists).toBe(true);
+      const externalMarkerStillExists = await fs
+        .stat(externalMarkerPath)
+        .then(() => true)
+        .catch(() => false);
+      expect(externalMarkerStillExists).toBe(true);
+
+      // 7. Registered staging directory containing a symlinked .gitignore marker
+      const dirWithSymlinkMarker = path.join(
+        home,
+        "openclaw-staged-99999999-9999-4999-8999-999999999999",
+      );
+      await fs.mkdir(dirWithSymlinkMarker, { recursive: true });
+      const externalSecretFile = path.join(home, "external-secret-file");
+      await fs.writeFile(externalSecretFile, STAGED_INPUT_GITIGNORE);
+      const symlinkMarkerPath = path.join(dirWithSymlinkMarker, ".gitignore");
+      await fs.symlink(externalSecretFile, symlinkMarkerPath, "file");
+      registerProducedStagingDirectory(dirWithSymlinkMarker);
+
+      cleanHostWorkspaceStaging({ hostWorkspaceStagingDir: dirWithSymlinkMarker });
+
+      const dirWithSymlinkExists = await waitForCondition(async () => {
+        return await fs
+          .stat(dirWithSymlinkMarker)
+          .then(() => true)
+          .catch(() => false);
+      });
+      expect(dirWithSymlinkExists).toBe(true);
+      const secretFileStillExists = await fs
+        .stat(externalSecretFile)
+        .then(() => true)
+        .catch(() => false);
+      expect(secretFileStillExists).toBe(true);
     });
   });
 

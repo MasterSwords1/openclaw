@@ -362,10 +362,18 @@ export function cleanHostWorkspaceStaging(run: Pick<FollowupRun, "hostWorkspaceS
     // would destroy attachments still needed by the running session.
     void (async () => {
       try {
+        const dirStat = await fs.lstat(hostWorkspaceStagingDir).catch(() => null);
+        if (!dirStat || !dirStat.isDirectory() || dirStat.isSymbolicLink()) {
+          return;
+        }
         const files = await fs.readdir(hostWorkspaceStagingDir);
         if (files.length === 0 || (files.length === 1 && files[0] === ".gitignore")) {
           if (files.length === 1) {
             const markerPath = path.join(hostWorkspaceStagingDir, ".gitignore");
+            const markerStat = await fs.lstat(markerPath).catch(() => null);
+            if (!markerStat || !markerStat.isFile() || markerStat.isSymbolicLink()) {
+              return;
+            }
             const markerContent = await fs.readFile(markerPath, "utf8").catch(() => null);
             if (markerContent !== null && markerContent === STAGED_INPUT_GITIGNORE) {
               await fs.rm(markerPath, { force: true });
