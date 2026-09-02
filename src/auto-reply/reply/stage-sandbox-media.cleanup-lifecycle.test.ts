@@ -616,13 +616,7 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
 
       cleanHostWorkspaceStaging({ hostWorkspaceStagingDir: stagingDirWithCustomGitignore });
 
-      const customExists = await waitForCondition(async () => {
-        return await fs
-          .stat(stagingDirWithCustomGitignore)
-          .then(() => true)
-          .catch(() => false);
-      });
-      expect(customExists).toBe(true);
+      expect(await waitForCondition(() => checkExists(stagingDirWithCustomGitignore))).toBe(true);
       const customContent = await fs.readFile(customGitignorePath, "utf-8");
       expect(customContent).toBe("build/\ndist/\n");
 
@@ -637,13 +631,8 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
 
       cleanHostWorkspaceStaging({ hostWorkspaceStagingDir: unmintedStagingDir });
 
-      const unmintedExists = await waitForCondition(async () => {
-        return await fs
-          .stat(unmintedStagingDir)
-          .then(() => true)
-          .catch(() => false);
-      });
-      expect(unmintedExists).toBe(true);
+      expect(await waitForCondition(() => checkExists(unmintedStagingDir))).toBe(true);
+
       // 4. Producer-registered directory whose marker is altered to bare wildcard "*"
       const registeredBareStarDir = path.join(
         home,
@@ -656,18 +645,8 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
 
       cleanHostWorkspaceStaging({ hostWorkspaceStagingDir: registeredBareStarDir });
 
-      const bareStarExists = await waitForCondition(async () => {
-        return await fs
-          .stat(registeredBareStarDir)
-          .then(() => true)
-          .catch(() => false);
-      });
-      expect(bareStarExists).toBe(true);
-      const bareStarMarkerStillExists = await fs
-        .stat(bareStarMarkerPath)
-        .then(() => true)
-        .catch(() => false);
-      expect(bareStarMarkerStillExists).toBe(true);
+      expect(await waitForCondition(() => checkExists(registeredBareStarDir))).toBe(true);
+      expect(await checkExists(bareStarMarkerPath)).toBe(true);
 
       // 5. Producer-registered directory whose marker is altered to "*\n"
       const registeredBareStarNewlineDir = path.join(
@@ -681,18 +660,9 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
 
       cleanHostWorkspaceStaging({ hostWorkspaceStagingDir: registeredBareStarNewlineDir });
 
-      const bareStarNewlineExists = await waitForCondition(async () => {
-        return await fs
-          .stat(registeredBareStarNewlineDir)
-          .then(() => true)
-          .catch(() => false);
-      });
-      expect(bareStarNewlineExists).toBe(true);
-      const bareStarNewlineMarkerStillExists = await fs
-        .stat(bareStarNewlineMarkerPath)
-        .then(() => true)
-        .catch(() => false);
-      expect(bareStarNewlineMarkerStillExists).toBe(true);
+      expect(await waitForCondition(() => checkExists(registeredBareStarNewlineDir))).toBe(true);
+      expect(await checkExists(bareStarNewlineMarkerPath)).toBe(true);
+
       // 6. Registered staging path is a symlink pointing to an external directory with canonical marker
       const externalTargetDir = path.join(home, "external-target-dir");
       await fs.mkdir(externalTargetDir, { recursive: true });
@@ -715,11 +685,7 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
           .catch(() => false);
       });
       expect(symlinkStillExists).toBe(true);
-      const externalMarkerStillExists = await fs
-        .stat(externalMarkerPath)
-        .then(() => true)
-        .catch(() => false);
-      expect(externalMarkerStillExists).toBe(true);
+      expect(await checkExists(externalMarkerPath)).toBe(true);
 
       // 7. Registered staging directory containing a symlinked .gitignore marker
       const dirWithSymlinkMarker = path.join(
@@ -1071,6 +1037,65 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
       expect(await fs.readFile(actor2Path, "utf8")).toBe("actor2-content");
 
       // Canonical .gitignore marker must be restored on the preserved directory:
+      expect(await checkExists(stagingMarker)).toBe(true);
+    });
+  });
+
+  it("cleanEmptyStagingDirectorySafely preserves colliding same-basename late media during restoration without overwriting peer files", async () => {
+    await withSandboxMediaTempHome("same-basename-collision-test", async (home) => {
+      const stagingParent = path.join(home, "media-inbound");
+      await fs.mkdir(stagingParent, { recursive: true });
+      const stagingDirName = "openclaw-staged-cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+      const stagingDir = path.join(stagingParent, stagingDirName);
+      await fs.mkdir(stagingDir, { recursive: true });
+      const stagingMarker = path.join(stagingDir, ".gitignore");
+      await fs.writeFile(stagingMarker, STAGED_INPUT_GITIGNORE);
+
+      let collided = false;
+      const hookKey = Symbol.for("openclaw.fsSafeBeforeDeletionEffectHook");
+      // SAFETY: test hook registration
+      (globalThis as Record<PropertyKey, unknown>)[hookKey] = async (
+        targetDir: string,
+        isolatedPath?: string,
+      ) => {
+        if (isolatedPath && !collided) {
+          collided = true;
+          // Actor 1: Writes late media with filename "photo.jpg" into isolatedPath
+          await fs.writeFile(path.join(isolatedPath, "photo.jpg"), "actor1-original-media");
+          // Actor 2: Concurrently recreates targetDir with the EXACT SAME basename "photo.jpg"
+          await fs.mkdir(targetDir);
+          await fs.writeFile(path.join(targetDir, "photo.jpg"), "actor2-peer-media");
+        }
+      };
+
+      try {
+        await cleanEmptyStagingDirectorySafely(stagingDir);
+      } finally {
+        // SAFETY: test hook cleanup
+        delete (globalThis as Record<PropertyKey, unknown>)[hookKey];
+      }
+
+      expect(collided).toBe(true);
+
+      // Recreated staging directory must survive:
+      expect(await checkExists(stagingDir)).toBe(true);
+
+      // Actor 2's peer file must NOT be overwritten:
+      const peerFile = path.join(stagingDir, "photo.jpg");
+      expect(await checkExists(peerFile)).toBe(true);
+      expect(await fs.readFile(peerFile, "utf8")).toBe("actor2-peer-media");
+
+      // Actor 1's late-written media MUST be preserved at the canonical staging directory under non-colliding name:
+      const dirEntries = await fs.readdir(stagingDir);
+      const restoredEntry = dirEntries.find(
+        (e) => e.startsWith("photo-restored-") && e.endsWith(".jpg"),
+      );
+      expect(restoredEntry).toBeDefined();
+      expect(await fs.readFile(path.join(stagingDir, restoredEntry!), "utf8")).toBe(
+        "actor1-original-media",
+      );
+
+      // Canonical .gitignore marker must be restored on the surviving directory:
       expect(await checkExists(stagingMarker)).toBe(true);
       expect(await fs.readFile(stagingMarker, "utf8")).toBe(STAGED_INPUT_GITIGNORE);
     });

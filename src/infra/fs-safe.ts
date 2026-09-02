@@ -236,10 +236,36 @@ export async function removeChildDirectoryIfIdentityMatches(params: {
             const entries = fsSync.readdirSync(isolatedPath);
             for (const entry of entries) {
               const src = path.join(isolatedPath, entry);
-              const dest = path.join(targetPath, entry);
+              let dest = path.join(targetPath, entry);
               try {
+                // If destination entry already exists, derive a unique non-colliding name in targetPath
+                // so original media is preserved at the canonical staging directory without overwriting peer files:
+                if (fsSync.existsSync(dest)) {
+                  if (entry === ".gitignore") {
+                    try {
+                      fsSync.unlinkSync(src);
+                    } catch {}
+                    continue;
+                  }
+                  const ext = path.extname(entry);
+                  const base = path.basename(entry, ext);
+                  dest = path.join(
+                    targetPath,
+                    `${base}-restored-${crypto.randomUUID().slice(0, 8)}${ext}`,
+                  );
+                }
                 fsSync.renameSync(src, dest);
-              } catch {}
+              } catch {
+                try {
+                  const ext = path.extname(entry);
+                  const base = path.basename(entry, ext);
+                  const fallbackDest = path.join(
+                    targetPath,
+                    `${base}-restored-${crypto.randomUUID().slice(0, 8)}${ext}`,
+                  );
+                  fsSync.renameSync(src, fallbackDest);
+                } catch {}
+              }
             }
             try {
               fsSync.rmdirSync(isolatedPath);
