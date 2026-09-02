@@ -1147,40 +1147,34 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
       const stagingMarker = path.join(stagingDir, ".gitignore");
       await fs.writeFile(stagingMarker, STAGED_INPUT_GITIGNORE);
 
-      // Hook fs.lstat so that when finalStat verifies the original staging directory (after .gitignore is unlinked),
-      // a concurrent workspace writer immediately replaces the leaf directory with a new markerless empty directory (different inode).
+      // Hook immediately before terminal removal (after final validation has confirmed the original directory):
       let swapped = false;
-      const realLstat = fs.lstat;
-      const lstatSpy = vi
-        .spyOn(fs, "lstat")
-        .mockImplementation(async (...args: Parameters<typeof realLstat>) => {
-          const result = await realLstat(...args);
-          if (args[0] === stagingDir && !swapped) {
-            const files = await fs.readdir(stagingDir).catch(() => null);
-            if (files && files.length === 0) {
-              swapped = true;
-              // Remove original empty directory and replace with a fresh empty directory
-              // Consume the freed inode with a temporary filler so the replacement receives a distinct inode
-              await fs.rmdir(stagingDir);
-              const filler = path.join(stagingParent, "inode-filler");
-              await fs.mkdir(filler);
-              await fs.mkdir(stagingDir);
-              await fs.rmdir(filler);
-            }
-          }
-          return result;
-        });
+      const hookKey = Symbol.for("openclaw.stagingCleanupBeforeRemovalHook");
+      // SAFETY: test hook registration
+      (globalThis as Record<PropertyKey, unknown>)[hookKey] = async (targetDir: string) => {
+        if (targetDir === stagingDir && !swapped) {
+          swapped = true;
+          // Replace the validated empty directory with a fresh empty directory
+          // Consume the freed inode with a temporary filler so the replacement receives a distinct inode
+          await fs.rmdir(stagingDir);
+          const filler = path.join(stagingParent, "inode-filler");
+          await fs.mkdir(filler);
+          await fs.mkdir(stagingDir);
+          await fs.rmdir(filler);
+        }
+      };
 
       try {
         await cleanEmptyStagingDirectorySafely(stagingDir);
       } finally {
-        lstatSpy.mockRestore();
+        // SAFETY: test hook cleanup
+        delete (globalThis as Record<PropertyKey, unknown>)[hookKey];
       }
 
       expect(swapped).toBe(true);
 
-      // The replacement directory MUST NOT be deleted because leaf identity validation
-      // detects the replacement and leaves it intact at its original path with no tombstone copy!
+      // The replacement directory MUST NOT be deleted because expected-leaf identity validation
+      // at the deletion primitive detects the replacement inode mismatch and leaves it intact at its original path!
       const replacementStillExists = await fs
         .stat(stagingDir)
         .then(() => true)

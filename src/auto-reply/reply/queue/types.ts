@@ -22,7 +22,7 @@ import type { ReplyToMode } from "../../../config/types.base.js";
 import type { OpenClawConfig } from "../../../config/types.openclaw.js";
 import type { GroupToolPolicyConfig } from "../../../config/types.tools.js";
 import { logVerbose } from "../../../globals.js";
-import { sameFileIdentity } from "../../../infra/fs-safe-advanced.js";
+import { sameFileIdentity, type FileIdentityStat } from "../../../infra/fs-safe-advanced.js";
 import { root as fsRoot } from "../../../infra/fs-safe.js";
 import type { MediaFact } from "../../../media/media-facts.js";
 import type { PromptImageOrderEntry } from "../../../media/prompt-image-order.js";
@@ -411,32 +411,66 @@ export async function cleanEmptyStagingDirectorySafely(
     return;
   }
 
-  const finalStat = await fs.lstat(hostWorkspaceStagingDir).catch(() => null);
+  await removeEmptyStagingDirectoryIfOwned({
+    parentRoot,
+    dirName,
+    hostWorkspaceStagingDir,
+    expectedIdentity: dirStat,
+    stagingRoot,
+  });
+}
+
+async function removeEmptyStagingDirectoryIfOwned(params: {
+  parentRoot: Awaited<ReturnType<typeof fsRoot>>;
+  dirName: string;
+  hostWorkspaceStagingDir: string;
+  expectedIdentity: FileIdentityStat;
+  stagingRoot: Awaited<ReturnType<typeof fsRoot>>;
+}): Promise<void> {
+  // Test hook for simulating an intervening leaf replacement immediately before removal
+  if (process.env.NODE_ENV === "test" || process.env.VITEST) {
+    // SAFETY: test-only global dictionary lookup
+    const globalDict = globalThis as Record<PropertyKey, unknown>;
+    // SAFETY: test-only global hook callback assertion
+    const hook = globalDict[Symbol.for("openclaw.stagingCleanupBeforeRemovalHook")] as
+      | ((dir: string) => Promise<void>)
+      | undefined;
+    if (hook) {
+      await hook(params.hostWorkspaceStagingDir);
+    }
+  }
+
+  // Expected-leaf identity validation at the deletion primitive
+  const leafStat = await fs.lstat(params.hostWorkspaceStagingDir).catch(() => null);
   if (
-    !finalStat ||
-    !finalStat.isDirectory() ||
-    finalStat.isSymbolicLink() ||
-    !sameFileIdentity(finalStat, dirStat)
+    !leafStat ||
+    !leafStat.isDirectory() ||
+    leafStat.isSymbolicLink() ||
+    !sameFileIdentity(leafStat, params.expectedIdentity)
   ) {
     const dirStillExists = await fs
-      .lstat(hostWorkspaceStagingDir)
+      .lstat(params.hostWorkspaceStagingDir)
       .then((s) => s.isDirectory() && !s.isSymbolicLink())
       .catch(() => false);
     if (dirStillExists) {
-      await stagingRoot.create(".gitignore", Buffer.from(STAGED_INPUT_GITIGNORE)).catch(() => {});
+      await params.stagingRoot
+        .create(".gitignore", Buffer.from(STAGED_INPUT_GITIGNORE))
+        .catch(() => {});
     }
     return;
   }
 
   try {
-    await parentRoot.remove(dirName);
+    await params.parentRoot.remove(params.dirName);
   } catch {
     const dirStillExists = await fs
-      .lstat(hostWorkspaceStagingDir)
+      .lstat(params.hostWorkspaceStagingDir)
       .then((s) => s.isDirectory() && !s.isSymbolicLink())
       .catch(() => false);
     if (dirStillExists) {
-      await stagingRoot.create(".gitignore", Buffer.from(STAGED_INPUT_GITIGNORE)).catch(() => {});
+      await params.stagingRoot
+        .create(".gitignore", Buffer.from(STAGED_INPUT_GITIGNORE))
+        .catch(() => {});
     }
   }
 }
