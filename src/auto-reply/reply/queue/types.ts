@@ -411,11 +411,26 @@ export async function cleanEmptyStagingDirectorySafely(
     finalStat.isSymbolicLink() ||
     !sameFileIdentity(finalStat, dirStat)
   ) {
+    const dirStillExists = await fs
+      .lstat(hostWorkspaceStagingDir)
+      .then((s) => s.isDirectory() && !s.isSymbolicLink())
+      .catch(() => false);
+    if (dirStillExists) {
+      await stagingRoot.create(".gitignore", Buffer.from(STAGED_INPUT_GITIGNORE)).catch(() => {});
+    }
     return;
   }
   try {
     await parentRoot.remove(dirName);
-  } catch {}
+  } catch {
+    const dirStillExists = await fs
+      .lstat(hostWorkspaceStagingDir)
+      .then((s) => s.isDirectory() && !s.isSymbolicLink())
+      .catch(() => false);
+    if (dirStillExists) {
+      await stagingRoot.create(".gitignore", Buffer.from(STAGED_INPUT_GITIGNORE)).catch(() => {});
+    }
+  }
 }
 
 export function cleanHostWorkspaceStaging(run: Pick<FollowupRun, "hostWorkspaceStagingDir">): void {

@@ -995,6 +995,65 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
     });
   });
 
+  it("cleanEmptyStagingDirectorySafely preserves and restores canonical marker if directory removal loses a concurrent write race", async () => {
+    await withSandboxMediaTempHome("concurrent-write-race-test", async (home) => {
+      const stagingParent = path.join(home, "media-inbound");
+      await fs.mkdir(stagingParent, { recursive: true });
+      const stagingDirName = "openclaw-staged-ffffffff-ffff-4fff-8fff-ffffffffffff";
+      const stagingDir = path.join(stagingParent, stagingDirName);
+      await fs.mkdir(stagingDir, { recursive: true });
+      const stagingMarker = path.join(stagingDir, ".gitignore");
+      await fs.writeFile(stagingMarker, STAGED_INPUT_GITIGNORE);
+
+      // Hook fs.rm (which deletes .gitignore) to simulate a concurrent workspace writer
+      // creating a new media file immediately after marker deletion and before directory removal
+      let raced = false;
+      const realRm = fs.rm;
+      const rmSpy = vi
+        .spyOn(fs, "rm")
+        .mockImplementation(async (...args: Parameters<typeof realRm>) => {
+          const res = await realRm(...args);
+          if (typeof args[0] === "string" && args[0].endsWith(".gitignore") && !raced) {
+            raced = true;
+            // Concurrent writer creates a media file before parentRoot.remove(dirName) runs:
+            await fs.writeFile(path.join(stagingDir, "concurrent-inbound-media.jpg"), "photo-data");
+          }
+          return res;
+        });
+
+      try {
+        await cleanEmptyStagingDirectorySafely(stagingDir);
+      } finally {
+        rmSpy.mockRestore();
+      }
+
+      expect(raced).toBe(true);
+
+      // The directory survived because it was non-empty:
+      const dirExists = await fs
+        .stat(stagingDir)
+        .then(() => true)
+        .catch(() => false);
+      expect(dirExists).toBe(true);
+
+      // The concurrent media file must remain intact:
+      const mediaExists = await fs
+        .stat(path.join(stagingDir, "concurrent-inbound-media.jpg"))
+        .then(() => true)
+        .catch(() => false);
+      expect(mediaExists).toBe(true);
+
+      // CRITICAL: The canonical ownership marker MUST have been restored!
+      const markerExists = await fs
+        .stat(stagingMarker)
+        .then(() => true)
+        .catch(() => false);
+      expect(markerExists).toBe(true);
+      const markerContent = await fs.readFile(stagingMarker, "utf8");
+      expect(markerContent).toBe(STAGED_INPUT_GITIGNORE);
+    });
+  });
+
   it("getReplyFromConfig rejects caller-supplied hostWorkspaceStagingDir options even if shaped like UUID with canonical marker", async () => {
     await withSandboxMediaTempHome("public-opts-forged-test", async (home) => {
       const forgedDir = path.join(home, "openclaw-staged-55555555-5555-4555-8555-555555555555");
