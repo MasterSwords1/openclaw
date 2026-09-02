@@ -1158,7 +1158,7 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
           swapped = true;
           // Replace the validated empty directory with a fresh empty directory
           // Consume the freed inode with a temporary filler so the replacement receives a distinct inode
-          await fs.rmdir(stagingDir);
+          await fs.rmdir(stagingDir).catch(() => {});
           const filler = path.join(stagingParent, "inode-filler");
           await fs.mkdir(filler);
           await fs.mkdir(stagingDir);

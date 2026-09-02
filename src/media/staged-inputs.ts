@@ -231,7 +231,7 @@ export async function cleanEmptyStagingDirectorySafely(
     return;
   }
 
-  // Final removal primitive: atomically enforce expected identity at deletion effect
+  // Final removal primitive: atomically isolates directory to eliminate replaceable-path deletion
   const removed = await removeChildDirectoryIfIdentityMatches({
     parentRoot,
     dirName,

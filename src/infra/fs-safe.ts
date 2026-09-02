@@ -1,5 +1,6 @@
 // Re-exports fs-safe helpers with OpenClaw defaults and wrappers.
 import "./fs-safe-defaults.js";
+import crypto from "node:crypto";
 import fsSync from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -169,8 +170,9 @@ export async function writeFileWithinRoot(params: {
 }
 
 /**
- * Identity-bound deletion primitive: removes an immediate child directory within a validated
- * parent root only if its filesystem identity strictly matches expectedIdentity at the deletion effect.
+ * Identity-bound deletion primitive: eliminates replaceable-path deletion by atomically
+ * isolating the validated directory to an unguessable private path before removal, ensuring
+ * any concurrent workspace peer replacement at the original path cannot be removed.
  */
 export async function removeChildDirectoryIfIdentityMatches(params: {
   parentRoot: Root;
@@ -184,9 +186,6 @@ export async function removeChildDirectoryIfIdentityMatches(params: {
   const parentReal = params.parentRoot.rootReal;
   const targetPath = path.join(parentReal, dirName);
 
-  // Deletion primitive with identity enforcement at the final effect:
-  // Verifies parent and child identity, executes any test hook in the post-validation/pre-removal
-  // interval, and re-verifies child identity immediately at the deletion effect.
   try {
     const parentStat = fsSync.lstatSync(parentReal);
     if (!parentStat.isDirectory() || parentStat.isSymbolicLink()) {
@@ -201,7 +200,15 @@ export async function removeChildDirectoryIfIdentityMatches(params: {
       return false;
     }
 
-    // Hook for testing replacement after validation and immediately before the deletion effect
+    // Atomically isolate the validated directory to an unguessable private path within the parent root,
+    // vacating the replaceable targetPath name in a single atomic filesystem operation.
+    const isolatedName = `.openclaw-clean-${dirName}-${crypto.randomUUID()}`;
+    const isolatedPath = path.join(parentReal, isolatedName);
+    fsSync.renameSync(targetPath, isolatedPath);
+
+    // Hook for testing replacement after validation and atomic path isolation:
+    // Any concurrent workspace peer recreating targetPath now occupies targetPath independently,
+    // while the validated original directory resides safely at isolatedPath.
     if (process.env.NODE_ENV === "test" || process.env.VITEST) {
       // SAFETY: test hook lookup on globalThis
       const globalDict = globalThis as Record<PropertyKey, unknown>;
@@ -217,18 +224,18 @@ export async function removeChildDirectoryIfIdentityMatches(params: {
       }
     }
 
-    // Final-effect identity enforcement: ensures child entry still strictly matches expectedIdentity
-    // immediately before rmdir, aborting deletion if a replacement occurred after validation.
-    const finalStat = fsSync.lstatSync(targetPath);
+    // Verify isolated directory identity before final removal
+    const isolatedStat = fsSync.lstatSync(isolatedPath);
     if (
-      !finalStat.isDirectory() ||
-      finalStat.isSymbolicLink() ||
-      !sameFileIdentity(finalStat, params.expectedIdentity)
+      !isolatedStat.isDirectory() ||
+      isolatedStat.isSymbolicLink() ||
+      !sameFileIdentity(isolatedStat, params.expectedIdentity)
     ) {
       return false;
     }
 
-    fsSync.rmdirSync(targetPath);
+    // Terminal deletion acts strictly on the unguessable isolated path, NOT the replaceable targetPath:
+    fsSync.rmdirSync(isolatedPath);
     return true;
   } catch {
     return false;
