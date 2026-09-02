@@ -27,22 +27,11 @@ import {
 } from "./queue/types.js";
 import { stageSandboxMedia } from "./stage-sandbox-media.js";
 
-async function waitForPathAbsence(targetPath: string, timeoutMs = 2000): Promise<boolean> {
-  const startTime = Date.now();
-  while (Date.now() - startTime < timeoutMs) {
-    const exists = await fs
-      .stat(targetPath)
-      .then(() => true)
-      .catch(() => false);
-    if (!exists) {
-      return true;
-    }
-    await new Promise((resolve) => {
-      setTimeout(resolve, 10);
-    });
-  }
-  return false;
-}
+const checkExists = (p: string) =>
+  fs
+    .stat(p)
+    .then(() => true)
+    .catch(() => false);
 
 async function waitForCondition(
   predicate: () => Promise<boolean>,
@@ -59,6 +48,9 @@ async function waitForCondition(
   }
   return false;
 }
+
+const waitForPathAbsence = (p: string, ms = 2000) =>
+  waitForCondition(async () => !(await checkExists(p)), ms);
 
 describe("stageSandboxMedia host staging lifecycle cleanup", () => {
   it("returns hostWorkspaceStagingDir and staged files remain readable after completeFollowupRunLifecycle (non-empty dir preserved)", async () => {
@@ -913,11 +905,7 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
 
       expect(swapped).toBe(true);
       // The external marker MUST remain intact and untouched
-      const externalMarkerStillExists = await fs
-        .stat(externalMarker)
-        .then(() => true)
-        .catch(() => false);
-      expect(externalMarkerStillExists).toBe(true);
+      expect(await checkExists(externalMarker)).toBe(true);
       const externalMarkerContent = await fs.readFile(externalMarker, "utf8");
       expect(externalMarkerContent).toBe(STAGED_INPUT_GITIGNORE);
     });
@@ -970,11 +958,7 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
       expect(swapped).toBe(true);
 
       // The external victim directory inside externalParent MUST NOT be deleted!
-      const externalVictimStillExists = await fs
-        .stat(externalVictimDir)
-        .then(() => true)
-        .catch(() => false);
-      expect(externalVictimStillExists).toBe(true);
+      expect(await checkExists(externalVictimDir)).toBe(true);
     });
   });
 
@@ -987,11 +971,7 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
       // Cleaner must refuse to delete it because it lacks the canonical ownership marker
       await cleanEmptyStagingDirectorySafely(stagingDir);
 
-      const stillExists = await fs
-        .stat(stagingDir)
-        .then(() => true)
-        .catch(() => false);
-      expect(stillExists).toBe(true);
+      expect(await checkExists(stagingDir)).toBe(true);
     });
   });
 
@@ -1030,25 +1010,11 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
       expect(raced).toBe(true);
 
       // The directory survived because it was non-empty:
-      const dirExists = await fs
-        .stat(stagingDir)
-        .then(() => true)
-        .catch(() => false);
-      expect(dirExists).toBe(true);
-
+      expect(await checkExists(stagingDir)).toBe(true);
       // The concurrent media file must remain intact:
-      const mediaExists = await fs
-        .stat(path.join(stagingDir, "concurrent-inbound-media.jpg"))
-        .then(() => true)
-        .catch(() => false);
-      expect(mediaExists).toBe(true);
-
+      expect(await checkExists(path.join(stagingDir, "concurrent-inbound-media.jpg"))).toBe(true);
       // CRITICAL: The canonical ownership marker MUST have been restored!
-      const markerExists = await fs
-        .stat(stagingMarker)
-        .then(() => true)
-        .catch(() => false);
-      expect(markerExists).toBe(true);
+      expect(await checkExists(stagingMarker)).toBe(true);
       const markerContent = await fs.readFile(stagingMarker, "utf8");
       expect(markerContent).toBe(STAGED_INPUT_GITIGNORE);
     });
@@ -1209,6 +1175,52 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
         .then(() => true)
         .catch(() => false);
       expect(replacementStillExists).toBe(true);
+    });
+  });
+
+  it("cleanEmptyStagingDirectorySafely preserves fresh workspace directory if tombstone removal fails and destination was recreated", async () => {
+    await withSandboxMediaTempHome("tombstone-recovery-overwrite-test", async (home) => {
+      const stagingParent = path.join(home, "media-inbound");
+      await fs.mkdir(stagingParent, { recursive: true });
+      const stagingDirName = "openclaw-staged-87654321-4321-4321-8321-1234567890cd";
+      const stagingDir = path.join(stagingParent, stagingDirName);
+      await fs.mkdir(stagingDir, { recursive: true });
+      const stagingMarker = path.join(stagingDir, ".gitignore");
+      await fs.writeFile(stagingMarker, STAGED_INPUT_GITIGNORE);
+
+      // Hook fs.rmdir so that when parentRoot.remove(tombstoneName) runs on the tombstone directory,
+      // it fails (simulating a concurrent process holding it or error),
+      // and a concurrent workspace writer recreates a fresh directory with new files at stagingDir
+      let tombstoneSeen = false;
+      const realRmdir = fs.rmdir;
+      const rmdirSpy = vi
+        .spyOn(fs, "rmdir")
+        .mockImplementation(async (...args: Parameters<typeof realRmdir>) => {
+          const targetPath = String(args[0]);
+          if (targetPath.includes(".deleting-") && !tombstoneSeen) {
+            tombstoneSeen = true;
+            // Writer creates fresh directory and file at the original stagingDir path:
+            await fs.mkdir(stagingDir, { recursive: true });
+            await fs.writeFile(path.join(stagingDir, "fresh-task.json"), '{"fresh":true}');
+            // Simulate removal failure:
+            throw new Error("simulated tombstone removal failure");
+          }
+          return await realRmdir(...args);
+        });
+
+      try {
+        await cleanEmptyStagingDirectorySafely(stagingDir);
+      } finally {
+        rmdirSpy.mockRestore();
+      }
+
+      expect(tombstoneSeen).toBe(true);
+
+      // The fresh workspace directory and file at stagingDir MUST NOT be overwritten or clobbered!
+      const freshFileContent = await fs
+        .readFile(path.join(stagingDir, "fresh-task.json"), "utf8")
+        .catch(() => null);
+      expect(freshFileContent).toBe('{"fresh":true}');
     });
   });
 });
