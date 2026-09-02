@@ -918,11 +918,20 @@ function releaseQueueSummaryDeliveryForRetry(
     const sourceIndex = queue.summarySources.indexOf(source);
     if (sourceIndex >= 0) {
       queue.summarySources[sourceIndex] = createOverflowSummaryRetrySource(source);
+      // Transfer staging ownership to the retry clone so completing the old source
+      // does not unregister the staging directory before the retry settles.
+      delete source.hostWorkspaceStagingDir;
     }
     if (!source.turnAdoptionLifecycle) {
       completeFollowupRunLifecycle(source);
     }
   }
+}
+
+if (process.env.NODE_ENV === "test" || process.env.VITEST) {
+  (globalThis as Record<PropertyKey, unknown>)[Symbol.for("openclaw.queueDrainTestApi")] = {
+    releaseQueueSummaryDeliveryForRetry,
+  };
 }
 
 function dropAbortedQueueSummarySources(queue: FollowupQueueSummaryState): number {

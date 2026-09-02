@@ -428,12 +428,8 @@ export async function cleanEmptyStagingDirectorySafely(
     return;
   }
 
-  // Atomically isolate the empty directory under a private unique name within parentRoot.
-  // This binds deletion to the validated leaf: any concurrent replacement created
-  // at hostWorkspaceStagingDir remains at that path and is never deleted.
-  const isolatedName = `${dirName}.deleting-${crypto.randomUUID()}`;
   try {
-    await parentRoot.move(dirName, isolatedName, { overwrite: true });
+    await parentRoot.remove(dirName);
   } catch {
     const dirStillExists = await fs
       .lstat(hostWorkspaceStagingDir)
@@ -442,19 +438,7 @@ export async function cleanEmptyStagingDirectorySafely(
     if (dirStillExists) {
       await stagingRoot.create(".gitignore", Buffer.from(STAGED_INPUT_GITIGNORE)).catch(() => {});
     }
-    return;
   }
-
-  // Verify the isolated entry matches the validated leaf identity
-  const isolatedPath = path.join(parentDir, isolatedName);
-  const isolatedStat = await fs.lstat(isolatedPath).catch(() => null);
-  if (!isolatedStat || !sameFileIdentity(isolatedStat, dirStat)) {
-    // Identity mismatch: entry was replaced before move. Do not delete, and never restore over a recreated destination.
-    return;
-  }
-
-  // Terminal removal operates exclusively on the isolated entry
-  await parentRoot.remove(isolatedName).catch(() => {});
 }
 
 export function cleanHostWorkspaceStaging(run: Pick<FollowupRun, "hostWorkspaceStagingDir">): void {

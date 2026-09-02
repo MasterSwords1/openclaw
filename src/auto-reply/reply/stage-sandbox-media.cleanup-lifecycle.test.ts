@@ -27,6 +27,17 @@ import {
 } from "./queue/types.js";
 import { stageSandboxMedia } from "./stage-sandbox-media.js";
 
+function getQueueDrainTestApi(): {
+  releaseQueueSummaryDeliveryForRetry: (queue: unknown, delivery: unknown) => void;
+} {
+  const api = (globalThis as Record<PropertyKey, unknown>)[
+    Symbol.for("openclaw.queueDrainTestApi")
+  ] as
+    | { releaseQueueSummaryDeliveryForRetry: (queue: unknown, delivery: unknown) => void }
+    | undefined;
+  return api as ReturnType<typeof getQueueDrainTestApi>;
+}
+
 const checkExists = (p: string) =>
   fs
     .stat(p)
@@ -1169,12 +1180,63 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
       expect(swapped).toBe(true);
 
       // The replacement directory MUST NOT be deleted because leaf identity validation
-      // and atomic tombstone binding detect the replacement and preserve it intact!
+      // detects the replacement and leaves it intact at its original path with no tombstone copy!
       const replacementStillExists = await fs
         .stat(stagingDir)
         .then(() => true)
         .catch(() => false);
       expect(replacementStillExists).toBe(true);
+    });
+  });
+
+  it("releaseQueueSummaryDeliveryForRetry transfers staging ownership to retry clone so old source does not unregister it", async () => {
+    await withSandboxMediaTempHome("overflow-retry-ownership-test", async (home) => {
+      const stagingParent = path.join(home, "media-inbound");
+      await fs.mkdir(stagingParent, { recursive: true });
+      const stagingDirName = "openclaw-staged-11223344-5566-4777-8899-aabbccddeeff";
+      const stagingDir = path.join(stagingParent, stagingDirName);
+      await fs.mkdir(stagingDir, { recursive: true });
+      const stagingMarker = path.join(stagingDir, ".gitignore");
+      await fs.writeFile(stagingMarker, STAGED_INPUT_GITIGNORE);
+      registerProducedStagingDirectory(stagingDir);
+
+      const sourceRun: FollowupRun = {
+        prompt: "overflow summary item",
+        hostWorkspaceStagingDir: stagingDir,
+        run: async () => {},
+      };
+
+      const queue = {
+        summarySources: [sourceRun],
+        summaryLines: ["overflow summary item"],
+        droppedCount: 0,
+      };
+
+      const delivery = {
+        sources: [sourceRun],
+        summary: "overflow summary item",
+        summaryLineCount: 1,
+      };
+
+      expect(isRegisteredStagingDirectory(stagingDir)).toBe(true);
+
+      // Release summary delivery for retry:
+      getQueueDrainTestApi().releaseQueueSummaryDeliveryForRetry(queue, delivery);
+
+      // The old source must have surrendered ownership (property deleted)
+      expect(sourceRun.hostWorkspaceStagingDir).toBeUndefined();
+
+      // The cloned retry source in queue.summarySources must now own the staging directory
+      expect(queue.summarySources[0]?.hostWorkspaceStagingDir).toBe(stagingDir);
+
+      // Crucially, the staging directory MUST STILL BE REGISTERED in the registry!
+      expect(isRegisteredStagingDirectory(stagingDir)).toBe(true);
+      expect(await checkExists(stagingDir)).toBe(true);
+
+      // When the retry clone later completes its lifecycle, it must successfully clean and unregister:
+      completeFollowupRunLifecycle(queue.summarySources[0]!);
+      expect(isRegisteredStagingDirectory(stagingDir)).toBe(false);
+      expect(await waitForPathAbsence(stagingDir)).toBe(true);
     });
   });
 });
