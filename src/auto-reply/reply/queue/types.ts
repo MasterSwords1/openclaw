@@ -1,5 +1,3 @@
-import fs from "node:fs/promises";
-import path from "node:path";
 import type { FastMode } from "@openclaw/normalization-core/string-coerce";
 // Shared queue type contracts for admission, drain, and fallback handling.
 import type { QueueMode } from "../../../../packages/gateway-protocol/src/schema/logs-chat.js";
@@ -21,16 +19,11 @@ import type { SessionEntry, SessionToolOverrides } from "../../../config/session
 import type { ReplyToMode } from "../../../config/types.base.js";
 import type { OpenClawConfig } from "../../../config/types.openclaw.js";
 import type { GroupToolPolicyConfig } from "../../../config/types.tools.js";
-import { logVerbose } from "../../../globals.js";
-import { sameFileIdentity, type FileIdentityStat } from "../../../infra/fs-safe-advanced.js";
-import { root as fsRoot } from "../../../infra/fs-safe.js";
 import type { MediaFact } from "../../../media/media-facts.js";
 import type { PromptImageOrderEntry } from "../../../media/prompt-image-order.js";
 import {
-  isOwnedStagedInputDirectoryName,
-  isRegisteredStagingDirectory,
-  STAGED_INPUT_GITIGNORE,
-  unregisterStagingDirectory,
+  cleanEmptyStagingDirectorySafely,
+  cleanHostWorkspaceStaging,
 } from "../../../media/staged-inputs.js";
 import type { PluginHookChannelContext } from "../../../plugins/hook-types.js";
 import type { RuntimePluginToolGrant } from "../../../plugins/runtime/tool-grant.js";
@@ -346,164 +339,7 @@ export async function admitFollowupRunLifecycle(run: FollowupLifecycleRun): Prom
   }
 }
 
-export async function cleanEmptyStagingDirectorySafely(
-  hostWorkspaceStagingDir: string,
-): Promise<void> {
-  const dirName = path.basename(hostWorkspaceStagingDir);
-  if (!isOwnedStagedInputDirectoryName(dirName)) {
-    return;
-  }
-  const parentDir = path.dirname(hostWorkspaceStagingDir);
-  const parentStat = await fs.lstat(parentDir).catch(() => null);
-  if (!parentStat || !parentStat.isDirectory() || parentStat.isSymbolicLink()) {
-    return;
-  }
-  const parentRoot = await fsRoot(parentDir).catch(() => null);
-  if (!parentRoot) {
-    return;
-  }
-  const postParentStat = await fs.lstat(parentDir).catch(() => null);
-  if (
-    !postParentStat ||
-    !postParentStat.isDirectory() ||
-    postParentStat.isSymbolicLink() ||
-    !sameFileIdentity(postParentStat, parentStat)
-  ) {
-    return;
-  }
-
-  const dirStat = await fs.lstat(hostWorkspaceStagingDir).catch(() => null);
-  if (!dirStat || !dirStat.isDirectory() || dirStat.isSymbolicLink()) {
-    return;
-  }
-  const stagingRoot = await fsRoot(hostWorkspaceStagingDir).catch(() => null);
-  if (!stagingRoot) {
-    return;
-  }
-  const postCreateStat = await fs.lstat(hostWorkspaceStagingDir).catch(() => null);
-  if (
-    !postCreateStat ||
-    !postCreateStat.isDirectory() ||
-    postCreateStat.isSymbolicLink() ||
-    !sameFileIdentity(postCreateStat, dirStat)
-  ) {
-    return;
-  }
-  const files = await stagingRoot.list("").catch(() => null);
-  if (!files || files.length !== 1 || files[0] !== ".gitignore") {
-    return;
-  }
-  const markerContent = await stagingRoot
-    .readText(".gitignore", { maxBytes: STAGED_INPUT_GITIGNORE.length })
-    .catch(() => null);
-  if (markerContent !== STAGED_INPUT_GITIGNORE) {
-    return;
-  }
-  try {
-    await stagingRoot.remove(".gitignore");
-  } catch {
-    return;
-  }
-  // If a concurrent write occurred after marker deletion, preserve directory and restore marker
-  const remaining = await stagingRoot.list("").catch(() => null);
-  if (remaining && remaining.length > 0) {
-    await stagingRoot.create(".gitignore", Buffer.from(STAGED_INPUT_GITIGNORE)).catch(() => {});
-    return;
-  }
-
-  await removeEmptyStagingDirectoryIfOwned({
-    parentRoot,
-    dirName,
-    hostWorkspaceStagingDir,
-    expectedIdentity: dirStat,
-    stagingRoot,
-  });
-}
-
-async function removeEmptyStagingDirectoryIfOwned(params: {
-  parentRoot: Awaited<ReturnType<typeof fsRoot>>;
-  dirName: string;
-  hostWorkspaceStagingDir: string;
-  expectedIdentity: FileIdentityStat;
-  stagingRoot: Awaited<ReturnType<typeof fsRoot>>;
-}): Promise<void> {
-  // Test hook for simulating an intervening leaf replacement immediately before removal
-  if (process.env.NODE_ENV === "test" || process.env.VITEST) {
-    // SAFETY: test-only global dictionary lookup
-    const globalDict = globalThis as Record<PropertyKey, unknown>;
-    // SAFETY: test-only global hook callback assertion
-    const hook = globalDict[Symbol.for("openclaw.stagingCleanupBeforeRemovalHook")] as
-      | ((dir: string) => Promise<void>)
-      | undefined;
-    if (hook) {
-      await hook(params.hostWorkspaceStagingDir);
-    }
-  }
-
-  // Expected-leaf identity validation at the deletion primitive
-  const leafStat = await fs.lstat(params.hostWorkspaceStagingDir).catch(() => null);
-  if (
-    !leafStat ||
-    !leafStat.isDirectory() ||
-    leafStat.isSymbolicLink() ||
-    !sameFileIdentity(leafStat, params.expectedIdentity)
-  ) {
-    const dirStillExists = await fs
-      .lstat(params.hostWorkspaceStagingDir)
-      .then((s) => s.isDirectory() && !s.isSymbolicLink())
-      .catch(() => false);
-    if (dirStillExists) {
-      await params.stagingRoot
-        .create(".gitignore", Buffer.from(STAGED_INPUT_GITIGNORE))
-        .catch(() => {});
-    }
-    return;
-  }
-
-  try {
-    await params.parentRoot.remove(params.dirName);
-  } catch {
-    const dirStillExists = await fs
-      .lstat(params.hostWorkspaceStagingDir)
-      .then((s) => s.isDirectory() && !s.isSymbolicLink())
-      .catch(() => false);
-    if (dirStillExists) {
-      await params.stagingRoot
-        .create(".gitignore", Buffer.from(STAGED_INPUT_GITIGNORE))
-        .catch(() => {});
-    }
-  }
-}
-
-export function cleanHostWorkspaceStaging(run: Pick<FollowupRun, "hostWorkspaceStagingDir">): void {
-  const hostWorkspaceStagingDir = run.hostWorkspaceStagingDir;
-  if (hostWorkspaceStagingDir) {
-    delete run.hostWorkspaceStagingDir;
-    // Must be a producer-minted staging directory registered by stageSandboxMedia
-    if (!isRegisteredStagingDirectory(hostWorkspaceStagingDir)) {
-      return;
-    }
-    unregisterStagingDirectory(hostWorkspaceStagingDir);
-    // Remove only if empty (or marker-only): staged files are persisted into the transcript and
-    // re-read by history hydration on subsequent turns. Recursive deletion
-    // would destroy attachments still needed by the running session.
-    void (async () => {
-      try {
-        await cleanEmptyStagingDirectorySafely(hostWorkspaceStagingDir);
-      } catch (err: unknown) {
-        // ENOTEMPTY is expected when staging succeeded; ENOENT is fine on double-call.
-        if (
-          err instanceof Error &&
-          !("code" in err && (err.code === "ENOTEMPTY" || err.code === "ENOENT"))
-        ) {
-          logVerbose(
-            `Failed to clean host workspace staging directory: ${hostWorkspaceStagingDir} (${err.message})`,
-          );
-        }
-      }
-    })();
-  }
-}
+export { cleanEmptyStagingDirectorySafely, cleanHostWorkspaceStaging };
 
 export function completeFollowupRunLifecycle(run: FollowupLifecycleRun): void {
   run.steerPending?.settle(false);

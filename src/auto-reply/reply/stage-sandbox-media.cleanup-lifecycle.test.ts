@@ -4,8 +4,10 @@ import { describe, expect, it, vi } from "vitest";
 import {
   isRegisteredStagingDirectory,
   registerProducedStagingDirectory,
-  STAGED_INPUT_GITIGNORE,
 } from "../../media/staged-inputs.js";
+
+const STAGED_INPUT_GITIGNORE =
+  "# Raw task inputs remain private; copy outputs into the project to publish.\n*\n";
 
 function getRegisteredStagingDirectoriesCount(): number {
   const api = (globalThis as Record<PropertyKey, unknown>)[
