@@ -22,6 +22,8 @@ import type { ReplyToMode } from "../../../config/types.base.js";
 import type { OpenClawConfig } from "../../../config/types.openclaw.js";
 import type { GroupToolPolicyConfig } from "../../../config/types.tools.js";
 import { logVerbose } from "../../../globals.js";
+import { sameFileIdentity } from "../../../infra/fs-safe-advanced.js";
+import { root as fsRoot } from "../../../infra/fs-safe.js";
 import type { MediaFact } from "../../../media/media-facts.js";
 import type { PromptImageOrderEntry } from "../../../media/prompt-image-order.js";
 import {
@@ -355,23 +357,46 @@ export async function cleanEmptyStagingDirectorySafely(
   if (!dirStat || !dirStat.isDirectory() || dirStat.isSymbolicLink()) {
     return;
   }
-  const files = await fs.readdir(hostWorkspaceStagingDir);
-  if (files.length === 0 || (files.length === 1 && files[0] === ".gitignore")) {
-    if (files.length === 1) {
-      const markerPath = path.join(hostWorkspaceStagingDir, ".gitignore");
-      const markerStat = await fs.lstat(markerPath).catch(() => null);
-      if (!markerStat || !markerStat.isFile() || markerStat.isSymbolicLink()) {
-        return;
-      }
-      const markerContent = await fs.readFile(markerPath, "utf8").catch(() => null);
-      if (markerContent !== null && markerContent === STAGED_INPUT_GITIGNORE) {
-        await fs.rm(markerPath, { force: true });
-      } else {
-        return;
-      }
-    }
-    await fs.rmdir(hostWorkspaceStagingDir);
+  const stagingRoot = await fsRoot(hostWorkspaceStagingDir).catch(() => null);
+  if (!stagingRoot) {
+    return;
   }
+  const postCreateStat = await fs.lstat(hostWorkspaceStagingDir).catch(() => null);
+  if (
+    !postCreateStat ||
+    !postCreateStat.isDirectory() ||
+    postCreateStat.isSymbolicLink() ||
+    !sameFileIdentity(postCreateStat, dirStat)
+  ) {
+    return;
+  }
+  const files = await stagingRoot.list("").catch(() => null);
+  if (!files || (files.length !== 0 && (files.length !== 1 || files[0] !== ".gitignore"))) {
+    return;
+  }
+  if (files.length === 1) {
+    const markerContent = await stagingRoot
+      .readText(".gitignore", { maxBytes: STAGED_INPUT_GITIGNORE.length })
+      .catch(() => null);
+    if (markerContent !== STAGED_INPUT_GITIGNORE) {
+      return;
+    }
+    try {
+      await stagingRoot.remove(".gitignore");
+    } catch {
+      return;
+    }
+  }
+  const finalStat = await fs.lstat(hostWorkspaceStagingDir).catch(() => null);
+  if (
+    !finalStat ||
+    !finalStat.isDirectory() ||
+    finalStat.isSymbolicLink() ||
+    !sameFileIdentity(finalStat, dirStat)
+  ) {
+    return;
+  }
+  await fs.rmdir(hostWorkspaceStagingDir).catch(() => {});
 }
 
 export function cleanHostWorkspaceStaging(run: Pick<FollowupRun, "hostWorkspaceStagingDir">): void {

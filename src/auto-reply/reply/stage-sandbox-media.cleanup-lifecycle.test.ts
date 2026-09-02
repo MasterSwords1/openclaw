@@ -816,6 +816,103 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
     });
   });
 
+  it("cleanEmptyStagingDirectorySafely protects against forced post-validation symlink swap race", async () => {
+    await withSandboxMediaTempHome("post-val-swap-test", async (home) => {
+      // Create external directory with critical marker file
+      const externalDir = path.join(home, "external-critical-dir");
+      await fs.mkdir(externalDir, { recursive: true });
+      const externalMarker = path.join(externalDir, ".gitignore");
+      await fs.writeFile(externalMarker, STAGED_INPUT_GITIGNORE);
+
+      // Create genuine staging directory with marker
+      const stagingDir = path.join(home, "openclaw-staged-aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+      await fs.mkdir(stagingDir, { recursive: true });
+      const stagingMarker = path.join(stagingDir, ".gitignore");
+      await fs.writeFile(stagingMarker, STAGED_INPUT_GITIGNORE);
+
+      // Hook fs.readdir to simulate an adversarial process swapping the validated
+      // directory to a symlink pointing to externalDir immediately after directory validation
+      const realReaddir = fs.readdir;
+      let swapped = false;
+      const readdirSpy = vi
+        .spyOn(fs, "readdir")
+        .mockImplementation(async (...args: Parameters<typeof realReaddir>) => {
+          const result = await realReaddir(...args);
+          if (args[0] === stagingDir && !swapped) {
+            swapped = true;
+            // Forced post-validation directory swap:
+            // Remove stagingDir and replace with symlink to externalDir
+            await fs.rm(stagingDir, { recursive: true });
+            await fs.symlink(externalDir, stagingDir, "dir");
+          }
+          return result;
+        });
+
+      try {
+        await cleanEmptyStagingDirectorySafely(stagingDir);
+      } finally {
+        readdirSpy.mockRestore();
+      }
+
+      expect(swapped).toBe(true);
+
+      // The external marker MUST remain intact and untouched
+      const externalMarkerStillExists = await fs
+        .stat(externalMarker)
+        .then(() => true)
+        .catch(() => false);
+      expect(externalMarkerStillExists).toBe(true);
+      const externalMarkerContent = await fs.readFile(externalMarker, "utf8");
+      expect(externalMarkerContent).toBe(STAGED_INPUT_GITIGNORE);
+    });
+  });
+
+  it("cleanEmptyStagingDirectorySafely protects against forced symlink swap between marker verification and deletion", async () => {
+    await withSandboxMediaTempHome("post-marker-read-swap-test", async (home) => {
+      const externalDir = path.join(home, "external-critical-dir-2");
+      await fs.mkdir(externalDir, { recursive: true });
+      const externalMarker = path.join(externalDir, ".gitignore");
+      await fs.writeFile(externalMarker, STAGED_INPUT_GITIGNORE);
+
+      const stagingDir = path.join(home, "openclaw-staged-bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb");
+      await fs.mkdir(stagingDir, { recursive: true });
+      const stagingMarker = path.join(stagingDir, ".gitignore");
+      await fs.writeFile(stagingMarker, STAGED_INPUT_GITIGNORE);
+
+      // Hook fs.open to swap the directory after the marker file has been opened
+      const realOpen = fs.open;
+      let swapped = false;
+      const openSpy = vi
+        .spyOn(fs, "open")
+        .mockImplementation(async (...args: Parameters<typeof realOpen>) => {
+          const result = await realOpen(...args);
+          if (typeof args[0] === "string" && args[0].includes(stagingDir) && !swapped) {
+            swapped = true;
+            // Forced swap right between marker open and deletion:
+            await fs.rm(stagingDir, { recursive: true });
+            await fs.symlink(externalDir, stagingDir, "dir");
+          }
+          return result;
+        });
+
+      try {
+        await cleanEmptyStagingDirectorySafely(stagingDir);
+      } finally {
+        openSpy.mockRestore();
+      }
+
+      expect(swapped).toBe(true);
+      // The external marker MUST remain intact and untouched
+      const externalMarkerStillExists = await fs
+        .stat(externalMarker)
+        .then(() => true)
+        .catch(() => false);
+      expect(externalMarkerStillExists).toBe(true);
+      const externalMarkerContent = await fs.readFile(externalMarker, "utf8");
+      expect(externalMarkerContent).toBe(STAGED_INPUT_GITIGNORE);
+    });
+  });
+
   it("getReplyFromConfig rejects caller-supplied hostWorkspaceStagingDir options even if shaped like UUID with canonical marker", async () => {
     await withSandboxMediaTempHome("public-opts-forged-test", async (home) => {
       const forgedDir = path.join(home, "openclaw-staged-55555555-5555-4555-8555-555555555555");
