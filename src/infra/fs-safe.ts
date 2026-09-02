@@ -184,25 +184,9 @@ export async function removeChildDirectoryIfIdentityMatches(params: {
   const parentReal = params.parentRoot.rootReal;
   const targetPath = path.join(parentReal, dirName);
 
-  // Hook for testing replacement after validation and immediately before the deletion effect
-  if (process.env.NODE_ENV === "test" || process.env.VITEST) {
-    // SAFETY: test hook lookup on globalThis
-    const globalDict = globalThis as Record<PropertyKey, unknown>;
-    const rawHook =
-      globalDict[Symbol.for("openclaw.fsSafeBeforeDeletionEffectHook")] ??
-      globalDict[Symbol.for("openclaw.stagingCleanupBeforeRemovalHook")];
-    const hook =
-      typeof rawHook === "function"
-        ? (rawHook as (path: string) => Promise<void>) // SAFETY: test hook callback assertion
-        : undefined;
-    if (hook) {
-      await hook(targetPath);
-    }
-  }
-
   // Deletion primitive with identity enforcement at the final effect:
-  // Verifies parent and child identity synchronously in the same execution frame as rmdir,
-  // eliminating any asynchronous window between identity verification and directory removal.
+  // Verifies parent and child identity, executes any test hook in the post-validation/pre-removal
+  // interval, and re-verifies child identity immediately at the deletion effect.
   try {
     const parentStat = fsSync.lstatSync(parentReal);
     if (!parentStat.isDirectory() || parentStat.isSymbolicLink()) {
@@ -216,6 +200,34 @@ export async function removeChildDirectoryIfIdentityMatches(params: {
     ) {
       return false;
     }
+
+    // Hook for testing replacement after validation and immediately before the deletion effect
+    if (process.env.NODE_ENV === "test" || process.env.VITEST) {
+      // SAFETY: test hook lookup on globalThis
+      const globalDict = globalThis as Record<PropertyKey, unknown>;
+      const rawHook =
+        globalDict[Symbol.for("openclaw.fsSafeBeforeDeletionEffectHook")] ??
+        globalDict[Symbol.for("openclaw.stagingCleanupBeforeRemovalHook")];
+      const hook =
+        typeof rawHook === "function"
+          ? (rawHook as (path: string) => Promise<void>) // SAFETY: test hook callback assertion
+          : undefined;
+      if (hook) {
+        await hook(targetPath);
+      }
+    }
+
+    // Final-effect identity enforcement: ensures child entry still strictly matches expectedIdentity
+    // immediately before rmdir, aborting deletion if a replacement occurred after validation.
+    const finalStat = fsSync.lstatSync(targetPath);
+    if (
+      !finalStat.isDirectory() ||
+      finalStat.isSymbolicLink() ||
+      !sameFileIdentity(finalStat, params.expectedIdentity)
+    ) {
+      return false;
+    }
+
     fsSync.rmdirSync(targetPath);
     return true;
   } catch {
