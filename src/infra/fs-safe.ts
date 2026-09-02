@@ -217,10 +217,10 @@ export async function removeChildDirectoryIfIdentityMatches(params: {
         globalDict[Symbol.for("openclaw.stagingCleanupBeforeRemovalHook")];
       const hook =
         typeof rawHook === "function"
-          ? (rawHook as (path: string) => Promise<void>) // SAFETY: test hook callback assertion
+          ? (rawHook as (path: string, isolatedPath?: string) => Promise<void>) // SAFETY: test hook callback assertion
           : undefined;
       if (hook) {
-        await hook(targetPath);
+        await hook(targetPath, isolatedPath);
       }
     }
 
@@ -231,12 +231,24 @@ export async function removeChildDirectoryIfIdentityMatches(params: {
       isolatedStat.isSymbolicLink() ||
       !sameFileIdentity(isolatedStat, params.expectedIdentity)
     ) {
+      try {
+        fsSync.renameSync(isolatedPath, targetPath);
+      } catch {}
       return false;
     }
 
-    // Terminal deletion acts strictly on the unguessable isolated path, NOT the replaceable targetPath:
-    fsSync.rmdirSync(isolatedPath);
-    return true;
+    // Terminal deletion acts strictly on the unguessable isolated path, NOT the replaceable targetPath.
+    // If removal fails (e.g. ENOTEMPTY because a concurrent writer wrote into the directory),
+    // restore the directory back to its canonical targetPath so staged media remains reachable.
+    try {
+      fsSync.rmdirSync(isolatedPath);
+      return true;
+    } catch {
+      try {
+        fsSync.renameSync(isolatedPath, targetPath);
+      } catch {}
+      return false;
+    }
   } catch {
     return false;
   }

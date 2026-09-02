@@ -46,6 +46,14 @@ const checkExists = (p: string) =>
     .then(() => true)
     .catch(() => false);
 
+function makeStageCfg(home: string) {
+  // SAFETY: test config cast
+  return {
+    ...createSandboxMediaStageConfig(home),
+    agents: { defaults: { sandbox: { mode: "off" } } },
+  } as unknown as Parameters<typeof stageSandboxMedia>[0]["cfg"];
+}
+
 async function waitForCondition(
   predicate: () => Promise<boolean>,
   timeoutMs = 2000,
@@ -75,14 +83,7 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
 
       const mediaUri = `media://inbound/sample.jpg`;
       const { ctx, sessionCtx } = createSandboxMediaContexts(mediaUri);
-      const cfg = {
-        ...createSandboxMediaStageConfig(home),
-        agents: {
-          defaults: {
-            sandbox: { mode: "off" },
-          },
-        },
-      } as unknown as Parameters<typeof stageSandboxMedia>[0]["cfg"];
+      const cfg = makeStageCfg(home);
       const workspaceDir = path.join(home, "openclaw");
 
       const result = await stageSandboxMedia({
@@ -142,14 +143,7 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
       const mediaUri = `media://inbound/missing.jpg`;
       await fs.mkdir(path.join(mediaDir, "missing.jpg"));
       const { ctx, sessionCtx } = createSandboxMediaContexts(mediaUri);
-      const cfg = {
-        ...createSandboxMediaStageConfig(home),
-        agents: {
-          defaults: {
-            sandbox: { mode: "off" },
-          },
-        },
-      } as unknown as Parameters<typeof stageSandboxMedia>[0]["cfg"];
+      const cfg = makeStageCfg(home);
       const workspaceDir = path.join(home, "openclaw");
 
       const result = await stageSandboxMedia({
@@ -179,14 +173,7 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
 
       const mediaUri = `media://inbound/sample2.jpg`;
       const { ctx, sessionCtx } = createSandboxMediaContexts(mediaUri);
-      const cfg = {
-        ...createSandboxMediaStageConfig(home),
-        agents: {
-          defaults: {
-            sandbox: { mode: "off" },
-          },
-        },
-      } as unknown as Parameters<typeof stageSandboxMedia>[0]["cfg"];
+      const cfg = makeStageCfg(home);
       const workspaceDir = path.join(home, "openclaw");
 
       const result = await stageSandboxMedia({
@@ -231,14 +218,7 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
 
       const mediaUri = `media://inbound/sample3.jpg`;
       const { ctx, sessionCtx } = createSandboxMediaContexts(mediaUri);
-      const cfg = {
-        ...createSandboxMediaStageConfig(home),
-        agents: {
-          defaults: {
-            sandbox: { mode: "off" },
-          },
-        },
-      } as unknown as Parameters<typeof stageSandboxMedia>[0]["cfg"];
+      const cfg = makeStageCfg(home);
       const workspaceDir = path.join(home, "openclaw");
 
       const result = await stageSandboxMedia({
@@ -289,14 +269,7 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
 
       const mediaUri = `media://inbound/sample4.jpg`;
       const { ctx, sessionCtx } = createSandboxMediaContexts(mediaUri);
-      const cfg = {
-        ...createSandboxMediaStageConfig(home),
-        agents: {
-          defaults: {
-            sandbox: { mode: "off" },
-          },
-        },
-      } as unknown as Parameters<typeof stageSandboxMedia>[0]["cfg"];
+      const cfg = makeStageCfg(home);
       const workspaceDir = path.join(home, "openclaw");
 
       const result = await stageSandboxMedia({
@@ -359,14 +332,7 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
 
       const mediaUri = `media://inbound/sample5.jpg`;
       const { ctx, sessionCtx } = createSandboxMediaContexts(mediaUri);
-      const cfg = {
-        ...createSandboxMediaStageConfig(home),
-        agents: {
-          defaults: {
-            sandbox: { mode: "off" },
-          },
-        },
-      } as unknown as Parameters<typeof stageSandboxMedia>[0]["cfg"];
+      const cfg = makeStageCfg(home);
       const workspaceDir = path.join(home, "openclaw");
 
       const result = await stageSandboxMedia({
@@ -409,14 +375,7 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
 
       const mediaUri = `media://inbound/sample6.jpg`;
       const { ctx, sessionCtx } = createSandboxMediaContexts(mediaUri);
-      const cfg = {
-        ...createSandboxMediaStageConfig(home),
-        agents: {
-          defaults: {
-            sandbox: { mode: "off" },
-          },
-        },
-      } as unknown as Parameters<typeof stageSandboxMedia>[0]["cfg"];
+      const cfg = makeStageCfg(home);
       const workspaceDir = path.join(home, "openclaw");
 
       const result = await stageSandboxMedia({
@@ -457,14 +416,7 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
 
       const mediaUri = `media://inbound/sample.jpg`;
       const { ctx, sessionCtx } = createSandboxMediaContexts(mediaUri);
-      const cfg = {
-        ...createSandboxMediaStageConfig(home),
-        agents: {
-          defaults: {
-            sandbox: { mode: "off" },
-          },
-        },
-      } as unknown as Parameters<typeof stageSandboxMedia>[0]["cfg"];
+      const cfg = makeStageCfg(home);
       const workspaceDir = path.join(home, "openclaw");
 
       const result = await stageSandboxMedia({
@@ -567,14 +519,7 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
 
       const mediaUri = `media://inbound/sample-optionless.jpg`;
       const { ctx, sessionCtx } = createSandboxMediaContexts(mediaUri);
-      const cfg = {
-        ...createSandboxMediaStageConfig(home),
-        agents: {
-          defaults: {
-            sandbox: { mode: "off" },
-          },
-        },
-      } as unknown as Parameters<typeof stageSandboxMedia>[0]["cfg"];
+      const cfg = makeStageCfg(home);
       const workspaceDir = path.join(home, "openclaw");
 
       const stageResult = await stageSandboxMedia({
@@ -1033,6 +978,54 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
     });
   });
 
+  it("cleanEmptyStagingDirectorySafely preserves and restores late-written media to canonical path if written after empty check", async () => {
+    await withSandboxMediaTempHome("late-concurrent-write-test", async (home) => {
+      const stagingParent = path.join(home, "media-inbound");
+      await fs.mkdir(stagingParent, { recursive: true });
+      const stagingDirName = "openclaw-staged-eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+      const stagingDir = path.join(stagingParent, stagingDirName);
+      await fs.mkdir(stagingDir, { recursive: true });
+      const stagingMarker = path.join(stagingDir, ".gitignore");
+      await fs.writeFile(stagingMarker, STAGED_INPUT_GITIGNORE);
+
+      let lateWritten = false;
+      const hookKey = Symbol.for("openclaw.fsSafeBeforeDeletionEffectHook");
+      // SAFETY: test hook registration
+      (globalThis as Record<PropertyKey, unknown>)[hookKey] = async (
+        _targetDir: string,
+        isolatedPath?: string,
+      ) => {
+        if (isolatedPath && !lateWritten) {
+          lateWritten = true;
+          // Simulate late writer placing new staged media into the directory after emptiness check:
+          await fs.writeFile(
+            path.join(isolatedPath, "late-inbound-media.png"),
+            "late-staged-content",
+          );
+        }
+      };
+
+      try {
+        await cleanEmptyStagingDirectorySafely(stagingDir);
+      } finally {
+        // SAFETY: test hook cleanup
+        delete (globalThis as Record<PropertyKey, unknown>)[hookKey];
+      }
+
+      expect(lateWritten).toBe(true);
+
+      // Late-written media must be restored back to the canonical staging path, NOT left in private isolation!
+      expect(await checkExists(stagingDir)).toBe(true);
+      const mediaPath = path.join(stagingDir, "late-inbound-media.png");
+      expect(await checkExists(mediaPath)).toBe(true);
+      expect(await fs.readFile(mediaPath, "utf8")).toBe("late-staged-content");
+
+      // Canonical .gitignore marker must be restored on the preserved directory:
+      expect(await checkExists(stagingMarker)).toBe(true);
+      expect(await fs.readFile(stagingMarker, "utf8")).toBe(STAGED_INPUT_GITIGNORE);
+    });
+  });
+
   it("getReplyFromConfig rejects caller-supplied hostWorkspaceStagingDir options even if shaped like UUID with canonical marker", async () => {
     await withSandboxMediaTempHome("public-opts-forged-test", async (home) => {
       const forgedDir = path.join(home, "openclaw-staged-55555555-5555-4555-8555-555555555555");
@@ -1087,14 +1080,7 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
       await fs.writeFile(sampleFile, "sibling-media-content");
 
       const mediaUri = `media://inbound/sample.jpg`;
-      const cfg = {
-        ...createSandboxMediaStageConfig(home),
-        agents: {
-          defaults: {
-            sandbox: { mode: "off" },
-          },
-        },
-      } as unknown as Parameters<typeof stageSandboxMedia>[0]["cfg"];
+      const cfg = makeStageCfg(home);
       const workspaceDir = path.join(home, "openclaw");
 
       // Repeatedly stage through non-auto-reply caller
