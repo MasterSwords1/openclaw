@@ -421,12 +421,8 @@ export async function cleanEmptyStagingDirectorySafely(
     return;
   }
 
-  // Atomically move the directory to a unique private tombstone within parentRoot
-  // and bind removal to the validated leaf identity. Any concurrent replacement directory
-  // at hostWorkspaceStagingDir is never deleted.
-  const tombstoneName = `${dirName}.deleting-${crypto.randomUUID()}`;
   try {
-    await parentRoot.move(dirName, tombstoneName, { overwrite: true });
+    await parentRoot.remove(dirName);
   } catch {
     const dirStillExists = await fs
       .lstat(hostWorkspaceStagingDir)
@@ -434,50 +430,6 @@ export async function cleanEmptyStagingDirectorySafely(
       .catch(() => false);
     if (dirStillExists) {
       await stagingRoot.create(".gitignore", Buffer.from(STAGED_INPUT_GITIGNORE)).catch(() => {});
-    }
-    return;
-  }
-
-  const tombstonePath = path.join(parentDir, tombstoneName);
-  const tombstoneStat = await fs.lstat(tombstonePath).catch(() => null);
-  if (
-    !tombstoneStat ||
-    !tombstoneStat.isDirectory() ||
-    tombstoneStat.isSymbolicLink() ||
-    !sameFileIdentity(tombstoneStat, dirStat)
-  ) {
-    // Identity mismatch (leaf was replaced before move): restore only if original path is vacant
-    const destStat = await fs.lstat(hostWorkspaceStagingDir).catch(() => null);
-    if (!destStat) {
-      await parentRoot.move(tombstoneName, dirName, { overwrite: true }).catch(() => {});
-    }
-    return;
-  }
-
-  const tombstoneRoot = await fsRoot(tombstonePath).catch(() => null);
-  if (!tombstoneRoot) {
-    const destStat = await fs.lstat(hostWorkspaceStagingDir).catch(() => null);
-    if (!destStat) {
-      await parentRoot.move(tombstoneName, dirName, { overwrite: true }).catch(() => {});
-    }
-    return;
-  }
-
-  try {
-    await parentRoot.remove(tombstoneName);
-  } catch {
-    // Restore marker if tombstone directory still exists
-    const tombstoneStillExists = await fs
-      .lstat(tombstonePath)
-      .then((s) => s.isDirectory() && !s.isSymbolicLink())
-      .catch(() => false);
-    if (tombstoneStillExists) {
-      await tombstoneRoot.create(".gitignore", Buffer.from(STAGED_INPUT_GITIGNORE)).catch(() => {});
-    }
-    // Never overwrite a newly created directory or file at the original staging path
-    const destStat = await fs.lstat(hostWorkspaceStagingDir).catch(() => null);
-    if (!destStat) {
-      await parentRoot.move(tombstoneName, dirName, { overwrite: true }).catch(() => {});
     }
   }
 }
