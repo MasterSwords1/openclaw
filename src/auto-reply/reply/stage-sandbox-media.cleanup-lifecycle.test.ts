@@ -1159,4 +1159,52 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
       expect(absent).toBe(true);
     });
   });
+
+  it("cleanEmptyStagingDirectorySafely preserves replacement directory if leaf is swapped after final identity validation", async () => {
+    await withSandboxMediaTempHome("leaf-swap-race-test", async (home) => {
+      const stagingParent = path.join(home, "media-inbound");
+      await fs.mkdir(stagingParent, { recursive: true });
+      const stagingDirName = "openclaw-staged-12345678-1234-4234-8234-1234567890ab";
+      const stagingDir = path.join(stagingParent, stagingDirName);
+      await fs.mkdir(stagingDir, { recursive: true });
+      const stagingMarker = path.join(stagingDir, ".gitignore");
+      await fs.writeFile(stagingMarker, STAGED_INPUT_GITIGNORE);
+
+      // Hook fs.lstat so that when finalStat verifies the original staging directory (after .gitignore is unlinked),
+      // a concurrent workspace writer immediately replaces the leaf directory with a new markerless empty directory (different inode).
+      let swapped = false;
+      const realLstat = fs.lstat;
+      const lstatSpy = vi
+        .spyOn(fs, "lstat")
+        .mockImplementation(async (...args: Parameters<typeof realLstat>) => {
+          const result = await realLstat(...args);
+          if (args[0] === stagingDir && !swapped) {
+            const files = await fs.readdir(stagingDir).catch(() => null);
+            if (files && files.length === 0) {
+              swapped = true;
+              // Remove original empty directory and replace with a fresh empty directory (different inode)
+              await fs.rmdir(stagingDir);
+              await fs.mkdir(stagingDir);
+            }
+          }
+          return result;
+        });
+
+      try {
+        await cleanEmptyStagingDirectorySafely(stagingDir);
+      } finally {
+        lstatSpy.mockRestore();
+      }
+
+      expect(swapped).toBe(true);
+
+      // The replacement directory MUST NOT be deleted because leaf identity validation
+      // and atomic tombstone binding detect the replacement and preserve it intact!
+      const replacementStillExists = await fs
+        .stat(stagingDir)
+        .then(() => true)
+        .catch(() => false);
+      expect(replacementStillExists).toBe(true);
+    });
+  });
 });
