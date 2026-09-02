@@ -1,8 +1,14 @@
 // Re-exports fs-safe helpers with OpenClaw defaults and wrappers.
 import "./fs-safe-defaults.js";
+import fsSync from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { ensureDirectoryWithinRoot, findExistingAncestor } from "@openclaw/fs-safe/advanced";
+import {
+  ensureDirectoryWithinRoot,
+  findExistingAncestor,
+  sameFileIdentity,
+  type FileIdentityStat,
+} from "@openclaw/fs-safe/advanced";
 import { writeExternalFileWithinRoot as writeExternalFileWithinRootBase } from "@openclaw/fs-safe/output";
 import {
   root as fsSafeRoot,
@@ -160,4 +166,59 @@ export async function writeFileWithinRoot(params: {
     encoding: params.encoding,
     mkdir: params.mkdir,
   });
+}
+
+/**
+ * Identity-bound deletion primitive: removes an immediate child directory within a validated
+ * parent root only if its filesystem identity strictly matches expectedIdentity at the deletion effect.
+ */
+export async function removeChildDirectoryIfIdentityMatches(params: {
+  parentRoot: Root;
+  dirName: string;
+  expectedIdentity: FileIdentityStat;
+}): Promise<boolean> {
+  const dirName = params.dirName;
+  if (dirName.includes("/") || dirName.includes("\\") || dirName === "." || dirName === "..") {
+    return false;
+  }
+  const parentReal = params.parentRoot.rootReal;
+  const targetPath = path.join(parentReal, dirName);
+
+  // Hook for testing replacement after validation and immediately before the deletion effect
+  if (process.env.NODE_ENV === "test" || process.env.VITEST) {
+    // SAFETY: test hook lookup on globalThis
+    const globalDict = globalThis as Record<PropertyKey, unknown>;
+    const rawHook =
+      globalDict[Symbol.for("openclaw.fsSafeBeforeDeletionEffectHook")] ??
+      globalDict[Symbol.for("openclaw.stagingCleanupBeforeRemovalHook")];
+    const hook =
+      typeof rawHook === "function"
+        ? (rawHook as (path: string) => Promise<void>) // SAFETY: test hook callback assertion
+        : undefined;
+    if (hook) {
+      await hook(targetPath);
+    }
+  }
+
+  // Deletion primitive with identity enforcement at the final effect:
+  // Verifies parent and child identity synchronously in the same execution frame as rmdir,
+  // eliminating any asynchronous window between identity verification and directory removal.
+  try {
+    const parentStat = fsSync.lstatSync(parentReal);
+    if (!parentStat.isDirectory() || parentStat.isSymbolicLink()) {
+      return false;
+    }
+    const currentStat = fsSync.lstatSync(targetPath);
+    if (
+      !currentStat.isDirectory() ||
+      currentStat.isSymbolicLink() ||
+      !sameFileIdentity(currentStat, params.expectedIdentity)
+    ) {
+      return false;
+    }
+    fsSync.rmdirSync(targetPath);
+    return true;
+  } catch {
+    return false;
+  }
 }

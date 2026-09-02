@@ -1,8 +1,12 @@
 import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { sameFileIdentity, type FileIdentityStat } from "../infra/fs-safe-advanced.js";
-import { root as fsRoot, sanitizeUntrustedFileName, type Root } from "../infra/fs-safe.js";
+import {
+  removeChildDirectoryIfIdentityMatches,
+  root as fsRoot,
+  sanitizeUntrustedFileName,
+  type Root,
+} from "../infra/fs-safe.js";
 import type { MediaFact } from "./media-facts.js";
 
 const STAGED_INPUT_DIRECTORY_PREFIX = "media/inbound/openclaw-staged-";
@@ -227,87 +231,20 @@ export async function cleanEmptyStagingDirectorySafely(
     return;
   }
 
-  await removeEmptyStagingDirectoryIfOwned({
+  // Final removal primitive: atomically enforce expected identity at deletion effect
+  const removed = await removeChildDirectoryIfIdentityMatches({
     parentRoot,
     dirName,
-    hostWorkspaceStagingDir,
     expectedIdentity: dirStat,
-    stagingRoot,
   });
-}
 
-async function removeEmptyStagingDirectoryIfOwned(params: {
-  parentRoot: Root;
-  dirName: string;
-  hostWorkspaceStagingDir: string;
-  expectedIdentity: FileIdentityStat;
-  stagingRoot: Root;
-}): Promise<void> {
-  // Pre-removal validation check: verifies the leaf directory identity before entering the removal boundary
-  const preCheckStat = await fs.lstat(params.hostWorkspaceStagingDir).catch(() => null);
-  if (
-    !preCheckStat ||
-    !preCheckStat.isDirectory() ||
-    preCheckStat.isSymbolicLink() ||
-    !sameFileIdentity(preCheckStat, params.expectedIdentity)
-  ) {
+  if (!removed) {
     const dirStillExists = await fs
-      .lstat(params.hostWorkspaceStagingDir)
+      .lstat(hostWorkspaceStagingDir)
       .then((s) => s.isDirectory() && !s.isSymbolicLink())
       .catch(() => false);
     if (dirStillExists) {
-      await params.stagingRoot
-        .create(".gitignore", Buffer.from(STAGED_INPUT_GITIGNORE))
-        .catch(() => {});
-    }
-    return;
-  }
-
-  // Test hook: runs in that exact interval between pre-removal check and terminal removal effect
-  if (process.env.NODE_ENV === "test" || process.env.VITEST) {
-    // SAFETY: test-only global dictionary lookup
-    const globalDict = globalThis as Record<PropertyKey, unknown>;
-    // SAFETY: test-only global hook callback assertion
-    const hook = globalDict[Symbol.for("openclaw.stagingCleanupBeforeRemovalHook")] as
-      | ((dir: string) => Promise<void>)
-      | undefined;
-    if (hook) {
-      await hook(params.hostWorkspaceStagingDir);
-    }
-  }
-
-  // Terminal removal effect with expectedIdentity enforcement:
-  // Verifies that the entry about to be removed still matches expectedIdentity at the final effect.
-  const terminalStat = await fs.lstat(params.hostWorkspaceStagingDir).catch(() => null);
-  if (
-    !terminalStat ||
-    !terminalStat.isDirectory() ||
-    terminalStat.isSymbolicLink() ||
-    !sameFileIdentity(terminalStat, params.expectedIdentity)
-  ) {
-    const dirStillExists = await fs
-      .lstat(params.hostWorkspaceStagingDir)
-      .then((s) => s.isDirectory() && !s.isSymbolicLink())
-      .catch(() => false);
-    if (dirStillExists) {
-      await params.stagingRoot
-        .create(".gitignore", Buffer.from(STAGED_INPUT_GITIGNORE))
-        .catch(() => {});
-    }
-    return;
-  }
-
-  try {
-    await params.parentRoot.remove(params.dirName);
-  } catch {
-    const dirStillExists = await fs
-      .lstat(params.hostWorkspaceStagingDir)
-      .then((s) => s.isDirectory() && !s.isSymbolicLink())
-      .catch(() => false);
-    if (dirStillExists) {
-      await params.stagingRoot
-        .create(".gitignore", Buffer.from(STAGED_INPUT_GITIGNORE))
-        .catch(() => {});
+      await stagingRoot.create(".gitignore", Buffer.from(STAGED_INPUT_GITIGNORE)).catch(() => {});
     }
   }
 }
