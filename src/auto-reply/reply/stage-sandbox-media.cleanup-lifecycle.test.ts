@@ -20,6 +20,7 @@ import {
 } from "../stage-sandbox-media.test-harness.js";
 import { getReplyFromConfig } from "./get-reply.js";
 import {
+  cleanEmptyStagingDirectorySafely,
   cleanHostWorkspaceStaging,
   completeFollowupRunLifecycle,
   type FollowupRun,
@@ -796,6 +797,22 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
         .then(() => true)
         .catch(() => false);
       expect(secretFileStillExists).toBe(true);
+
+      // 8. cleanEmptyStagingDirectorySafely directly rejects symlinked staging directory
+      await cleanEmptyStagingDirectorySafely(symlinkStagingDir);
+      const directSymlinkExists = await fs
+        .lstat(symlinkStagingDir)
+        .then((s) => s.isSymbolicLink())
+        .catch(() => false);
+      expect(directSymlinkExists).toBe(true);
+
+      // 9. cleanEmptyStagingDirectorySafely directly rejects symlinked marker
+      await cleanEmptyStagingDirectorySafely(dirWithSymlinkMarker);
+      const directSecretExists = await fs
+        .stat(externalSecretFile)
+        .then(() => true)
+        .catch(() => false);
+      expect(directSecretExists).toBe(true);
     });
   });
 

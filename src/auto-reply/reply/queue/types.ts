@@ -344,6 +344,36 @@ export async function admitFollowupRunLifecycle(run: FollowupLifecycleRun): Prom
   }
 }
 
+export async function cleanEmptyStagingDirectorySafely(
+  hostWorkspaceStagingDir: string,
+): Promise<void> {
+  const dirName = path.basename(hostWorkspaceStagingDir);
+  if (!isOwnedStagedInputDirectoryName(dirName)) {
+    return;
+  }
+  const dirStat = await fs.lstat(hostWorkspaceStagingDir).catch(() => null);
+  if (!dirStat || !dirStat.isDirectory() || dirStat.isSymbolicLink()) {
+    return;
+  }
+  const files = await fs.readdir(hostWorkspaceStagingDir);
+  if (files.length === 0 || (files.length === 1 && files[0] === ".gitignore")) {
+    if (files.length === 1) {
+      const markerPath = path.join(hostWorkspaceStagingDir, ".gitignore");
+      const markerStat = await fs.lstat(markerPath).catch(() => null);
+      if (!markerStat || !markerStat.isFile() || markerStat.isSymbolicLink()) {
+        return;
+      }
+      const markerContent = await fs.readFile(markerPath, "utf8").catch(() => null);
+      if (markerContent !== null && markerContent === STAGED_INPUT_GITIGNORE) {
+        await fs.rm(markerPath, { force: true });
+      } else {
+        return;
+      }
+    }
+    await fs.rmdir(hostWorkspaceStagingDir);
+  }
+}
+
 export function cleanHostWorkspaceStaging(run: Pick<FollowupRun, "hostWorkspaceStagingDir">): void {
   const hostWorkspaceStagingDir = run.hostWorkspaceStagingDir;
   if (hostWorkspaceStagingDir) {
@@ -353,36 +383,12 @@ export function cleanHostWorkspaceStaging(run: Pick<FollowupRun, "hostWorkspaceS
       return;
     }
     unregisterStagingDirectory(hostWorkspaceStagingDir);
-    const dirName = path.basename(hostWorkspaceStagingDir);
-    if (!isOwnedStagedInputDirectoryName(dirName)) {
-      return;
-    }
     // Remove only if empty (or marker-only): staged files are persisted into the transcript and
     // re-read by history hydration on subsequent turns. Recursive deletion
     // would destroy attachments still needed by the running session.
     void (async () => {
       try {
-        const dirStat = await fs.lstat(hostWorkspaceStagingDir).catch(() => null);
-        if (!dirStat || !dirStat.isDirectory() || dirStat.isSymbolicLink()) {
-          return;
-        }
-        const files = await fs.readdir(hostWorkspaceStagingDir);
-        if (files.length === 0 || (files.length === 1 && files[0] === ".gitignore")) {
-          if (files.length === 1) {
-            const markerPath = path.join(hostWorkspaceStagingDir, ".gitignore");
-            const markerStat = await fs.lstat(markerPath).catch(() => null);
-            if (!markerStat || !markerStat.isFile() || markerStat.isSymbolicLink()) {
-              return;
-            }
-            const markerContent = await fs.readFile(markerPath, "utf8").catch(() => null);
-            if (markerContent !== null && markerContent === STAGED_INPUT_GITIGNORE) {
-              await fs.rm(markerPath, { force: true });
-            } else {
-              return;
-            }
-          }
-          await fs.rmdir(hostWorkspaceStagingDir);
-        }
+        await cleanEmptyStagingDirectorySafely(hostWorkspaceStagingDir);
       } catch (err: unknown) {
         // ENOTEMPTY is expected when staging succeeded; ENOENT is fine on double-call.
         if (

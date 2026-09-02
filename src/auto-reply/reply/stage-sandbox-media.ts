@@ -26,6 +26,7 @@ import { getMediaDir } from "../../media/store.js";
 import { runCommandWithTimeout } from "../../process/exec.js";
 import { CONFIG_DIR } from "../../utils.js";
 import type { RuntimeMsgContext as MsgContext, TemplateContext } from "../templating.js";
+import { cleanEmptyStagingDirectorySafely } from "./queue.js";
 
 /** Maximum size of one file copied into an agent sandbox or staging workspace. */
 export const SANDBOX_MEDIA_MAX_BYTES = 50 * 1024 * 1024;
@@ -171,12 +172,9 @@ export async function stageSandboxMedia(params: {
   }
 
   if (staged.size === 0) {
-    // No successful stages - clean up the marker-only staging directory if it was created
+    // No successful stages - safely clean up the marker-only staging directory if it was created
     if (stagingReady) {
-      await fs
-        .rm(path.join(hostWorkspaceStagingDir, ".gitignore"), { force: true })
-        .catch(() => {});
-      await fs.rmdir(hostWorkspaceStagingDir).catch(() => {});
+      await cleanEmptyStagingDirectorySafely(hostWorkspaceStagingDir).catch(() => {});
     }
     return { staged };
   }
