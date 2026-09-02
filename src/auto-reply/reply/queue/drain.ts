@@ -929,6 +929,7 @@ function releaseQueueSummaryDeliveryForRetry(
 }
 
 if (process.env.NODE_ENV === "test" || process.env.VITEST) {
+  // SAFETY: test-only global API hook for lifecycle unit test access
   (globalThis as Record<PropertyKey, unknown>)[Symbol.for("openclaw.queueDrainTestApi")] = {
     releaseQueueSummaryDeliveryForRetry,
   };
