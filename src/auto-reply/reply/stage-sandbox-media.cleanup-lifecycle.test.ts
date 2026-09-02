@@ -1250,11 +1250,11 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
       await fs.writeFile(stagingMarker, STAGED_INPUT_GITIGNORE);
       registerProducedStagingDirectory(stagingDir);
 
-      const sourceRun: FollowupRun = {
+      // SAFETY: test followup run cast
+      const sourceRun = {
         prompt: "overflow summary item",
         hostWorkspaceStagingDir: stagingDir,
-        run: async () => {},
-      };
+      } as unknown as FollowupRun;
 
       const queue = {
         summarySources: [sourceRun],
@@ -1284,7 +1284,9 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
       expect(await checkExists(stagingDir)).toBe(true);
 
       // When the retry clone later completes its lifecycle, it must successfully clean and unregister:
-      completeFollowupRunLifecycle(queue.summarySources[0]!);
+      if (queue.summarySources[0]) {
+        completeFollowupRunLifecycle(queue.summarySources[0]);
+      }
       expect(isRegisteredStagingDirectory(stagingDir)).toBe(false);
       expect(await waitForPathAbsence(stagingDir)).toBe(true);
     });
