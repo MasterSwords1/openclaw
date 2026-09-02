@@ -813,6 +813,16 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
         .then(() => true)
         .catch(() => false);
       expect(directSecretExists).toBe(true);
+
+      // 10. cleanEmptyStagingDirectorySafely directly rejects markerless directory
+      const markerlessDir = path.join(home, "openclaw-staged-dddddddd-dddd-4ddd-8ddd-dddddddddddd");
+      await fs.mkdir(markerlessDir, { recursive: true });
+      await cleanEmptyStagingDirectorySafely(markerlessDir);
+      const markerlessDirStillExists = await fs
+        .stat(markerlessDir)
+        .then(() => true)
+        .catch(() => false);
+      expect(markerlessDirStillExists).toBe(true);
     });
   });
 
@@ -965,6 +975,23 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
         .then(() => true)
         .catch(() => false);
       expect(externalVictimStillExists).toBe(true);
+    });
+  });
+
+  it("cleanEmptyStagingDirectorySafely rejects markerless replacement directory and leaves it intact", async () => {
+    await withSandboxMediaTempHome("markerless-replacement-test", async (home) => {
+      const stagingDir = path.join(home, "openclaw-staged-eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee");
+      // Create empty markerless directory shaped like an OpenClaw staging directory
+      await fs.mkdir(stagingDir, { recursive: true });
+
+      // Cleaner must refuse to delete it because it lacks the canonical ownership marker
+      await cleanEmptyStagingDirectorySafely(stagingDir);
+
+      const stillExists = await fs
+        .stat(stagingDir)
+        .then(() => true)
+        .catch(() => false);
+      expect(stillExists).toBe(true);
     });
   });
 

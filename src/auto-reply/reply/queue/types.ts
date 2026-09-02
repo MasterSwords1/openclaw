@@ -390,21 +390,19 @@ export async function cleanEmptyStagingDirectorySafely(
     return;
   }
   const files = await stagingRoot.list("").catch(() => null);
-  if (!files || (files.length !== 0 && (files.length !== 1 || files[0] !== ".gitignore"))) {
+  if (!files || files.length !== 1 || files[0] !== ".gitignore") {
     return;
   }
-  if (files.length === 1) {
-    const markerContent = await stagingRoot
-      .readText(".gitignore", { maxBytes: STAGED_INPUT_GITIGNORE.length })
-      .catch(() => null);
-    if (markerContent !== STAGED_INPUT_GITIGNORE) {
-      return;
-    }
-    try {
-      await stagingRoot.remove(".gitignore");
-    } catch {
-      return;
-    }
+  const markerContent = await stagingRoot
+    .readText(".gitignore", { maxBytes: STAGED_INPUT_GITIGNORE.length })
+    .catch(() => null);
+  if (markerContent !== STAGED_INPUT_GITIGNORE) {
+    return;
+  }
+  try {
+    await stagingRoot.remove(".gitignore");
+  } catch {
+    return;
   }
   const finalStat = await fs.lstat(hostWorkspaceStagingDir).catch(() => null);
   if (
