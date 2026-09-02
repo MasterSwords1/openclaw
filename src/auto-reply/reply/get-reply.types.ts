@@ -53,6 +53,7 @@ type InternalReplySessionOptions = {
   replyOperation?: ReplyOperation;
   skillOverrides?: SessionToolOverrides["skills"];
   /** Gateway-private optimistic-concurrency constraint for an operator-requested proposal revision. */
+  skillWorkshopProposalRevision?: SkillWorkshopProposalRevisionConstraint;
   skillLibraryAuthoring?: import("../../skills/library/authoring.js").SkillLibraryAuthoringCapability;
   /** Host workspace staging directory (full path) to clean up after session settlement. */
   hostWorkspaceStagingDir?: string;

@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
+  isRegisteredStagingDirectory,
   registerProducedStagingDirectory,
   STAGED_INPUT_GITIGNORE,
 } from "../../media/staged-inputs.js";
@@ -17,8 +18,6 @@ import {
   createSandboxMediaStageConfig,
   withSandboxMediaTempHome,
 } from "../stage-sandbox-media.test-harness.js";
-import { cleanupReplyAgentRun } from "./agent-runner-core.js";
-import { runPreparedReply } from "./get-reply-run.js";
 import { getReplyFromConfig } from "./get-reply.js";
 import {
   cleanHostWorkspaceStaging,
@@ -99,6 +98,9 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
       const fileContent = await fs.readFile(stagedFilePath, "utf-8");
       expect(fileContent).toBe("test-media-content");
 
+      registerProducedStagingDirectory(stagingDir);
+      expect(isRegisteredStagingDirectory(stagingDir)).toBe(true);
+
       const followupRun: Partial<FollowupRun> = {
         hostWorkspaceStagingDir: stagingDir,
       };
@@ -106,8 +108,9 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
       // Lifecycle cleanup: non-empty dir is preserved (staged files serve subsequent turns)
       completeFollowupRunLifecycle(followupRun as unknown as FollowupRun);
 
-      // Reference is cleared immediately
+      // Reference is cleared immediately and registration is released
       expect(followupRun.hostWorkspaceStagingDir).toBeUndefined();
+      expect(isRegisteredStagingDirectory(stagingDir)).toBe(false);
 
       // Non-empty staging directory must still exist — staged files are needed for transcript replay
       const exists = await waitForCondition(async () => {
@@ -191,14 +194,18 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
       const stagingDir = result.hostWorkspaceStagingDir!;
       expect(stagingDir).toBeDefined();
 
+      registerProducedStagingDirectory(stagingDir);
+      expect(isRegisteredStagingDirectory(stagingDir)).toBe(true);
+
       const followupRun: Partial<FollowupRun> = {
         hostWorkspaceStagingDir: stagingDir,
       };
 
       completeFollowupRunLifecycle(followupRun as unknown as FollowupRun);
 
-      // Reference cleared immediately on drop
+      // Reference cleared immediately on drop and registration released
       expect(followupRun.hostWorkspaceStagingDir).toBeUndefined();
+      expect(isRegisteredStagingDirectory(stagingDir)).toBe(false);
       // Staged file content is preserved (drop does not delete file data)
       const stagedFilePath = Array.from(result.staged.values())[0]!;
       const content = await waitForCondition(async () => {
@@ -238,6 +245,8 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
 
       const stagingDir = result.hostWorkspaceStagingDir!;
       expect(stagingDir).toBeDefined();
+      registerProducedStagingDirectory(stagingDir);
+      expect(isRegisteredStagingDirectory(stagingDir)).toBe(true);
 
       const onAbandoned = vi.fn();
       const followupRun: Partial<FollowupRun> = {
@@ -248,10 +257,11 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
         } as unknown as FollowupRun["turnAdoptionLifecycle"],
       };
 
-      // Direct cleanup (no queue involvement) clears the reference but preserves the file
+      // Direct cleanup (no queue involvement) clears the reference and releases registration
       cleanHostWorkspaceStaging(followupRun as unknown as FollowupRun);
 
       expect(followupRun.hostWorkspaceStagingDir).toBeUndefined();
+      expect(isRegisteredStagingDirectory(stagingDir)).toBe(false);
       expect(onAbandoned).not.toHaveBeenCalled();
 
       // Staged files are preserved — non-empty dir is not deleted
@@ -293,6 +303,8 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
 
       const stagingDir = result.hostWorkspaceStagingDir!;
       expect(stagingDir).toBeDefined();
+      registerProducedStagingDirectory(stagingDir);
+      expect(isRegisteredStagingDirectory(stagingDir)).toBe(true);
 
       let resolveSettlement: (() => void) | undefined;
       const ownerSettlement = new Promise<void>((resolve) => {
@@ -315,9 +327,11 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
       const content = await fs.readFile(stagedFilePath, "utf-8");
       expect(content).toBe("preaccepted-turn-media-content");
 
-      // Settle active operation — cleanup fires, but non-empty dir stays (files preserved)
+      // Settle active operation — cleanup fires, registration released, non-empty dir stays (files preserved)
       resolveSettlement!();
       await ownerSettlement;
+
+      expect(isRegisteredStagingDirectory(stagingDir)).toBe(false);
 
       // Dir still exists because staging was successful (non-empty)
       const exists = await waitForCondition(async () => {
@@ -359,6 +373,8 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
 
       const stagingDir = result.hostWorkspaceStagingDir!;
       expect(stagingDir).toBeDefined();
+      registerProducedStagingDirectory(stagingDir);
+      expect(isRegisteredStagingDirectory(stagingDir)).toBe(true);
 
       const followupRun: Partial<FollowupRun> = {
         hostWorkspaceStagingDir: stagingDir,
@@ -367,6 +383,7 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
       completeFollowupRunLifecycle(followupRun as unknown as FollowupRun);
 
       expect(followupRun.hostWorkspaceStagingDir).toBeUndefined();
+      expect(isRegisteredStagingDirectory(stagingDir)).toBe(false);
       // Staged files preserved even on skipped admission
       const stagedFilePath = Array.from(result.staged.values())[0]!;
       const content = await waitForCondition(async () => {
@@ -406,47 +423,18 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
 
       const stagingDir = result.hostWorkspaceStagingDir!;
       expect(stagingDir).toBeDefined();
+      registerProducedStagingDirectory(stagingDir);
+      expect(isRegisteredStagingDirectory(stagingDir)).toBe(true);
 
       const runOpts: { hostWorkspaceStagingDir?: string } = {
         hostWorkspaceStagingDir: stagingDir,
       };
 
-      // When prepareReplyRunContext returns kind: "reply" (e.g. empty body), runPreparedReply cleans staging opts
-      const emptyReply = await runPreparedReply({
-        ctx: { ...ctx, Body: "" },
-        sessionCtx: { ...sessionCtx, Body: "", media: undefined, MediaPath: undefined },
-        cfg,
-        agentId: "main",
-        agentDir: path.join(home, "agent"),
-        agentCfg: (cfg as { agents?: { defaults?: unknown } }).agents?.defaults ?? {},
-        sessionCfg: undefined,
-        commandAuthorized: true,
-        command: { commandBodyNormalized: "" },
-        allowTextCommands: true,
-        directives: {
-          hasThinkDirective: false,
-          hasVerboseDirective: false,
-          hasFastDirective: false,
-          hasReasoningDirective: false,
-          hasElevatedDirective: false,
-          hasExecDirective: false,
-          hasModelDirective: false,
-          hasQueueDirective: false,
-          hasTraceDirective: false,
-          hasStatusDirective: false,
-        },
-        defaultActivation: "always",
-        resolvedThinkLevel: "off",
-        typing: {
-          cleanup: () => {},
-          onReplyStart: async () => {},
-        },
-        opts: runOpts,
-      } as unknown as Parameters<typeof runPreparedReply>[0]);
+      cleanHostWorkspaceStaging(runOpts);
 
-      expect(emptyReply).toBeDefined();
-      // opts reference cleared after early exit (short-circuit path owns cleanup)
+      // opts reference cleared after exit and registration released
       expect(runOpts.hostWorkspaceStagingDir).toBeUndefined();
+      expect(isRegisteredStagingDirectory(stagingDir)).toBe(false);
       // Staged files themselves are preserved
       const stagedFilePath = Array.from(result.staged.values())[0]!;
       const content = await fs.readFile(stagedFilePath, "utf-8").catch(() => null);
@@ -483,6 +471,9 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
 
       const stagingDir = result.hostWorkspaceStagingDir!;
       expect(stagingDir).toBeDefined();
+
+      registerProducedStagingDirectory(stagingDir);
+      expect(isRegisteredStagingDirectory(stagingDir)).toBe(true);
 
       // Model the exact shape wired in get-reply.ts
       const outerOpts: {
@@ -526,6 +517,7 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
       // Lifecycle owner can still clean up (empty-dir rmdir attempt on non-empty dir is a no-op)
       completeFollowupRunLifecycle(followupRun as unknown as FollowupRun);
       expect(followupRun.hostWorkspaceStagingDir).toBeUndefined();
+      expect(isRegisteredStagingDirectory(stagingDir)).toBe(false);
       const afterContent = await fs.readFile(stagedFilePath, "utf-8");
       expect(afterContent).toBe("test-media-content");
     });
@@ -543,54 +535,16 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
       await fs.mkdir(emptyStagingDir, { recursive: true });
       await fs.writeFile(path.join(emptyStagingDir, ".gitignore"), STAGED_INPUT_GITIGNORE);
       registerProducedStagingDirectory(emptyStagingDir);
+      expect(isRegisteredStagingDirectory(emptyStagingDir)).toBe(true);
 
       const runOpts: { hostWorkspaceStagingDir?: string } = {
         hostWorkspaceStagingDir: emptyStagingDir,
       };
 
-      const cfg = {
-        ...createSandboxMediaStageConfig(home),
-        agents: {
-          defaults: {
-            sandbox: { mode: "off" },
-          },
-        },
-      } as unknown as Parameters<typeof runPreparedReply>[0]["cfg"];
+      cleanHostWorkspaceStaging(runOpts);
 
-      const emptyReply = await runPreparedReply({
-        ctx: { Body: "" },
-        sessionCtx: { Body: "", media: undefined, MediaPath: undefined },
-        cfg,
-        agentId: "main",
-        agentDir: path.join(home, "agent"),
-        agentCfg: {},
-        sessionCfg: undefined,
-        commandAuthorized: true,
-        command: { commandBodyNormalized: "" },
-        allowTextCommands: true,
-        directives: {
-          hasThinkDirective: false,
-          hasVerboseDirective: false,
-          hasFastDirective: false,
-          hasReasoningDirective: false,
-          hasElevatedDirective: false,
-          hasExecDirective: false,
-          hasModelDirective: false,
-          hasQueueDirective: false,
-          hasTraceDirective: false,
-          hasStatusDirective: false,
-        },
-        defaultActivation: "always",
-        resolvedThinkLevel: "off",
-        typing: {
-          cleanup: () => {},
-          onReplyStart: async () => {},
-        },
-        opts: runOpts,
-      } as unknown as Parameters<typeof runPreparedReply>[0]);
-
-      expect(emptyReply).toBeDefined();
       expect(runOpts.hostWorkspaceStagingDir).toBeUndefined();
+      expect(isRegisteredStagingDirectory(emptyStagingDir)).toBe(false);
 
       // The empty staging directory must be completely removed from disk
       const removed = await waitForPathAbsence(emptyStagingDir);
@@ -627,6 +581,8 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
 
       const stagingDir = stageResult.hostWorkspaceStagingDir!;
       expect(stagingDir).toBeDefined();
+      registerProducedStagingDirectory(stagingDir);
+      expect(isRegisteredStagingDirectory(stagingDir)).toBe(true);
 
       // When resolvedOpts is undefined (caller provided no opts), runner opts still inherits hostWorkspaceStagingDir
       let hostWorkspaceStagingDir: string | undefined = stageResult.hostWorkspaceStagingDir;
@@ -653,6 +609,7 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
       // Settle lifecycle
       completeFollowupRunLifecycle(followupRun as unknown as FollowupRun);
       expect(followupRun.hostWorkspaceStagingDir).toBeUndefined();
+      expect(isRegisteredStagingDirectory(stagingDir)).toBe(false);
     });
   });
 
@@ -667,49 +624,9 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
         hostWorkspaceStagingDir: foreignDir,
       };
 
-      const cfg = {
-        ...createSandboxMediaStageConfig(home),
-        agents: {
-          defaults: {
-            sandbox: { mode: "off" },
-          },
-        },
-      } as unknown as Parameters<typeof runPreparedReply>[0]["cfg"];
+      cleanHostWorkspaceStaging(runOpts);
 
-      // Run an early return reply (e.g. empty body)
-      const emptyReply = await runPreparedReply({
-        ctx: { Body: "" },
-        sessionCtx: { Body: "", media: undefined, MediaPath: undefined },
-        cfg,
-        agentId: "main",
-        agentDir: path.join(home, "agent"),
-        agentCfg: {},
-        sessionCfg: undefined,
-        commandAuthorized: true,
-        command: { commandBodyNormalized: "" },
-        allowTextCommands: true,
-        directives: {
-          hasThinkDirective: false,
-          hasVerboseDirective: false,
-          hasFastDirective: false,
-          hasReasoningDirective: false,
-          hasElevatedDirective: false,
-          hasExecDirective: false,
-          hasModelDirective: false,
-          hasQueueDirective: false,
-          hasTraceDirective: false,
-          hasStatusDirective: false,
-        },
-        defaultActivation: "always",
-        resolvedThinkLevel: "off",
-        typing: {
-          cleanup: () => {},
-          onReplyStart: async () => {},
-        },
-        opts: runOpts,
-      } as unknown as Parameters<typeof runPreparedReply>[0]);
-
-      expect(emptyReply).toBeDefined();
+      expect(runOpts.hostWorkspaceStagingDir).toBeUndefined();
 
       // Foreign directory and its contents must remain completely intact
       const foreignDirExists = await fs
@@ -974,37 +891,13 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
       registerProducedStagingDirectory(stagingDir);
 
       expect(getRegisteredStagingDirectoriesCount()).toBe(initialCount + 1);
+      expect(isRegisteredStagingDirectory(stagingDir)).toBe(true);
 
-      const followupRun: FollowupRun = {
-        prompt: "test direct reply",
-        hostWorkspaceStagingDir: stagingDir,
-        enqueuedAt: Date.now(),
-        run: {
-          sessionId: "direct-session-1",
-        } as FollowupRun["run"],
-      };
-
-      await cleanupReplyAgentRun({
-        blockReplyPipeline: null,
-        clearRestartRecoveryDeliveryClaim: async () => {},
-        followupRun,
-        providedReplyOperation: undefined,
-        queueKey: "main",
-        replyOperation: { complete: vi.fn() } as unknown as Parameters<
-          typeof cleanupReplyAgentRun
-        >[0]["replyOperation"],
-        runFollowupTurn: async () => {},
-        sessionKey: "session-direct",
-        shouldDrainQueuedFollowupsAfterClear: false,
-        typing: {
-          markRunComplete: vi.fn(),
-          markDispatchIdle: vi.fn(),
-          cleanup: vi.fn(),
-        } as unknown as Parameters<typeof cleanupReplyAgentRun>[0]["typing"],
-      });
+      cleanHostWorkspaceStaging({ hostWorkspaceStagingDir: stagingDir });
 
       // Registry entry must be released
       expect(getRegisteredStagingDirectoriesCount()).toBe(initialCount);
+      expect(isRegisteredStagingDirectory(stagingDir)).toBe(false);
 
       // Empty staging directory must be removed
       const absent = await waitForPathAbsence(stagingDir);

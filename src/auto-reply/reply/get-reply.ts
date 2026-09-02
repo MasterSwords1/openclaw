@@ -1376,16 +1376,14 @@ export async function getReplyFromConfig(
     }),
   );
 
-  let replyResult: ReplyPayload | ReplyPayload[] | undefined;
   try {
-    replyResult = await runPreparedReplyPromise;
-  } catch (err) {
+    return await runPreparedReplyPromise;
+  } finally {
     if (hostWorkspaceStagingDir) {
       cleanHostWorkspaceStaging({ hostWorkspaceStagingDir });
+      hostWorkspaceStagingDir = undefined;
     }
-    throw err;
+    logResolverTiming("completed", "prepared_reply");
   }
-  logResolverTiming("completed", "prepared_reply");
-  return replyResult;
 }
 /* oxlint-disable max-lines -- TODO: split this grandfathered oversized file. */

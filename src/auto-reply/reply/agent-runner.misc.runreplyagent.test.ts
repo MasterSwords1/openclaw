@@ -182,7 +182,6 @@ vi.mock("../../runtime.js", () => {
 vi.mock("./queue.js", () => {
   return {
     admitFollowupRunLifecycle: vi.fn(async () => {}),
-    cleanHostWorkspaceStaging: vi.fn(),
     completeFollowupRunLifecycle: vi.fn(),
     enqueueFollowupRun: vi.fn(),
     parkSteerCandidate: vi.fn(() => ({
