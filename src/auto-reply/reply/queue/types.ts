@@ -353,6 +353,25 @@ export async function cleanEmptyStagingDirectorySafely(
   if (!isOwnedStagedInputDirectoryName(dirName)) {
     return;
   }
+  const parentDir = path.dirname(hostWorkspaceStagingDir);
+  const parentStat = await fs.lstat(parentDir).catch(() => null);
+  if (!parentStat || !parentStat.isDirectory() || parentStat.isSymbolicLink()) {
+    return;
+  }
+  const parentRoot = await fsRoot(parentDir).catch(() => null);
+  if (!parentRoot) {
+    return;
+  }
+  const postParentStat = await fs.lstat(parentDir).catch(() => null);
+  if (
+    !postParentStat ||
+    !postParentStat.isDirectory() ||
+    postParentStat.isSymbolicLink() ||
+    !sameFileIdentity(postParentStat, parentStat)
+  ) {
+    return;
+  }
+
   const dirStat = await fs.lstat(hostWorkspaceStagingDir).catch(() => null);
   if (!dirStat || !dirStat.isDirectory() || dirStat.isSymbolicLink()) {
     return;
@@ -396,7 +415,9 @@ export async function cleanEmptyStagingDirectorySafely(
   ) {
     return;
   }
-  await fs.rmdir(hostWorkspaceStagingDir).catch(() => {});
+  try {
+    await parentRoot.remove(dirName);
+  } catch {}
 }
 
 export function cleanHostWorkspaceStaging(run: Pick<FollowupRun, "hostWorkspaceStagingDir">): void {

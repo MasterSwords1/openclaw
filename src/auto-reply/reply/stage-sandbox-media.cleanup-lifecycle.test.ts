@@ -913,6 +913,61 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
     });
   });
 
+  it("cleanEmptyStagingDirectorySafely protects against forced parent-directory symlink swap before final removal", async () => {
+    await withSandboxMediaTempHome("post-val-parent-swap-test", async (home) => {
+      // Create external directory with same-named target directory that should never be deleted
+      const externalParent = path.join(home, "external-parent-dir");
+      await fs.mkdir(externalParent, { recursive: true });
+      const stagingDirName = "openclaw-staged-cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+      const externalVictimDir = path.join(externalParent, stagingDirName);
+      await fs.mkdir(externalVictimDir, { recursive: true });
+
+      // Create genuine staging parent directory and staging directory with marker
+      const stagingParent = path.join(home, "media-inbound");
+      await fs.mkdir(stagingParent, { recursive: true });
+      const stagingDir = path.join(stagingParent, stagingDirName);
+      await fs.mkdir(stagingDir, { recursive: true });
+      const stagingMarker = path.join(stagingDir, ".gitignore");
+      await fs.writeFile(stagingMarker, STAGED_INPUT_GITIGNORE);
+
+      // Hook fs.lstat to swap stagingParent to a symlink pointing to externalParent
+      // right after marker removal and before the final removal
+      let swapped = false;
+      const realLstat = fs.lstat;
+      const lstatSpy = vi
+        .spyOn(fs, "lstat")
+        .mockImplementation(async (...args: Parameters<typeof realLstat>) => {
+          const result = await realLstat(...args);
+          // When finalStat is queried on hostWorkspaceStagingDir after marker removal,
+          // swap the parent directory to a symlink to externalParent
+          if (args[0] === stagingDir && !swapped) {
+            const files = await fs.readdir(stagingDir).catch(() => null);
+            if (files && files.length === 0) {
+              swapped = true;
+              await fs.rm(stagingParent, { recursive: true });
+              await fs.symlink(externalParent, stagingParent, "dir");
+            }
+          }
+          return result;
+        });
+
+      try {
+        await cleanEmptyStagingDirectorySafely(stagingDir);
+      } finally {
+        lstatSpy.mockRestore();
+      }
+
+      expect(swapped).toBe(true);
+
+      // The external victim directory inside externalParent MUST NOT be deleted!
+      const externalVictimStillExists = await fs
+        .stat(externalVictimDir)
+        .then(() => true)
+        .catch(() => false);
+      expect(externalVictimStillExists).toBe(true);
+    });
+  });
+
   it("getReplyFromConfig rejects caller-supplied hostWorkspaceStagingDir options even if shaped like UUID with canonical marker", async () => {
     await withSandboxMediaTempHome("public-opts-forged-test", async (home) => {
       const forgedDir = path.join(home, "openclaw-staged-55555555-5555-4555-8555-555555555555");
