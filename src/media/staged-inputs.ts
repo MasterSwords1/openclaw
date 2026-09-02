@@ -244,7 +244,12 @@ export async function cleanEmptyStagingDirectorySafely(
       .then((s) => s.isDirectory() && !s.isSymbolicLink())
       .catch(() => false);
     if (dirStillExists) {
-      await stagingRoot.create(".gitignore", Buffer.from(STAGED_INPUT_GITIGNORE)).catch(() => {});
+      const restoredRoot = await fsRoot(hostWorkspaceStagingDir).catch(() => null);
+      if (restoredRoot) {
+        await restoredRoot
+          .create(".gitignore", Buffer.from(STAGED_INPUT_GITIGNORE))
+          .catch(() => {});
+      }
     }
   }
 }

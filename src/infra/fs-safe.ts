@@ -224,6 +224,31 @@ export async function removeChildDirectoryIfIdentityMatches(params: {
       }
     }
 
+    // Helper to safely restore isolatedPath back to targetPath without stranding staged media,
+    // merging entries into targetPath if targetPath was concurrently recreated by another actor.
+    const restoreToTargetPath = (): void => {
+      try {
+        fsSync.renameSync(isolatedPath, targetPath);
+      } catch {
+        try {
+          const targetStat = fsSync.lstatSync(targetPath);
+          if (targetStat.isDirectory() && !targetStat.isSymbolicLink()) {
+            const entries = fsSync.readdirSync(isolatedPath);
+            for (const entry of entries) {
+              const src = path.join(isolatedPath, entry);
+              const dest = path.join(targetPath, entry);
+              try {
+                fsSync.renameSync(src, dest);
+              } catch {}
+            }
+            try {
+              fsSync.rmdirSync(isolatedPath);
+            } catch {}
+          }
+        } catch {}
+      }
+    };
+
     // Verify isolated directory identity before final removal
     const isolatedStat = fsSync.lstatSync(isolatedPath);
     if (
@@ -231,9 +256,7 @@ export async function removeChildDirectoryIfIdentityMatches(params: {
       isolatedStat.isSymbolicLink() ||
       !sameFileIdentity(isolatedStat, params.expectedIdentity)
     ) {
-      try {
-        fsSync.renameSync(isolatedPath, targetPath);
-      } catch {}
+      restoreToTargetPath();
       return false;
     }
 
@@ -244,9 +267,7 @@ export async function removeChildDirectoryIfIdentityMatches(params: {
       fsSync.rmdirSync(isolatedPath);
       return true;
     } catch {
-      try {
-        fsSync.renameSync(isolatedPath, targetPath);
-      } catch {}
+      restoreToTargetPath();
       return false;
     }
   } catch {

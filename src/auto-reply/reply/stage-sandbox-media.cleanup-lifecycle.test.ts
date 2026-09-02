@@ -1022,6 +1022,56 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
 
       // Canonical .gitignore marker must be restored on the preserved directory:
       expect(await checkExists(stagingMarker)).toBe(true);
+    });
+  });
+
+  it("cleanEmptyStagingDirectorySafely handles two-writer recovery collision when late write occurs and targetPath is concurrently recreated", async () => {
+    await withSandboxMediaTempHome("two-writer-collision-test", async (home) => {
+      const stagingParent = path.join(home, "media-inbound");
+      await fs.mkdir(stagingParent, { recursive: true });
+      const stagingDirName = "openclaw-staged-dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+      const stagingDir = path.join(stagingParent, stagingDirName);
+      await fs.mkdir(stagingDir, { recursive: true });
+      const stagingMarker = path.join(stagingDir, ".gitignore");
+      await fs.writeFile(stagingMarker, STAGED_INPUT_GITIGNORE);
+
+      let collided = false;
+      const hookKey = Symbol.for("openclaw.fsSafeBeforeDeletionEffectHook");
+      // SAFETY: test hook registration
+      (globalThis as Record<PropertyKey, unknown>)[hookKey] = async (
+        targetDir: string,
+        isolatedPath?: string,
+      ) => {
+        if (isolatedPath && !collided) {
+          collided = true;
+          // Actor 1: Writes late media into isolatedPath:
+          await fs.writeFile(path.join(isolatedPath, "actor1-late-media.png"), "actor1-content");
+          // Actor 2: Concurrently recreates targetPath with its own media:
+          await fs.mkdir(targetDir);
+          await fs.writeFile(path.join(targetDir, "actor2-concurrent.jpg"), "actor2-content");
+        }
+      };
+
+      try {
+        await cleanEmptyStagingDirectorySafely(stagingDir);
+      } finally {
+        // SAFETY: test hook cleanup
+        delete (globalThis as Record<PropertyKey, unknown>)[hookKey];
+      }
+
+      expect(collided).toBe(true);
+
+      // Both late-written original media and recreated target media must be safe at canonical path:
+      expect(await checkExists(stagingDir)).toBe(true);
+      const actor1Path = path.join(stagingDir, "actor1-late-media.png");
+      const actor2Path = path.join(stagingDir, "actor2-concurrent.jpg");
+      expect(await checkExists(actor1Path)).toBe(true);
+      expect(await fs.readFile(actor1Path, "utf8")).toBe("actor1-content");
+      expect(await checkExists(actor2Path)).toBe(true);
+      expect(await fs.readFile(actor2Path, "utf8")).toBe("actor2-content");
+
+      // Canonical .gitignore marker must be restored on the preserved directory:
+      expect(await checkExists(stagingMarker)).toBe(true);
       expect(await fs.readFile(stagingMarker, "utf8")).toBe(STAGED_INPUT_GITIGNORE);
     });
   });
@@ -1033,14 +1083,7 @@ describe("stageSandboxMedia host staging lifecycle cleanup", () => {
       const markerPath = path.join(forgedDir, ".gitignore");
       await fs.writeFile(markerPath, STAGED_INPUT_GITIGNORE);
 
-      const cfg = {
-        ...createSandboxMediaStageConfig(home),
-        agents: {
-          defaults: {
-            sandbox: { mode: "off" },
-          },
-        },
-      } as unknown as Parameters<typeof getReplyFromConfig>[2];
+      const cfg = makeStageCfg(home) as unknown as Parameters<typeof getReplyFromConfig>[2];
 
       const ctx = {
         Body: "test forged options",
