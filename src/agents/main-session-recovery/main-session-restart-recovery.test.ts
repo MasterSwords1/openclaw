@@ -1153,6 +1153,64 @@ describe("main-session-restart-recovery", () => {
     },
   );
 
+  it("yields to the event loop between store recoveries to prevent accumulation", async () => {
+    // Create two stores with recovery targets so the loop runs twice.
+    const storePathA = path.join(tmpDir, "agent-a", "sessions.json");
+    const storePathB = path.join(tmpDir, "agent-b", "sessions.json");
+
+    // Mock discovery to return both stores as discoverable targets.
+    vi.spyOn(configSessions, "resolveAllAgentSessionStoreTargetsSync").mockReturnValue([
+      { agentId: "main", storePath: storePathA, sessionsDir: path.dirname(storePathA) },
+      { agentId: "ops", storePath: storePathB, sessionsDir: path.dirname(storePathB) },
+    ]);
+
+    const cfg = {
+      agents: { ownership: "explicit", entries: { main: {}, ops: {} } },
+      session: { store: storePathA },
+    } satisfies OpenClawConfig;
+
+    // Seed both stores with a running session that needs recovery.
+    await writeStore(path.dirname(storePathA), mainSessionStore());
+    await replaceSessionEntry(
+      {
+        agentId: "main",
+        defaultAgentId: "main",
+        sessionKey: "agent:main:main",
+        storePath: storePathA,
+      },
+      mainSessionEntry({ pendingFinalDelivery: makePendingFinalDelivery() }),
+    );
+    await writeStore(path.dirname(storePathB), mainSessionStore());
+    await replaceSessionEntry(
+      {
+        agentId: "ops",
+        defaultAgentId: "ops",
+        sessionKey: "agent:ops:main",
+        storePath: storePathB,
+      },
+      mainSessionEntry({ pendingFinalDelivery: makePendingFinalDelivery() }),
+    );
+
+    const yields: number[] = [];
+    const originalSetImmediate = globalThis.setImmediate;
+    vi.spyOn(globalThis, "setImmediate").mockImplementation(
+      (callback: (...args: unknown[]) => void, ...args) => {
+        yields.push(yields.length);
+        return originalSetImmediate(callback, ...args);
+      },
+    );
+
+    try {
+      await recoverRestartAbortedMainSessions({ cfg, stateDir: tmpDir });
+    } finally {
+      vi.restoreAllMocks();
+    }
+
+    // Two stores means one yield between them (after the first store's recovery).
+    expect(yields).toHaveLength(1);
+    expect(yields).toEqual([0]);
+  });
+
   it("dispatches a bare fixed-store recovery under its persisted owner", async () => {
     const storePath = path.join(tmpDir, "shared", "sessions.json");
     const cfg = {
@@ -4290,6 +4348,8 @@ describe("main-session-restart-recovery", () => {
         stateDir: tmpDir,
       });
       await firstDispatch.promise;
+      // Advance any pending setImmediate callbacks before awaiting the retry timeout.
+      await vi.advanceTimersByTimeAsync(0);
       await retryScheduled.promise;
       expect(countAgentDispatches()).toBe(1);
 
