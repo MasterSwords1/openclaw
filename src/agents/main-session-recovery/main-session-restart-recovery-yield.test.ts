@@ -143,9 +143,12 @@ describe("main-session-restart-recovery yield", () => {
       const storePathB = path.join(tmpDir, "agents", "agent-b", "sessions", "sessions.json");
 
       // Configure per-agent stores so both are discoverable.
+      // Use a path with {agentId} template so each agent gets its own store.
       const cfg = {
         agents: { ownership: "explicit", entries: { "agent-a": {}, "agent-b": {} } },
-        session: { store: storePathA }, // point to first store as canonical
+        session: {
+          store: path.join(tmpDir, "agents", "{agentId}", "sessions", "sessions.json"),
+        },
       } satisfies import("../../config/config.js").OpenClawConfig;
 
       // Seed both stores with a running session that needs recovery.
@@ -171,51 +174,54 @@ describe("main-session-restart-recovery yield", () => {
       );
 
       // Track when each store's recovery completes and when setImmediate callbacks run.
-      const recoveryOrder: string[] = [];
+      // Use interleaved events to prove yield order.
+      const events: string[] = [];
       const originalRecoverStore = storeModule.recoverStore;
       vi.spyOn(storeModule, "recoverStore").mockImplementation(async (params) => {
         const storeId = params.storePath.includes("agent-a") ? "A" : "B";
-        recoveryOrder.push(`start:${storeId}`);
+        events.push(`start:${storeId}`);
         const result = await originalRecoverStore(params);
-        recoveryOrder.push(`end:${storeId}`);
+        events.push(`end:${storeId}`);
         return result;
       });
 
-      const yields: number[] = [];
-      const immediateCallbacks: string[] = [];
-      const originalSetImmediate = globalThis.setImmediate;
-      vi.spyOn(globalThis, "setImmediate").mockImplementation(
-        (callback: (...args: unknown[]) => void, ...args) => {
-          yields.push(yields.length);
-          // Wrap the callback to track when it actually runs.
-          const wrapped = () => {
-            immediateCallbacks.push(`immediate:${yields.length - 1}`);
-            callback(...args);
-          };
-          return originalSetImmediate(wrapped);
+      // Track yield timing by observing events between recoveries.
+      const originalSetTimeout = globalThis.setTimeout;
+      vi.spyOn(globalThis, "setTimeout").mockImplementation(
+        (callback: (...args: unknown[]) => void, ms: number, ...args) => {
+          if (ms === 0) {
+            // Track when the yield callback is scheduled vs when recoveries happen
+            events.push(`yield-scheduled:${events.length}`);
+          }
+          return originalSetTimeout(callback, ms, ...args);
         },
       );
 
       try {
         const result = await doRecoverRestartAbortedMainSessions({ cfg, stateDir: tmpDir });
+        // Debug: log events for inspection
+        console.log("EVENTS:", JSON.stringify(events));
+        console.log("RESULT:", JSON.stringify(result));
         // Both stores should be recovered.
         expect(result.started).toBeGreaterThanOrEqual(2);
         expect(result.failed).toBe(0);
 
         // Recovery should have started both stores.
-        expect(recoveryOrder).toContain("start:A");
-        expect(recoveryOrder).toContain("start:B");
+        expect(events).toContain("start:A");
+        expect(events).toContain("start:B");
 
-        // At least one immediate callback should have run (proving the yield executed).
-        expect(immediateCallbacks.length).toBeGreaterThanOrEqual(1);
+        // At least one yield callback should have been scheduled.
+        expect(events.some((e) => e.startsWith("yield-scheduled"))).toBe(true);
 
-        // Verify that an immediate callback ran between the two store recoveries.
-        // Find the index of the last "start:B" and check there's an immediate after it.
-        const lastStartB = recoveryOrder.lastIndexOf("start:B");
-        if (lastStartB >= 0) {
-          // There should be an immediate callback that ran during/after the recovery.
-          expect(immediateCallbacks.length).toBeGreaterThan(0);
+        // Prove yield happens between stores: find a yield-scheduled between start and end
+        let yieldBetweenStores = false;
+        for (let i = 0; i < events.length - 1; i++) {
+          if (events[i].startsWith("start:") && events[i + 1].startsWith("yield-scheduled")) {
+            yieldBetweenStores = true;
+            break;
+          }
         }
+        expect(yieldBetweenStores).toBe(true);
       } finally {
         vi.restoreAllMocks();
       }
