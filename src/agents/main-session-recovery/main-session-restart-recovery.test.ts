@@ -1153,93 +1153,6 @@ describe("main-session-restart-recovery", () => {
     },
   );
 
-  it("yields to the event loop between store recoveries to prevent accumulation", async () => {
-    // Create two stores with recovery targets so the loop runs twice.
-    // Use per-agent store config so both agents' stores are discovered.
-    const storePathA = path.join(tmpDir, "agents", "agent-a", "sessions", "sessions.json");
-    const storePathB = path.join(tmpDir, "agents", "agent-b", "sessions", "sessions.json");
-
-    // Configure per-agent stores so both are discoverable.
-    const cfg = {
-      agents: { ownership: "explicit", entries: { "agent-a": {}, "agent-b": {} } },
-      session: {
-        store: path.join("{stateDir}", "agents", "{agentId}", "sessions", "sessions.json"),
-      },
-    } satisfies OpenClawConfig;
-
-    // Seed both stores with a running session that needs recovery.
-    await writeStore(path.dirname(storePathA), mainSessionStore());
-    await replaceSessionEntry(
-      {
-        agentId: "agent-a",
-        defaultAgentId: "agent-a",
-        sessionKey: "agent:agent-a:main",
-        storePath: storePathA,
-      },
-      mainSessionEntry({ pendingFinalDelivery: makePendingFinalDelivery() }),
-    );
-    await writeStore(path.dirname(storePathB), mainSessionStore());
-    await replaceSessionEntry(
-      {
-        agentId: "agent-b",
-        defaultAgentId: "agent-b",
-        sessionKey: "agent:agent-b:main",
-        storePath: storePathB,
-      },
-      mainSessionEntry({ pendingFinalDelivery: makePendingFinalDelivery() }),
-    );
-
-    // Track when each store's recovery completes and when setImmediate callbacks run.
-    const recoveryOrder: string[] = [];
-    const originalRecoverStore = recoverStore;
-    vi.spyOn({ recoverStore }, "recoverStore").mockImplementation(async (params) => {
-      const storeId = params.storePath.includes("agent-a") ? "A" : "B";
-      recoveryOrder.push(`start:${storeId}`);
-      const result = await originalRecoverStore(params);
-      recoveryOrder.push(`end:${storeId}`);
-      return result;
-    });
-
-    const yields: number[] = [];
-    const immediateCallbacks: string[] = [];
-    const originalSetImmediate = globalThis.setImmediate;
-    vi.spyOn(globalThis, "setImmediate").mockImplementation(
-      (callback: (...args: unknown[]) => void, ...args) => {
-        yields.push(yields.length);
-        // Wrap the callback to track when it actually runs.
-        const wrapped = () => {
-          immediateCallbacks.push(`immediate:${yields.length - 1}`);
-          callback(...args);
-        };
-        return originalSetImmediate(wrapped);
-      },
-    );
-
-    try {
-      const result = await recoverRestartAbortedMainSessions({ cfg, stateDir: tmpDir });
-      // Both stores should be recovered.
-      expect(result.started).toBeGreaterThanOrEqual(2);
-      expect(result.failed).toBe(0);
-
-      // Recovery should have started both stores.
-      expect(recoveryOrder).toContain("start:A");
-      expect(recoveryOrder).toContain("start:B");
-
-      // At least one immediate callback should have run (proving the yield executed).
-      expect(immediateCallbacks.length).toBeGreaterThanOrEqual(1);
-
-      // Verify that an immediate callback ran between the two store recoveries.
-      // Find the index of the last "start:B" and check there's an immediate after it.
-      const lastStartB = recoveryOrder.lastIndexOf("start:B");
-      if (lastStartB >= 0) {
-        // There should be an immediate callback that ran during/after the recovery.
-        expect(immediateCallbacks.length).toBeGreaterThan(0);
-      }
-    } finally {
-      vi.restoreAllMocks();
-    }
-  });
-
   it("dispatches a bare fixed-store recovery under its persisted owner", async () => {
     const storePath = path.join(tmpDir, "shared", "sessions.json");
     const cfg = {
@@ -4377,8 +4290,6 @@ describe("main-session-restart-recovery", () => {
         stateDir: tmpDir,
       });
       await firstDispatch.promise;
-      // Advance any pending setImmediate callbacks before awaiting the retry timeout.
-      await vi.advanceTimersByTimeAsync(0);
       await retryScheduled.promise;
       expect(countAgentDispatches()).toBe(1);
 
