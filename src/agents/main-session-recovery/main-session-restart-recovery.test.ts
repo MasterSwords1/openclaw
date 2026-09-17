@@ -1211,7 +1211,7 @@ describe("main-session-restart-recovery", () => {
           immediateCallbacks.push(`immediate:${yields.length - 1}`);
           callback(...args);
         };
-        return originalSetImmediate(wrapped, ...args);
+        return originalSetImmediate(wrapped);
       },
     );
 
