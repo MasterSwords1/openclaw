@@ -187,7 +187,7 @@ describe("main-session-restart-recovery yield", () => {
       // Track yield timing by observing events between recoveries.
       const originalSetTimeout = globalThis.setTimeout;
       vi.spyOn(globalThis, "setTimeout").mockImplementation(
-        (callback: (...args: unknown[]) => void, ms: number, ...args) => {
+        (callback: (...args: any[]) => void, ms: number | undefined, ...args: any[]) => {
           if (ms === 0) {
             // Track when the yield callback is scheduled vs when recoveries happen
             events.push(`yield-scheduled:${events.length}`);
@@ -215,7 +215,14 @@ describe("main-session-restart-recovery yield", () => {
         // Prove yield happens between stores: find a yield-scheduled between start and end
         let yieldBetweenStores = false;
         for (let i = 0; i < events.length - 1; i++) {
-          if (events[i].startsWith("start:") && events[i + 1].startsWith("yield-scheduled")) {
+          const current = events[i];
+          const next = events[i + 1];
+          if (
+            current != null &&
+            next != null &&
+            current.startsWith("start:") &&
+            next.startsWith("yield-scheduled")
+          ) {
             yieldBetweenStores = true;
             break;
           }
