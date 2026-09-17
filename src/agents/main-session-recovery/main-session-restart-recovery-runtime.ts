@@ -107,7 +107,10 @@ export async function recoverRestartAbortedMainSessions(params: {
     // Yield to the event loop between stores so that each store's synchronous
     // I/O (SQLite reads, filesystem stat calls) doesn't accumulate into a
     // single blocking burst that starves the Gateway request loop (#149935).
-    await new Promise<void>((resolve) => setImmediate(resolve));
+    await new Promise<void>((resolve) => {
+      // eslint-disable-next-line promise/implicit-return
+      setImmediate(resolve);
+    });
   }
 
   if (result.started > 0 || result.settled > 0 || result.failed > 0) {
