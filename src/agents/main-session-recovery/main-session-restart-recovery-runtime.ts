@@ -84,10 +84,13 @@ export async function recoverRestartAbortedMainSessions(params: {
   const result = { started: 0, settled: 0, failed: 0, skipped: 0 };
   const handledSessionKeys = params.handledSessionKeys ?? new Set<string>();
 
-  for (const target of await discoverRestartRecoveryStoreTargets({
+  const targets = await discoverRestartRecoveryStoreTargets({
     ...params,
     statuses: ["running"],
-  })) {
+  });
+
+  for (let i = 0; i < targets.length; i++) {
+    const target = targets[i]!;
     if (params.shouldContinue?.() === false) {
       return result;
     }
@@ -107,9 +110,11 @@ export async function recoverRestartAbortedMainSessions(params: {
     // Yield to the event loop between stores so that each store's synchronous
     // I/O (SQLite reads, filesystem stat calls) doesn't accumulate into a
     // single blocking burst that starves the Gateway request loop (#149935).
-    await new Promise<void>((resolve) => {
-      setTimeout(resolve, 0);
-    });
+    if (i < targets.length - 1) {
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, 0);
+      });
+    }
   }
 
   if (result.started > 0 || result.settled > 0 || result.failed > 0) {

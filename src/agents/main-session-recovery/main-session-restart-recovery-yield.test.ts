@@ -172,8 +172,7 @@ describe("main-session-restart-recovery yield", () => {
         mainSessionEntry({ pendingFinalDelivery: makePendingFinalDelivery() }),
       );
 
-      // Track when each store's recovery completes and when setImmediate callbacks run.
-      // Use interleaved events to prove yield order.
+      // Track when each store's recovery completes and when an independent callback runs.
       const events: string[] = [];
       const originalRecoverStore = storeModule.recoverStore;
       vi.spyOn(storeModule, "recoverStore").mockImplementation(async (params) => {
@@ -181,53 +180,32 @@ describe("main-session-restart-recovery yield", () => {
         events.push(`start:${storeId}`);
         const result = await originalRecoverStore(params);
         events.push(`end:${storeId}`);
+        if (storeId === "A") {
+          setImmediate(() => {
+            events.push("gateway-callback");
+          });
+        }
         return result;
       });
 
-      // Track yield timing by observing events between recoveries.
-      const originalSetTimeout = globalThis.setTimeout;
-      vi.spyOn(globalThis, "setTimeout").mockImplementation(
-        (callback: (...args: any[]) => void, ms: number | undefined, ...args: any[]) => {
-          if (ms === 0) {
-            // Track when the yield callback is scheduled vs when recoveries happen
-            events.push(`yield-scheduled:${events.length}`);
-          }
-          return originalSetTimeout(callback, ms, ...args);
-        },
-      );
-
       try {
         const result = await doRecoverRestartAbortedMainSessions({ cfg, stateDir: tmpDir });
-        // Debug: log events for inspection
-        console.log("EVENTS:", JSON.stringify(events));
-        console.log("RESULT:", JSON.stringify(result));
+
         // Both stores should be recovered.
         expect(result.started).toBeGreaterThanOrEqual(2);
         expect(result.failed).toBe(0);
 
-        // Recovery should have started both stores.
-        expect(events).toContain("start:A");
-        expect(events).toContain("start:B");
+        // Verify that an independent event-loop callback executed between store A and store B.
+        // Without the yield between stores, start:B runs in the same tick as end:A,
+        // postponing gateway-callback until after end:B.
+        const endAIndex = events.indexOf("end:A");
+        const callbackIndex = events.indexOf("gateway-callback");
+        const startBIndex = events.indexOf("start:B");
 
-        // At least one yield callback should have been scheduled.
-        expect(events.some((e) => e.startsWith("yield-scheduled"))).toBe(true);
-
-        // Prove yield happens between stores: find a yield-scheduled between start and end
-        let yieldBetweenStores = false;
-        for (let i = 0; i < events.length - 1; i++) {
-          const current = events[i];
-          const next = events[i + 1];
-          if (
-            current != null &&
-            next != null &&
-            current.startsWith("start:") &&
-            next.startsWith("yield-scheduled")
-          ) {
-            yieldBetweenStores = true;
-            break;
-          }
-        }
-        expect(yieldBetweenStores).toBe(true);
+        expect(endAIndex).toBeGreaterThan(-1);
+        expect(callbackIndex).toBeGreaterThan(endAIndex);
+        expect(startBIndex).toBeGreaterThan(callbackIndex);
+        expect(events).toEqual(["start:A", "end:A", "gateway-callback", "start:B", "end:B"]);
       } finally {
         vi.restoreAllMocks();
       }
