@@ -17,7 +17,6 @@ import {
   createSessionStore,
   type SessionEntryFixture,
 } from "../subagent-test-fixtures.test-helpers.js";
-import { recoverStore } from "./main-session-restart-recovery-store.js";
 import * as storeModule from "./main-session-restart-recovery-store.js";
 import { recoverRestartAbortedMainSessions } from "./main-session-restart-recovery.js";
 
