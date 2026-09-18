@@ -1,4 +1,3 @@
-/** Process-local index of session keys that enabled cron jobs are bound to. */
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { resolveCronJobBoundSessionKeys } from "../cron/job-session-bindings.js";
 import type { CronJob } from "../cron/types.js";
@@ -21,16 +20,13 @@ let memo: {
   keys: ReadonlySet<string>;
 } | null = null;
 
-/**
- * Claimed at cron service build time so registration authority follows build
- * order: a stale service whose start resolves after a config reload cannot
- * clobber the replacement's registration.
- */
+/** Track the last-emitted keys so we can compute targeted deltas. */
+let lastEmittedKeys: ReadonlySet<string> | null = null;
+
 export function claimSessionAutomationEpoch(): number {
   return ++epochCounter;
 }
 
-/** Registered by the gateway cron owner; newer epochs win over stale services. */
 export function registerSessionAutomationSource(
   next: SessionAutomationSource | null,
   epoch?: number,
@@ -41,13 +37,10 @@ export function registerSessionAutomationSource(
   }
   registeredEpoch = effectiveEpoch;
   source = next;
+  lastEmittedKeys = null;
   invalidateSessionAutomationIndex();
 }
 
-/**
- * Owner-compare unregistration: a stopped cron service must not clear a
- * replacement's registration when config reloads race the lazy service build.
- */
 export function unregisterSessionAutomationSource(owner: SessionAutomationSource): void {
   if (source !== owner) {
     return;
@@ -56,10 +49,55 @@ export function unregisterSessionAutomationSource(owner: SessionAutomationSource
   invalidateSessionAutomationIndex();
 }
 
-/** Called from the cron onEvent hook after any job/store change. */
 export function invalidateSessionAutomationIndex(): void {
+  // Preserve the previous keys BEFORE clearing, so we can compute deltas.
+  const prevKeys = lastEmittedKeys;
   memo = null;
-  sessionChanges.emit({ all: true, scope: "automation" });
+  // Do NOT clear lastEmittedKeys yet — we need it for delta computation below.
+
+  const jobs = source?.getJobs();
+  const defaultAgentId = source?.getDefaultAgentId();
+
+  if (!jobs || jobs.length === 0) {
+    sessionChanges.emit({ all: true, scope: "automation" });
+    lastEmittedKeys = new Set();
+    return;
+  }
+
+  const currentKeys = buildAutomationKeys(jobs, {} as OpenClawConfig, defaultAgentId);
+
+  // First emission (prevKeys is null); emit global to seed all resident sessions.
+  if (prevKeys === null) {
+    lastEmittedKeys = currentKeys;
+    sessionChanges.emit({ all: true, scope: "automation" });
+    return;
+  }
+
+  // If bindings unchanged, no invalidation needed.
+  if (keysEqual(prevKeys, currentKeys)) {
+    lastEmittedKeys = currentKeys;
+    return;
+  }
+
+  // Emit targeted changes for added/removed session keys.
+  const added = [...currentKeys].filter((k) => !prevKeys!.has(k));
+  const removed = [...prevKeys!].filter((k) => !currentKeys.has(k));
+  for (const key of added) {
+    sessionChanges.emit({ sessionKey: key, scope: "automation" });
+  }
+  for (const key of removed) {
+    sessionChanges.emit({ sessionKey: key, scope: "automation" });
+  }
+
+  lastEmittedKeys = currentKeys;
+}
+
+function keysEqual(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {
+  if (a.size !== b.size) return false;
+  for (const key of a) {
+    if (!b.has(key)) return false;
+  }
+  return true;
 }
 
 function buildAutomationKeys(
@@ -72,7 +110,10 @@ function buildAutomationKeys(
     if (!job.enabled) {
       continue;
     }
-    for (const key of resolveCronJobBoundSessionKeys(job, { cfg, defaultAgentId })) {
+    for (const key of resolveCronJobBoundSessionKeys(job, {
+      cfg,
+      defaultAgentId,
+    })) {
       const agentId = job.owner?.agentId ?? defaultAgentId;
       if (parseAgentSessionKey(key)) {
         keys.add(key);
@@ -84,7 +125,6 @@ function buildAutomationKeys(
   return keys;
 }
 
-/** True when an enabled cron job is bound to the canonical session key. */
 export function sessionHasAutomation(
   sessionKey: string,
   cfg: OpenClawConfig,

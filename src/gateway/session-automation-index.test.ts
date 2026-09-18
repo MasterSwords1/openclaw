@@ -93,4 +93,47 @@ describe("session automation index", () => {
       unsubscribe();
     }
   });
+
+  test("unchanged bindings produce no global invalidation", () => {
+    const changes: unknown[] = [];
+    const unsubscribe = sessionChanges.subscribe((change) => changes.push(change));
+    try {
+      const jobs = [job({ id: "a" })];
+      registerSessionAutomationSource({
+        getJobs: () => jobs,
+        getDefaultAgentId: () => "main",
+      });
+      // First invalidation after registration emits global.
+      expect(changes).toEqual([{ all: true, scope: "automation" }]);
+      changes.length = 0;
+
+      // Trigger another invalidation with same bindings.
+      invalidateSessionAutomationIndex();
+      expect(changes).toEqual([]);
+    } finally {
+      unsubscribe();
+    }
+  });
+
+  test("changed bindings emit targeted per-key invalidations", () => {
+    const changes: unknown[] = [];
+    const unsubscribe = sessionChanges.subscribe((change) => changes.push(change));
+    try {
+      const jobs = [job({ id: "a" })];
+      registerSessionAutomationSource({
+        getJobs: () => jobs,
+        getDefaultAgentId: () => "main",
+      });
+      expect(changes).toEqual([{ all: true, scope: "automation" }]);
+      changes.length = 0;
+
+      // Disable the job — should emit targeted invalidation for the removed key.
+      (jobs[0] as { enabled: boolean }).enabled = false;
+      invalidateSessionAutomationIndex();
+      expect(sessionHasAutomation("agent:main:cron:a", cfg)).toBe(false);
+      expect(changes).toEqual([{ sessionKey: "agent:main:cron:a", scope: "automation" }]);
+    } finally {
+      unsubscribe();
+    }
+  });
 });
