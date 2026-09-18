@@ -76,6 +76,62 @@ export function isPerAgentSessionStoreConfig(storeConfig: string | undefined): b
   return !storeConfig?.trim() || storeConfig.includes("{agentId}");
 }
 
+export function isSameSessionStoreConfig(
+  source: string | undefined,
+  target: string | undefined,
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  if (isSameFixedSessionStoreConfig(source, target, env)) {
+    return true;
+  }
+  const sourcePerAgent = isPerAgentSessionStoreConfig(source);
+  const targetPerAgent = isPerAgentSessionStoreConfig(target);
+  if (sourcePerAgent && targetPerAgent) {
+    if (source === target) {
+      return true;
+    }
+    const sourceEmpty = !source?.trim();
+    const targetEmpty = !target?.trim();
+    if (sourceEmpty && targetEmpty) {
+      return true;
+    }
+    if (sourceEmpty || targetEmpty) {
+      return false;
+    }
+    if (
+      source !== undefined &&
+      target !== undefined &&
+      source.includes("{agentId}") &&
+      target.includes("{agentId}")
+    ) {
+      try {
+        const canary1 = "canary-token-1";
+        const canary2 = "canary-token-2";
+        const s1 = path.resolve(resolveSessionStorePathCore(source, { agentId: canary1, env }));
+        const t1 = path.resolve(resolveSessionStorePathCore(target, { agentId: canary1, env }));
+        const s2 = path.resolve(resolveSessionStorePathCore(source, { agentId: canary2, env }));
+        const t2 = path.resolve(resolveSessionStorePathCore(target, { agentId: canary2, env }));
+
+        if (s1 === t1 && s2 === t2) {
+          return true;
+        }
+
+        if (s1.toLowerCase() === t1.toLowerCase() && s2.toLowerCase() === t2.toLowerCase()) {
+          const sCase = tryResolvePathCaseInsensitive(s1);
+          const tCase = tryResolvePathCaseInsensitive(t1);
+          if (sCase !== false && tCase !== false) {
+            return true;
+          }
+        }
+      } catch {
+        // Fail closed: ambiguity in resolution must not destroy existing store ownership
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 export function isSameFixedSessionStoreConfig(
   source: string | undefined,
   target: string | undefined,
