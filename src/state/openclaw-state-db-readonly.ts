@@ -45,6 +45,7 @@ import {
   openOpenClawStateReadOnlyLocation,
   withOpenClawStateReadOnlyLocation,
 } from "./openclaw-state-db-read-connection.js";
+import * as readonlyCache from "./openclaw-state-db-readonly-cache.js";
 import { isExistingOpenClawStateSchema } from "./openclaw-state-db-schema-policy.js";
 import {
   existingPathOrUndefined,
@@ -315,10 +316,10 @@ function withFreshOpenClawStateDatabaseReadOnly<T>(
     }
     return result;
   }
-  const prepared = requiresArtifactPreservingSnapshot(pathname)
-    ? prepareSqliteReadOnlyLocationSync(pathname)
-    : undefined;
-  return withOpenClawStateReadOnlyLocation(operation, pathname, prepared ?? pathname);
+  if (!requiresArtifactPreservingSnapshot(pathname)) {
+    return withOpenClawStateReadOnlyLocation(operation, pathname, pathname);
+  }
+  return readonlyCache.withRetainedUnmutatedStateSnapshot(operation, pathname);
 }
 
 /** Keep streamed rows on one private reader while callers yield or close the shared writer. */

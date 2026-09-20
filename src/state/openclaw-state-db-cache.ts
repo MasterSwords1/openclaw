@@ -52,6 +52,10 @@ import {
   type StateDatabaseHandle,
 } from "./openclaw-state-db-contract.js";
 import { closeTrackedStateDatabase } from "./openclaw-state-db-handle.js";
+import {
+  clearRetainedUnmutatedStateSnapshots,
+  evictRetainedUnmutatedStateSnapshot,
+} from "./openclaw-state-db-readonly-cache-store.js";
 import { createOpenClawStateDatabaseRuntimeFailureOwner } from "./openclaw-state-db-runtime-failure.js";
 import { assertExistingOpenClawStateSchemaCacheAdmission } from "./openclaw-state-db-schema-policy.js";
 import { openClawStateSnapshotOwners } from "./openclaw-state-db-snapshot-owner.js";
@@ -287,7 +291,10 @@ function evictOpenClawStateDatabaseAfterCorruption(
   database: OpenClawStateDatabase,
   error: unknown,
 ): boolean {
-  return isSqliteCorruptionError(error) && evictCachedOpenClawStateDatabase(database);
+  return (
+    isSqliteCorruptionError(error) &&
+    (evictRetainedUnmutatedStateSnapshot(database.path), evictCachedOpenClawStateDatabase(database))
+  );
 }
 
 /** Publish a fully opened handle and bind query corruption to its exact cache owner. */
@@ -531,6 +538,7 @@ export function closeOpenClawStateDatabaseByPath(
   pathname: string,
   options?: OpenClawStateDatabaseCloseOptions,
 ): boolean {
+  evictRetainedUnmutatedStateSnapshot(pathname);
   return retireOpenClawStateDatabaseHandles(
     path.resolve(pathname),
     options,
@@ -540,6 +548,7 @@ export function closeOpenClawStateDatabaseByPath(
 
 /** Close all cached shared state database handles. */
 export function closeOpenClawStateDatabase(options?: OpenClawStateDatabaseCloseOptions): void {
+  clearRetainedUnmutatedStateSnapshots();
   retireOpenClawStateDatabaseHandles(undefined, options);
 }
 
@@ -568,6 +577,7 @@ export function closeOpenClawStateDatabaseByPathAsync(
   options?: OpenClawStateDatabaseCloseOptions,
 ): Promise<boolean> {
   const resolvedPath = path.resolve(pathname);
+  evictRetainedUnmutatedStateSnapshot(resolvedPath);
   return asyncResources.close(resolvedPath, (identity) =>
     retireOpenClawStateDatabaseHandles(resolvedPath, options, identity),
   );
@@ -577,6 +587,7 @@ export function closeOpenClawStateDatabaseByPathAsync(
 export async function closeOpenClawStateDatabaseAsync(
   options?: OpenClawStateDatabaseCloseOptions,
 ): Promise<void> {
+  clearRetainedUnmutatedStateSnapshots();
   await asyncResources.close(undefined, () =>
     retireOpenClawStateDatabaseHandles(undefined, options),
   );

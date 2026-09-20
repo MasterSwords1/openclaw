@@ -92,11 +92,7 @@ describe("package finalization recovery targets", () => {
         : kind === "retargeted"
           ? [first.databasePath, other!.databasePath]
           : [first.databasePath];
-    expect(prepare.mock.calls.map(([pathname]) => pathname)).toEqual([
-      ...recoveryPaths,
-      // Settlement still needs its independent terminal-history read.
-      ...(phase === "settlement" ? [resolveOpenClawStateSqlitePath(first.run.env)] : []),
-    ]);
+    expect(prepare.mock.calls.map(([pathname]) => pathname)).toEqual(recoveryPaths);
   });
 
   it.each(["first-read", "distinct-read", "run-replaced", "fence-replaced"] as const)(

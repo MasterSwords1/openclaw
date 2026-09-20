@@ -4,6 +4,9 @@ import { DatabaseSync } from "node:sqlite";
 import { it, expect, vi } from "vitest";
 import * as snapshots from "../infra/sqlite-snapshot-source.js";
 import { clearPluginMetadataLifecycleCaches } from "../plugins/plugin-metadata-lifecycle.js";
+import { withOpenClawStateReadOnlyLocation } from "../state/openclaw-state-db-read-connection.js";
+import { clearRetainedUnmutatedStateSnapshots } from "../state/openclaw-state-db-readonly-cache-store.js";
+import * as readonlyCache from "../state/openclaw-state-db-readonly-cache.js";
 import * as readonly from "../state/openclaw-state-db-readonly.js";
 import {
   openOpenClawStateDatabase,
@@ -39,19 +42,32 @@ it("shares the CLI routing metadata snapshot without changing the resolved confi
       for (let trial = 0; trial < (rows > 1 ? 3 : 1); trial++) {
         for (const mode of trial % 2 ? ["candidate", "baseline"] : ["baseline", "candidate"]) {
           clearPluginMetadataLifecycleCaches();
+          clearRetainedUnmutatedStateSnapshots();
           prepare.mockClear();
           const bypass =
             mode === "baseline"
-              ? vi
-                  .spyOn(readonly, "withSynchronousArtifactPreservingStateSnapshot")
-                  .mockImplementation((operation) => operation())
+              ? [
+                  vi
+                    .spyOn(readonly, "withSynchronousArtifactPreservingStateSnapshot")
+                    .mockImplementation((operation) => operation()),
+                  vi
+                    .spyOn(readonlyCache, "withRetainedUnmutatedStateSnapshot")
+                    .mockImplementation((operation, p, admission) =>
+                      withOpenClawStateReadOnlyLocation(
+                        operation,
+                        p,
+                        snapshots.prepareSqliteReadOnlyLocationSync(p),
+                        admission,
+                      ),
+                    ),
+                ]
               : undefined;
           const started = performance.now();
           let config;
           try {
             config = await readBestEffortConfig({ observe: false, skipPluginValidation: true });
           } finally {
-            bypass?.mockRestore();
+            bypass?.forEach((m) => m.mockRestore());
           }
           const ms = performance.now() - started;
           expected ??= config;

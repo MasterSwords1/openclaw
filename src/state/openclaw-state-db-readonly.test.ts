@@ -23,6 +23,11 @@ import {
   recordOpenClawStateDatabaseOpenFailure,
 } from "./openclaw-state-db-cache.js";
 import {
+  clearRetainedUnmutatedStateSnapshots,
+  retainedUnmutatedStateSnapshots,
+} from "./openclaw-state-db-readonly-cache-store.js";
+import { withRetainedUnmutatedStateSnapshot } from "./openclaw-state-db-readonly-cache.js";
+import {
   isOpenClawStateDatabaseDefinitelyAbsent,
   withSynchronousArtifactPreservingStateSnapshot,
   isArtifactPreservingStateRead,
@@ -735,6 +740,324 @@ it("reports scoped cleanup failure and does not reuse its snapshot", async () =>
       expect(scope()).toBe(1);
     } finally {
       cleanup?.();
+    }
+  });
+});
+
+it("retains and reuses unmutated state snapshots across independent steady-state reads without re-copying", async () => {
+  await withTempDir("openclaw-unmutated-snapshot-", async (root) => {
+    const options = createOptions(root);
+    openOpenClawStateDatabase(options);
+    closeOpenClawStateDatabaseForTest();
+    const writer = new DatabaseSync(options.path);
+    writer.exec(
+      "PRAGMA journal_mode=WAL; PRAGMA wal_autocheckpoint=0; CREATE TABLE held(value TEXT); INSERT INTO held VALUES ('initial');",
+    );
+    const read = () =>
+      withExistingOpenClawStateDatabaseArtifactPreservingReadOnly(
+        ({ db }) => db.prepare("SELECT value FROM held").get()?.value,
+        options,
+      );
+    const prepare = vi.spyOn(sqliteReadOnly, "prepareSqliteReadOnlyLocationSync");
+    const artifacts = () =>
+      ["", "-wal", "-shm"].map((suffix) => fs.readFileSync(options.path + suffix));
+    try {
+      const before = artifacts();
+      // First independent read prepares a snapshot.
+      expect(read()).toBe("initial");
+      expect(prepare).toHaveBeenCalledTimes(1);
+      expect(artifacts()).toEqual(before);
+
+      // Second and third independent reads reuse the retained unmutated snapshot.
+      expect(read()).toBe("initial");
+      expect(read()).toBe("initial");
+      expect(prepare).toHaveBeenCalledTimes(1);
+      expect(artifacts()).toEqual(before);
+
+      // Mutate the database in WAL mode.
+      writer.exec("UPDATE held SET value='updated'");
+
+      // Next read detects mutation and prepares a fresh snapshot.
+      expect(read()).toBe("updated");
+      expect(prepare).toHaveBeenCalledTimes(2);
+
+      // Subsequent read reuses the updated unmutated snapshot.
+      expect(read()).toBe("updated");
+      expect(prepare).toHaveBeenCalledTimes(2);
+    } finally {
+      writer.close();
+      closeOpenClawStateDatabaseForTest();
+    }
+  });
+});
+
+it("does not retain snapshot in cache when writer commits between preparation and witness stat", async () => {
+  await withTempDir("openclaw-race1-witness-interleave-", async (root) => {
+    const options = createOptions(root);
+    openOpenClawStateDatabase(options);
+    closeOpenClawStateDatabaseForTest();
+    const writer = new DatabaseSync(options.path);
+    writer.exec(
+      "PRAGMA journal_mode=WAL; PRAGMA wal_autocheckpoint=0; CREATE TABLE items(value TEXT); INSERT INTO items VALUES ('initial-A');",
+    );
+
+    let writeCommittedDuringPrep = false;
+    const origPrepare = sqliteReadOnly.prepareSqliteReadOnlyLocationSync;
+    vi.spyOn(sqliteReadOnly, "prepareSqliteReadOnlyLocationSync").mockImplementation((p) => {
+      const result = origPrepare(p);
+      if (!writeCommittedDuringPrep) {
+        writeCommittedDuringPrep = true;
+        writer.exec("UPDATE items SET value = 'updated-B';");
+      }
+      return result;
+    });
+
+    try {
+      const val1 = withExistingOpenClawStateDatabaseArtifactPreservingReadOnly(
+        ({ db }) => db.prepare("SELECT value FROM items").get()?.value,
+        options,
+      );
+      expect(val1).toBe("initial-A");
+      expect(retainedUnmutatedStateSnapshots.has(path.resolve(options.path))).toBe(false);
+
+      const val2 = withExistingOpenClawStateDatabaseArtifactPreservingReadOnly(
+        ({ db }) => db.prepare("SELECT value FROM items").get()?.value,
+        options,
+      );
+      expect(val2).toBe("updated-B");
+    } finally {
+      writer.close();
+      closeOpenClawStateDatabaseForTest();
+    }
+  });
+});
+
+it("cleans up displaced snapshot only after active synchronous readers finish", async () => {
+  await withTempDir("openclaw-race2-displaced-cleanup-", async (root) => {
+    const options = createOptions(root);
+    openOpenClawStateDatabase(options);
+    closeOpenClawStateDatabaseForTest();
+    const writer = new DatabaseSync(options.path);
+    writer.exec(
+      "PRAGMA journal_mode=WAL; PRAGMA wal_autocheckpoint=0; CREATE TABLE items(value TEXT); INSERT INTO items VALUES ('initial-1');",
+    );
+
+    try {
+      const val1 = withExistingOpenClawStateDatabaseArtifactPreservingReadOnly(
+        ({ db }) => db.prepare("SELECT value FROM items").get()?.value,
+        options,
+      );
+      expect(val1).toBe("initial-1");
+
+      const key = path.resolve(options.path);
+      const snapshotA = retainedUnmutatedStateSnapshots.get(key);
+      expect(snapshotA).toBeDefined();
+      expect(snapshotA!.activeReaders).toBe(0);
+      expect(fs.existsSync(snapshotA!.location)).toBe(true);
+
+      let releaseHold!: () => void;
+      const holdPromise = new Promise<void>((resolve) => {
+        releaseHold = resolve;
+      });
+
+      const heldReadPromise = withRetainedUnmutatedStateSnapshot(async ({ db }) => {
+        const val = db.prepare("SELECT value FROM items").get()?.value;
+        await holdPromise;
+        return val;
+      }, options.path);
+
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, 20);
+      });
+      expect(snapshotA!.activeReaders).toBe(1);
+
+      writer.exec("UPDATE items SET value = 'mutated-2';");
+
+      const val2 = withExistingOpenClawStateDatabaseArtifactPreservingReadOnly(
+        ({ db }) => db.prepare("SELECT value FROM items").get()?.value,
+        options,
+      );
+      expect(val2).toBe("mutated-2");
+
+      expect(snapshotA!.retired).toBe(true);
+      expect(fs.existsSync(snapshotA!.location)).toBe(true);
+
+      const snapshotB = retainedUnmutatedStateSnapshots.get(key);
+      expect(snapshotB).toBeDefined();
+      expect(snapshotB).not.toBe(snapshotA);
+      expect(fs.existsSync(snapshotB!.location)).toBe(true);
+
+      releaseHold();
+      const val1Held = await heldReadPromise;
+      expect(val1Held).toBe("initial-1");
+
+      expect(fs.existsSync(snapshotA!.location)).toBe(false);
+      expect(fs.existsSync(snapshotB!.location)).toBe(true);
+
+      clearRetainedUnmutatedStateSnapshots();
+      expect(retainedUnmutatedStateSnapshots.size).toBe(0);
+    } finally {
+      writer.close();
+      closeOpenClawStateDatabaseForTest();
+    }
+  });
+});
+
+it("does not delete newer displaced snapshot when older active reader fails", async () => {
+  await withTempDir("openclaw-interleaved-failure-", async (root) => {
+    const options = createOptions(root);
+    openOpenClawStateDatabase(options);
+    closeOpenClawStateDatabaseForTest();
+    const writer = new DatabaseSync(options.path);
+    writer.exec(
+      "PRAGMA journal_mode=WAL; PRAGMA wal_autocheckpoint=0; CREATE TABLE items(value TEXT); INSERT INTO items VALUES ('v1');",
+    );
+
+    try {
+      withExistingOpenClawStateDatabaseArtifactPreservingReadOnly(
+        ({ db }) => db.prepare("SELECT value FROM items").get()?.value,
+        options,
+      );
+      const key = path.resolve(options.path);
+      const snapshotA = retainedUnmutatedStateSnapshots.get(key);
+      expect(snapshotA).toBeDefined();
+
+      let rejectHold!: (err: Error) => void;
+      const holdPromise = new Promise<void>((_, reject) => {
+        rejectHold = reject;
+      });
+
+      const reader1Promise = withRetainedUnmutatedStateSnapshot(async ({ db }) => {
+        db.prepare("SELECT value FROM items").get();
+        await holdPromise;
+      }, options.path);
+
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, 20);
+      });
+      expect(snapshotA!.activeReaders).toBe(1);
+
+      writer.exec("UPDATE items SET value = 'v2';");
+
+      const val2 = withExistingOpenClawStateDatabaseArtifactPreservingReadOnly(
+        ({ db }) => db.prepare("SELECT value FROM items").get()?.value,
+        options,
+      );
+      expect(val2).toBe("v2");
+
+      const snapshotB = retainedUnmutatedStateSnapshots.get(key);
+      expect(snapshotB).toBeDefined();
+      expect(snapshotB).not.toBe(snapshotA);
+
+      rejectHold(new Error("reader 1 intentional failure"));
+      await expect(reader1Promise).rejects.toThrow("reader 1 intentional failure");
+
+      expect(snapshotA!.retired).toBe(true);
+      expect(fs.existsSync(snapshotA!.location)).toBe(false);
+
+      expect(retainedUnmutatedStateSnapshots.get(key)).toBe(snapshotB);
+      expect(snapshotB!.retired).toBe(false);
+      expect(fs.existsSync(snapshotB!.location)).toBe(true);
+
+      const val3 = withExistingOpenClawStateDatabaseArtifactPreservingReadOnly(
+        ({ db }) => db.prepare("SELECT value FROM items").get()?.value,
+        options,
+      );
+      expect(val3).toBe("v2");
+      expect(retainedUnmutatedStateSnapshots.get(key)).toBe(snapshotB);
+
+      clearRetainedUnmutatedStateSnapshots();
+      expect(retainedUnmutatedStateSnapshots.size).toBe(0);
+      expect(fs.existsSync(snapshotB!.location)).toBe(false);
+    } finally {
+      writer.close();
+      closeOpenClawStateDatabaseForTest();
+    }
+  });
+});
+
+it("invalidates retained snapshot when update is committed through canonical target of a database symlink", async () => {
+  await withTempDir("openclaw-symlink-sidecar-", async (root) => {
+    const targetDir = path.join(root, "target");
+    const aliasDir = path.join(root, "alias");
+    fs.mkdirSync(targetDir, { recursive: true });
+    fs.mkdirSync(aliasDir, { recursive: true });
+
+    const targetDb = path.join(targetDir, "state.sqlite");
+    const aliasDb = path.join(aliasDir, "state.sqlite");
+
+    const writer = new DatabaseSync(targetDb);
+    writer.exec(
+      "PRAGMA journal_mode=WAL; PRAGMA wal_autocheckpoint=0; CREATE TABLE items(value TEXT); INSERT INTO items VALUES ('v1');",
+    );
+    fs.symlinkSync(targetDb, aliasDb);
+
+    try {
+      const val1 = withExistingOpenClawStateDatabaseArtifactPreservingReadOnly(
+        ({ db }) => db.prepare("SELECT value FROM items").get()?.value,
+        { path: aliasDb },
+      );
+      expect(val1).toBe("v1");
+
+      writer.exec("UPDATE items SET value = 'v2';");
+
+      const val2 = withExistingOpenClawStateDatabaseArtifactPreservingReadOnly(
+        ({ db }) => db.prepare("SELECT value FROM items").get()?.value,
+        { path: aliasDb },
+      );
+      expect(val2).toBe("v2");
+
+      clearRetainedUnmutatedStateSnapshots();
+    } finally {
+      writer.close();
+      closeOpenClawStateDatabaseForTest();
+    }
+  });
+});
+
+it("does not cache snapshot under stale identity if symlink is retargeted during preparation", async () => {
+  await withTempDir("openclaw-symlink-retarget-", async (root) => {
+    const dbA = path.join(root, "dbA.sqlite");
+    const dbB = path.join(root, "dbB.sqlite");
+    const aliasDb = path.join(root, "alias.sqlite");
+
+    const writerA = new DatabaseSync(dbA);
+    writerA.exec(
+      "PRAGMA journal_mode=WAL; CREATE TABLE items(value TEXT); INSERT INTO items VALUES ('A1');",
+    );
+    const writerB = new DatabaseSync(dbB);
+    writerB.exec(
+      "PRAGMA journal_mode=WAL; CREATE TABLE items(value TEXT); INSERT INTO items VALUES ('B1');",
+    );
+
+    fs.symlinkSync(dbA, aliasDb);
+
+    let retargeted = false;
+    const origPrepare = sqliteReadOnly.prepareSqliteReadOnlyLocationSync;
+    vi.spyOn(sqliteReadOnly, "prepareSqliteReadOnlyLocationSync").mockImplementation((p) => {
+      const result = origPrepare(p);
+      if (!retargeted) {
+        retargeted = true;
+        fs.unlinkSync(aliasDb);
+        fs.symlinkSync(dbB, aliasDb);
+      }
+      return result;
+    });
+
+    try {
+      withExistingOpenClawStateDatabaseArtifactPreservingReadOnly(
+        ({ db }) => db.prepare("SELECT value FROM items").get()?.value,
+        { path: aliasDb },
+      );
+
+      const keyA = fs.realpathSync.native(dbA);
+      const keyB = fs.realpathSync.native(dbB);
+      expect(retainedUnmutatedStateSnapshots.has(keyA)).toBe(false);
+      expect(retainedUnmutatedStateSnapshots.has(keyB)).toBe(false);
+    } finally {
+      writerA.close();
+      writerB.close();
+      closeOpenClawStateDatabaseForTest();
     }
   });
 });
