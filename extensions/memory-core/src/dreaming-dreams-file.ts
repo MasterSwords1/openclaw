@@ -504,11 +504,14 @@ export async function appendNarrativeEntry(params: {
       const currentDiary = new Set(getDiaryContextEntries(existing));
       // The updater holds the purge lock. Model work ran outside it, so both
       // staged inputs and prior diary quotes must survive until this commit.
+      // Callers hand back what readRecentDreamDiaryEntries returned, so the quotes already went
+      // through getDiaryContextEntries. The comparison must be direct: when the cut landed on
+      // whitespace, a second clamp would apply trimEnd() again and append another ellipsis,
+      // making an unchanged entry appear different. The guard still correctly rejects stale
+      // or removed entries because those will miss the Set lookup without any clamping.
       if (
         sourceKeys.some((key) => !currentSources?.[key]) ||
-        params.recentDiaryEntries?.some(
-          (block) => !currentDiary.has(clampDreamDiaryContextEntry(block)),
-        )
+        params.recentDiaryEntries?.some((block) => !currentDiary.has(block))
       ) {
         return { content: existing, result: undefined, shouldWrite: false };
       }

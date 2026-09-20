@@ -4,6 +4,8 @@ import path from "node:path";
 import { createDeferred } from "openclaw/plugin-sdk/extension-shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  appendNarrativeEntry,
+  clampDreamDiaryContextEntry,
   dedupeDreamDiaryEntries,
   readDreamsFile,
   readRecentDreamDiaryEntries,
@@ -146,6 +148,96 @@ describe("dream diary file behavior", () => {
     await expect(readRecentDreamDiaryEntries({ workspaceDir, limit: 1 })).resolves.toEqual([
       `${prefix}...`,
     ]);
+  });
+
+  it("publishes a narrative when a truncated recent entry is unchanged", async () => {
+    const workspaceDir = await createTempWorkspace("dreaming-narrative-whitespace-");
+    // Build an entry whose normalized body exceeds 360 chars and where char 360 is whitespace,
+    // so the clamp's trimEnd() shortens it and a second clamp would append another ellipsis.
+    const longEntry = "x".repeat(359) + " " + "y".repeat(5);
+    expect(longEntry.length).toBeGreaterThan(360);
+    expect(longEntry[359]).toBe(" ");
+
+    await writeBackfillDiaryEntries({
+      workspaceDir,
+      entries: [
+        {
+          isoDay: "2026-04-05",
+          bodyLines: [longEntry],
+        },
+      ],
+      timezone: "UTC",
+    });
+
+    const recentEntries = await readRecentDreamDiaryEntries({ workspaceDir, limit: 3 });
+    const firstRecentEntry = recentEntries[0];
+    expect(firstRecentEntry).toBeDefined();
+    if (!firstRecentEntry) {
+      throw new Error("expected recent dream diary entry");
+    }
+    expect(firstRecentEntry.endsWith("...")).toBe(true);
+    // Confirm the second clamp produces a different value (the bug condition).
+    expect(clampDreamDiaryContextEntry(firstRecentEntry)).not.toBe(firstRecentEntry);
+
+    const dreamsPath = path.join(workspaceDir, "DREAMS.md");
+    const narrative = "The archive hummed with quiet data.";
+    const result = await appendNarrativeEntry({
+      workspaceDir,
+      narrative,
+      nowMs: Date.parse("2026-04-05T03:00:00Z"),
+      timezone: "UTC",
+      recentDiaryEntries: recentEntries,
+    });
+
+    expect(result).toBeDefined();
+    const content = await fs.readFile(dreamsPath, "utf8");
+    expect(content).toContain(narrative);
+  });
+
+  it("skips publication when a truncated recent entry was removed from the diary", async () => {
+    const workspaceDir = await createTempWorkspace("dreaming-narrative-whitespace-stale-");
+    // Build an entry whose normalized body exceeds 360 chars and where char 360 is whitespace,
+    // so the clamp's trimEnd() shortens it and a second clamp would append another ellipsis.
+    const longEntry = "x".repeat(359) + " " + "y".repeat(5);
+    expect(longEntry.length).toBeGreaterThan(360);
+    expect(longEntry[359]).toBe(" ");
+
+    await writeBackfillDiaryEntries({
+      workspaceDir,
+      entries: [
+        {
+          isoDay: "2026-04-05",
+          bodyLines: [longEntry],
+        },
+      ],
+      timezone: "UTC",
+    });
+
+    const recentEntries = await readRecentDreamDiaryEntries({ workspaceDir, limit: 3 });
+    const firstRecentEntry = recentEntries[0];
+    expect(firstRecentEntry).toBeDefined();
+    if (!firstRecentEntry) {
+      throw new Error("expected recent dream diary entry");
+    }
+    expect(firstRecentEntry.endsWith("...")).toBe(true);
+
+    // Remove the entry from the diary so the recentDiaryEntries reference is stale.
+    await removeBackfillDiaryEntries({ workspaceDir });
+
+    const dreamsPath = path.join(workspaceDir, "DREAMS.md");
+    const narrative = "The archive hummed with quiet data.";
+    const result = await appendNarrativeEntry({
+      workspaceDir,
+      narrative,
+      nowMs: Date.parse("2026-04-05T03:00:00Z"),
+      timezone: "UTC",
+      recentDiaryEntries: recentEntries,
+    });
+
+    // Publication must be skipped when the diary context has changed.
+    expect(result).toBeUndefined();
+    const content = await fs.readFile(dreamsPath, "utf8");
+    expect(content).not.toContain(narrative);
   });
 
   it("skips symlinked and non-file DREAMS.md when reading recent context", async () => {
