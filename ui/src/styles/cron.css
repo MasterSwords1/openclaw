@@ -1078,13 +1078,16 @@
 }
 
 /* Cron markdown overrides out-specify the base .chat-text rules in chat/text.css. */
-.cron-run-entry__body.chat-text table {
+.cron-run-entry__body.chat-text table,
+.cron-payload-markdown.chat-text table {
   display: table;
   width: 100%;
 }
 
 .cron-run-entry__body.chat-text pre,
-.cron-run-entry__body.chat-text blockquote {
+.cron-run-entry__body.chat-text blockquote,
+.cron-payload-markdown.chat-text pre,
+.cron-payload-markdown.chat-text blockquote {
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
@@ -1095,18 +1098,80 @@
 .cron-run-entry__body.chat-text table + p,
 .cron-run-entry__body.chat-text p + pre,
 .cron-run-entry__body.chat-text p + blockquote,
-.cron-run-entry__body.chat-text p + table {
+.cron-run-entry__body.chat-text p + table,
+.cron-payload-markdown.chat-text pre + p,
+.cron-payload-markdown.chat-text blockquote + p,
+.cron-payload-markdown.chat-text table + p,
+.cron-payload-markdown.chat-text p + pre,
+.cron-payload-markdown.chat-text p + blockquote,
+.cron-payload-markdown.chat-text p + table {
   margin-top: 0.75em;
 }
 
 .cron-run-entry__body.chat-text pre,
 .cron-run-entry__body.chat-text blockquote,
-.cron-run-entry__body.chat-text table {
+.cron-run-entry__body.chat-text table,
+.cron-payload-markdown.chat-text pre,
+.cron-payload-markdown.chat-text blockquote,
+.cron-payload-markdown.chat-text table {
   margin-bottom: 0.75em;
 }
 
-.cron-run-entry__body.chat-text > :last-child {
+.cron-run-entry__body.chat-text > :last-child,
+.cron-payload-markdown.chat-text > :last-child {
   margin-bottom: 0;
+}
+
+.cron-prompt-preview {
+  margin-top: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  overflow: hidden;
+}
+
+.cron-prompt-preview__summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--control-ui-text-sm);
+  font-weight: 500;
+  cursor: pointer;
+  user-select: none;
+  color: var(--muted);
+}
+
+.cron-prompt-preview__summary:hover {
+  color: var(--text);
+  background: var(--bg-hover);
+}
+
+.cron-prompt-preview__summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.cron-prompt-preview[open] .cron-prompt-preview__summary {
+  border-bottom: 1px solid var(--border);
+}
+
+.cron-payload-markdown {
+  padding: var(--space-3);
+  max-height: 480px;
+  overflow-y: auto;
+  font-size: var(--control-ui-text-sm);
+  line-height: 1.5;
+}
+
+.cron-payload-markdown.chat-text pre {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.cron-prompt-preview__empty {
+  font-style: italic;
+  color: var(--muted);
 }
 
 @media (max-width: 640px) {

@@ -1,9 +1,12 @@
 {
-  "fallbackKeys": [],
-  "generatedAt": "2026-09-20T21:31:31.651Z",
+  "fallbackKeys": [
+    "cron.form.previewMarkdown",
+    "cron.form.promptPreviewEmpty"
+  ],
+  "generatedAt": "2026-09-20T23:26:34.752Z",
   "locale": "uk",
-  "sourceHash": "f7217badf5b47958c73939a5919eff9e10e4486a442f3e7528c84d380902c1e8",
-  "totalKeys": 9712,
+  "sourceHash": "d1eb2f182db1b7cb1332c5381619055132fdc55022299d989335b13d4fdeb909",
+  "totalKeys": 9714,
   "translatedKeys": 9712,
   "workflow": 1
 }

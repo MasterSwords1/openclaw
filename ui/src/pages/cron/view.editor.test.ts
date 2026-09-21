@@ -782,6 +782,106 @@ describe("cron view editor", () => {
     expect(inheritText).toContain("Default");
     expect(inheritText).not.toContain("common.default");
   });
+
+  it("renders prompt as sanitized markdown preview beside the editor", () => {
+    const container = renderView({
+      createOpen: true,
+      form: {
+        ...DEFAULT_CRON_FORM,
+        payloadKind: "agentTurn",
+        payloadText: "## Plan\n\nRun **maintenance** and `pnpm check` <script>alert(1)</script>",
+      },
+    });
+
+    const textarea = getElement(container, "#cron-payload-text", HTMLTextAreaElement);
+    expect(textarea.value).toBe(
+      "## Plan\n\nRun **maintenance** and `pnpm check` <script>alert(1)</script>",
+    );
+
+    const preview = getElement(
+      container,
+      '[data-test-id="cron-prompt-preview"]',
+      HTMLDetailsElement,
+    );
+    expect(preview).toBeInstanceOf(HTMLDetailsElement);
+    const summary = getElement(
+      container,
+      '[data-test-id="cron-prompt-preview-summary"]',
+      HTMLElement,
+    );
+    expect(summary.textContent).toContain("Preview rendered Markdown");
+
+    const markdown = getElement(
+      container,
+      '[data-test-id="cron-payload-markdown"]',
+      HTMLDivElement,
+    );
+    expect(markdown.querySelector("h2")?.textContent).toBe("Plan");
+    expect(markdown.querySelector("strong")?.textContent).toBe("maintenance");
+    expect(markdown.querySelector("code")?.textContent).toBe("pnpm check");
+    expect(markdown.querySelector("script")).toBeNull();
+  });
+
+  it("shows an empty notice in markdown preview when prompt text is blank", () => {
+    const container = renderView({
+      createOpen: true,
+      form: {
+        ...DEFAULT_CRON_FORM,
+        payloadKind: "agentTurn",
+        payloadText: "",
+      },
+    });
+
+    const markdown = getElement(
+      container,
+      '[data-test-id="cron-payload-markdown"]',
+      HTMLDivElement,
+    );
+    expect(markdown.textContent).toContain("No prompt text to preview.");
+  });
+
+  it("renders locked agent-turn prompts with preview open by default", () => {
+    const container = renderView({
+      createOpen: true,
+      form: {
+        ...DEFAULT_CRON_FORM,
+        payloadKind: "agentTurn",
+        payloadLocked: true,
+        payloadText: "Run **daily backup**",
+      },
+    });
+
+    const textarea = getElement(container, "#cron-payload-text", HTMLTextAreaElement);
+    expect(textarea.readOnly).toBe(true);
+
+    const preview = getElement(
+      container,
+      '[data-test-id="cron-prompt-preview"]',
+      HTMLDetailsElement,
+    );
+    expect(preview.open).toBe(true);
+    const markdown = getElement(
+      container,
+      '[data-test-id="cron-payload-markdown"]',
+      HTMLDivElement,
+    );
+    expect(markdown.querySelector("strong")?.textContent).toBe("daily backup");
+  });
+
+  it("does not render markdown preview for locked script/command payloads", () => {
+    const container = renderView({
+      createOpen: true,
+      form: {
+        ...DEFAULT_CRON_FORM,
+        payloadKind: "script",
+        payloadLocked: true,
+        payloadText: "console.log('hello');",
+      },
+    });
+
+    expect(container.querySelector('[data-test-id="cron-payload-code"]')).not.toBeNull();
+    expect(container.querySelector('[data-test-id="cron-prompt-preview"]')).toBeNull();
+  });
 });
 
 describe("failure alert field inheritance controls", () => {

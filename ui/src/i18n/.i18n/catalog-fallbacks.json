@@ -1,5 +1,50 @@
 {
-  "fallbacks": {},
-  "sourceHash": "f7217badf5b47958c73939a5919eff9e10e4486a442f3e7528c84d380902c1e8",
+  "fallbacks": {
+    "cron.form.previewMarkdown": [
+      "ar",
+      "de",
+      "es",
+      "fa",
+      "fr",
+      "hi",
+      "id",
+      "it",
+      "ja-JP",
+      "ko",
+      "nl",
+      "pl",
+      "pt-BR",
+      "ru",
+      "th",
+      "tr",
+      "uk",
+      "vi",
+      "zh-CN",
+      "zh-TW"
+    ],
+    "cron.form.promptPreviewEmpty": [
+      "ar",
+      "de",
+      "es",
+      "fa",
+      "fr",
+      "hi",
+      "id",
+      "it",
+      "ja-JP",
+      "ko",
+      "nl",
+      "pl",
+      "pt-BR",
+      "ru",
+      "th",
+      "tr",
+      "uk",
+      "vi",
+      "zh-CN",
+      "zh-TW"
+    ]
+  },
+  "sourceHash": "d1eb2f182db1b7cb1332c5381619055132fdc55022299d989335b13d4fdeb909",
   "version": 1
 }
