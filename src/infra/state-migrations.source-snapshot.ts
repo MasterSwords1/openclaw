@@ -10,6 +10,7 @@ import {
   type PinnedDirectory,
 } from "./directory-durability.js";
 import { hasErrnoCode } from "./errno.js";
+import { getFsSafeNativeConfig } from "./fs-safe-defaults.js";
 import { pathMayExistSync } from "./path-existence.js";
 
 /** The stable source identity every doctor-owned import verifies before cleanup. */
@@ -132,6 +133,7 @@ export class LegacyMigrationSourceClaim<
       if (
         !(error instanceof FsSafeError) ||
         error.code !== "helper-unavailable" ||
+        getFsSafeNativeConfig().mode === "require" ||
         path.dirname(from) !== path.dirname(to) ||
         root.defaults.assertBeforeMutation ||
         root.defaults.denyMutations ||

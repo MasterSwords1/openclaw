@@ -6,6 +6,7 @@ import { __setFsSafeTestHooksForTest } from "@openclaw/fs-safe/test-hooks";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { useAutoCleanupTempDirTracker } from "../../test/helpers/temp-dir.js";
 import * as durability from "./directory-durability.js";
+import { configureFsSafeNative } from "./fs-safe-defaults.js";
 import {
   assertLegacyMigrationSourceUnchanged,
   claimAndRemoveLegacyMigrationSource,
@@ -21,6 +22,7 @@ import {
 describe("doctor legacy migration source contract", () => {
   const tempDirs = useAutoCleanupTempDirTracker((cleanup) => {
     afterEach(() => {
+      configureFsSafeNative({ mode: "auto" });
       __setFsSafeTestHooksForTest(undefined);
       vi.restoreAllMocks();
       cleanup();
@@ -175,6 +177,29 @@ describe("doctor legacy migration source contract", () => {
     expect(fs.readFileSync(sourcePath)).toEqual(snapshot.buffer);
     expect(fs.statSync(sourcePath).ino).toBe(snapshot.ino);
     expect(fs.existsSync(claim.claimPath)).toBe(false);
+  });
+
+  it("refuses portable publication and leaves source untouched when native mode is require", async () => {
+    const { sourcePath, stateDir } = createSource();
+    const stateRoot = await root(stateDir, { hardlinks: "reject", symlinks: "reject" });
+    vi.spyOn(stateRoot, "move").mockRejectedValue(
+      new FsSafeError("helper-unavailable", "native no-replace move is unavailable"),
+    );
+    configureFsSafeNative({ mode: "require" });
+    try {
+      const claim = createClaim(stateRoot, stateDir, sourcePath);
+      const snapshot = await claim.read();
+
+      await expect(claim.claim({ snapshot, mismatchMessage: "source changed" })).rejects.toThrow(
+        "native no-replace move is unavailable",
+      );
+
+      expect(fs.existsSync(sourcePath)).toBe(true);
+      expect(fs.readFileSync(sourcePath)).toEqual(snapshot.buffer);
+      expect(fs.existsSync(claim.claimPath)).toBe(false);
+    } finally {
+      configureFsSafeNative({ mode: "auto" });
+    }
   });
 
   it("preserves a competing claim created before portable publication", async () => {
