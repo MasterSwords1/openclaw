@@ -1,11 +1,26 @@
 import { PluginInstanceUnavailableError } from "../plugins/plugin-instance-error.js";
 import type { PreparedModelRuntimeInput } from "./prepared-model-runtime.types.js";
 
-export class PreparedModelRuntimeOwnerNotPublishedError extends Error {}
+export class PreparedModelRuntimeOwnerNotPublishedError extends Error {
+  constructor(message?: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = "PreparedModelRuntimeOwnerNotPublishedError";
+  }
+}
 
-export class PreparedModelRuntimePublicationSupersededError extends PreparedModelRuntimeOwnerNotPublishedError {}
+export class PreparedModelRuntimePublicationSupersededError extends PreparedModelRuntimeOwnerNotPublishedError {
+  constructor(message?: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = "PreparedModelRuntimePublicationSupersededError";
+  }
+}
 
-export class PreparedModelRuntimePluginGenerationRetiredError extends Error {}
+export class PreparedModelRuntimePluginGenerationRetiredError extends Error {
+  constructor(message?: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = "PreparedModelRuntimePluginGenerationRetiredError";
+  }
+}
 
 export function isPreparedModelRuntimePluginLifecycleFailure(error: unknown): boolean {
   return (

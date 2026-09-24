@@ -32,6 +32,10 @@ import {
 } from "./harness/errors.js";
 import { isRecordedModelFallbackStop } from "./model-fallback-stop.js";
 import {
+  isPreparedModelRuntimePluginLifecycleFailure,
+  PreparedModelRuntimeOwnerNotPublishedError,
+} from "./prepared-model-runtime.errors.js";
+import {
   isSessionPlacementSettlementClosedError,
   isAgentRunSupersededAbortReason,
 } from "./run-termination.js";
@@ -54,6 +58,10 @@ const RUNTIME_COORDINATION_ERROR_NAMES = new Set([
   "WorkerRunnerCapacityError",
   "WorkerWorkspaceReconciliationError",
   "ActiveTurnClaimError",
+  "PluginInstanceUnavailableError",
+  "PreparedModelRuntimeOwnerNotPublishedError",
+  "PreparedModelRuntimePublicationSupersededError",
+  "PreparedModelRuntimePluginGenerationRetiredError",
 ]);
 
 export { recordModelFallbackStop } from "./model-fallback-stop.js";
@@ -312,8 +320,11 @@ function hasStaleAgentRunLifecycleFailure(err: unknown): boolean {
 }
 
 function hasRuntimeCoordinationFailure(err: unknown): boolean {
-  return collectErrorGraphCandidates(err, resolveNestedErrors).some((candidate) =>
-    RUNTIME_COORDINATION_ERROR_NAMES.has(readErrorName(candidate)),
+  return collectErrorGraphCandidates(err, resolveNestedErrors).some(
+    (candidate) =>
+      RUNTIME_COORDINATION_ERROR_NAMES.has(readErrorName(candidate)) ||
+      candidate instanceof PreparedModelRuntimeOwnerNotPublishedError ||
+      isPreparedModelRuntimePluginLifecycleFailure(candidate),
   );
 }
 
