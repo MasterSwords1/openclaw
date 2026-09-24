@@ -15,6 +15,7 @@ import {
   type NormalizedLegacyDeviceIdentity,
 } from "./device-identity-legacy.js";
 import { deriveDeviceIdFromPublicKey } from "./device-identity.js";
+import { configureFsSafeNative } from "./fs-safe-defaults.js";
 import { acquireGatewayLock } from "./gateway-lock.js";
 import {
   executeSqliteQuerySync,
@@ -870,5 +871,26 @@ describe("legacy device identity Doctor migration", () => {
     expect(receipt(env)).toMatchObject({
       source_sha256: createHash("sha256").update(bytes).digest("hex"),
     });
+  });
+
+  it("migrates legacy device identity when native fs-safe mode is off", async () => {
+    configureFsSafeNative({ mode: "off" });
+    try {
+      const { env, stateDir } = useStateDir();
+      const sourcePath = await writeLegacy({ stateDir });
+
+      const result = await migrate(stateDir, env);
+
+      expect(result.warnings).toEqual([]);
+      expect(result.changes).toEqual(["Migrated primary device identity to SQLite."]);
+      expect(fs.existsSync(sourcePath)).toBe(false);
+      expect(identityRow(env)).toMatchObject({
+        identity_key: "primary",
+        device_id: normalizedSwift().deviceId,
+      });
+      expect(receipt(env)).toMatchObject({ removed_source: 1 });
+    } finally {
+      configureFsSafeNative({ mode: "auto" });
+    }
   });
 });

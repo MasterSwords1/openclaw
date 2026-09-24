@@ -136,9 +136,10 @@ export class LegacyMigrationSourceClaim<
         root.defaults.assertBeforeMutation ||
         root.defaults.denyMutations ||
         root.defaults.mutationSymlinks ||
-        !["EINVAL", "ENOSYS", "ENOTSUP", "EOPNOTSUPP"].some((code) =>
-          hasErrnoCode(error.cause, code),
-        )
+        (error.cause !== undefined &&
+          !["EINVAL", "ENOSYS", "ENOTSUP", "EOPNOTSUPP"].some((code) =>
+            hasErrnoCode(error.cause, code),
+          ))
       ) {
         throw error;
       }

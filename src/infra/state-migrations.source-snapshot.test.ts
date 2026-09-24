@@ -157,6 +157,26 @@ describe("doctor legacy migration source contract", () => {
     },
   );
 
+  it("claims and restores the same inode when native helper is unavailable without cause", async () => {
+    const { sourcePath, stateDir } = createSource();
+    const stateRoot = await root(stateDir, { hardlinks: "reject", symlinks: "reject" });
+    vi.spyOn(stateRoot, "move").mockRejectedValue(
+      new FsSafeError("helper-unavailable", "native no-replace move is unavailable"),
+    );
+    const claim = createClaim(stateRoot, stateDir, sourcePath);
+    const snapshot = await claim.read();
+
+    const claimed = await claim.claim({ snapshot, mismatchMessage: "source changed" });
+
+    expect(legacyMigrationSourceSnapshotsMatch(claimed, snapshot)).toBe(true);
+    expect(fs.existsSync(sourcePath)).toBe(false);
+    expect(fs.statSync(claim.claimPath).nlink).toBe(1);
+    expect(await claim.restore()).toBeNull();
+    expect(fs.readFileSync(sourcePath)).toEqual(snapshot.buffer);
+    expect(fs.statSync(sourcePath).ino).toBe(snapshot.ino);
+    expect(fs.existsSync(claim.claimPath)).toBe(false);
+  });
+
   it("preserves a competing claim created before portable publication", async () => {
     const { sourcePath, stateDir } = createSource();
     const stateRoot = await root(stateDir, { hardlinks: "reject", symlinks: "reject" });
