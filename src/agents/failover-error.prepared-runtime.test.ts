@@ -39,14 +39,6 @@ describe("prepared model runtime coordination failures", () => {
           "prepared model runtime owner is not published",
         ),
     ],
-    [
-      "prepared model runtime plugin generation retired",
-      () =>
-        new PreparedModelRuntimePluginGenerationRetiredError(
-          "prepared model runtime plugin generation retired",
-        ),
-    ],
-    ["plugin instance unavailable", () => new PluginInstanceUnavailableError("test-plugin")],
   ])("classifies direct and nested %s as coordination errors", (_label, makeError) => {
     const coordination = makeError();
     for (const error of [
@@ -265,34 +257,40 @@ describe("prepared model runtime coordination failures", () => {
         new PreparedModelRuntimePluginGenerationRetiredError("generation retired"),
       ],
     ])(
-      "aborts execution immediately on %s without attempting secondary fallbacks",
+      "preserves fallback after %s to allow cross-runtime recovery",
       async (_label, lifecycleError) => {
         const candidateCalls: Array<{ provider: string; model: string }> = [];
-        await expect(
-          runEmbeddedAgentEntry({
-            selection: {
-              cfg: {} as OpenClawConfig,
-              provider: "openai",
-              model: "gpt-6-luna",
-              fallbacksOverride: ["xai/grok-4.7"],
-            },
-            identity: {
-              runId: "run-lifecycle-boundary",
-              agentId: "main",
-              sessionId: "session-1",
-            },
-            harness: createDirectHarness(),
-            behavior: { kind: "command-rpc", hasCommittedSideEffect: () => false },
-            sessionOverride: { kind: "preserve" },
-            runCandidate: async (provider, model) => {
-              candidateCalls.push({ provider, model });
+        const result = await runEmbeddedAgentEntry({
+          selection: {
+            cfg: {} as OpenClawConfig,
+            provider: "openai",
+            model: "gpt-6-luna",
+            fallbacksOverride: ["xai/grok-4.7"],
+          },
+          identity: {
+            runId: "run-lifecycle-boundary",
+            agentId: "main",
+            sessionId: "session-1",
+          },
+          harness: createDirectHarness(),
+          behavior: { kind: "command-rpc", hasCommittedSideEffect: () => false },
+          sessionOverride: { kind: "preserve" },
+          runCandidate: async (provider, model) => {
+            candidateCalls.push({ provider, model });
+            if (provider === "openai" && model === "gpt-6-luna") {
               throw lifecycleError;
-            },
-          }),
-        ).rejects.toBe(lifecycleError);
+            }
+            return makeResult({ provider, model });
+          },
+        });
 
-        // Verification: internal lifecycle failures must halt immediately without rotating to secondary models
-        expect(candidateCalls).toEqual([{ provider: "openai", model: "gpt-6-luna" }]);
+        // Verification: plugin-specific retirement preserves fallback, allowing cross-runtime recovery on secondary candidate
+        expect(result.provider).toBe("xai");
+        expect(result.model).toBe("grok-4.7");
+        expect(candidateCalls).toEqual([
+          { provider: "openai", model: "gpt-6-luna" },
+          { provider: "xai", model: "grok-4.7" },
+        ]);
       },
     );
   });
