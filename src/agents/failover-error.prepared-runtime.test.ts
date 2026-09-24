@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
+import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { PluginInstanceUnavailableError } from "../plugins/plugin-instance-error.js";
+import { runEmbeddedAgentEntry } from "./embedded-agent-runner/run-entry.js";
+import { createDirectHarness, makeResult } from "./embedded-agent-runner/run-entry.test-support.js";
 import {
+  FailoverError,
   coerceToFailoverError,
   describeFailoverError,
   isNonProviderRuntimeCoordinationError,
@@ -13,6 +17,10 @@ import {
   PreparedModelRuntimePluginGenerationRetiredError,
   PreparedModelRuntimePublicationSupersededError,
 } from "./prepared-model-runtime.errors.js";
+
+vi.mock("./harness/runtime-plugin.js", () => ({
+  ensureSelectedAgentHarnessPlugin: vi.fn(async () => undefined),
+}));
 
 describe("prepared model runtime coordination failures", () => {
   it.each([
@@ -109,5 +117,107 @@ describe("prepared model runtime coordination failures", () => {
     ).rejects.toBe(wrappedError);
 
     expect(run).toHaveBeenCalledTimes(1);
+  });
+
+  describe("production runtime boundary (runEmbeddedAgentEntry)", () => {
+    it("aborts execution immediately on superseded publication without attempting secondary fallbacks", async () => {
+      const supersededError = new PreparedModelRuntimePublicationSupersededError(
+        "prepared model runtime publication was superseded for /agents/main",
+      );
+      const candidateCalls: Array<{ provider: string; model: string }> = [];
+      const fallbackSteps: Array<{ decision: string }> = [];
+
+      await expect(
+        runEmbeddedAgentEntry({
+          selection: {
+            cfg: {} as OpenClawConfig,
+            provider: "openai",
+            model: "gpt-6-luna",
+            fallbacksOverride: ["xai/grok-4.7"],
+          },
+          identity: {
+            runId: "run-superseded-boundary",
+            agentId: "main",
+            sessionId: "session-1",
+          },
+          harness: createDirectHarness(),
+          behavior: { kind: "command-rpc", hasCommittedSideEffect: () => false },
+          sessionOverride: { kind: "preserve" },
+          onFallbackStep: (step) => {
+            fallbackSteps.push(step as { decision: string });
+          },
+          runCandidate: async (provider, model) => {
+            candidateCalls.push({ provider, model });
+            if (provider === "openai" && model === "gpt-6-luna") {
+              throw supersededError;
+            }
+            return makeResult({ provider, model });
+          },
+        }),
+      ).rejects.toBe(supersededError);
+
+      // Fault verification: runtime boundary halts on first candidate, never calls secondary fallback
+      expect(candidateCalls).toEqual([{ provider: "openai", model: "gpt-6-luna" }]);
+      expect(fallbackSteps).toHaveLength(0);
+    });
+
+    it("advances to fallback candidate on ordinary provider error (control)", async () => {
+      const providerError = new FailoverError("rate limit exceeded", {
+        provider: "openai",
+        model: "gpt-6-luna",
+        reason: "rate_limit",
+        status: 429,
+      });
+      const candidateCalls: Array<{ provider: string; model: string }> = [];
+      const fallbackSteps: Array<{ decision: string }> = [];
+
+      const result = await runEmbeddedAgentEntry({
+        selection: {
+          cfg: {} as OpenClawConfig,
+          provider: "openai",
+          model: "gpt-6-luna",
+          fallbacksOverride: ["xai/grok-4.7"],
+        },
+        identity: {
+          runId: "run-fallback-control",
+          agentId: "main",
+          sessionId: "session-1",
+        },
+        harness: createDirectHarness(),
+        behavior: { kind: "command-rpc", hasCommittedSideEffect: () => false },
+        sessionOverride: { kind: "preserve" },
+        onFallbackStep: (step) => {
+          fallbackSteps.push(step as { decision: string });
+        },
+        runCandidate: async (provider, model) => {
+          candidateCalls.push({ provider, model });
+          if (provider === "openai" && model === "gpt-6-luna") {
+            throw providerError;
+          }
+          return makeResult({ provider, model });
+        },
+      });
+
+      // Control verification: provider error advances to xai/grok-4.7
+      expect(result.provider).toBe("xai");
+      expect(result.model).toBe("grok-4.7");
+      expect(candidateCalls).toEqual([
+        { provider: "openai", model: "gpt-6-luna" },
+        { provider: "xai", model: "grok-4.7" },
+      ]);
+      expect(fallbackSteps).toEqual([
+        expect.objectContaining({
+          fallbackStepFinalOutcome: "next_fallback",
+          fallbackStepFromFailureReason: "rate_limit",
+          fallbackStepFromModel: "openai/gpt-6-luna",
+          fallbackStepToModel: "xai/grok-4.7",
+        }),
+        expect.objectContaining({
+          fallbackStepFinalOutcome: "succeeded",
+          fallbackStepFromModel: "openai/gpt-6-luna",
+          fallbackStepToModel: "xai/grok-4.7",
+        }),
+      ]);
+    });
   });
 });
