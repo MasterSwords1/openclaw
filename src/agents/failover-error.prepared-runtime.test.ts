@@ -13,6 +13,7 @@ import {
 } from "./failover-error.js";
 import { runWithModelFallback } from "./model-fallback-runner.js";
 import {
+  assertPreparedModelRuntimeInputCurrent,
   PreparedModelRuntimeOwnerNotPublishedError,
   PreparedModelRuntimePluginGenerationRetiredError,
   PreparedModelRuntimePublicationSupersededError,
@@ -219,5 +220,80 @@ describe("prepared model runtime coordination failures", () => {
         }),
       ]);
     });
+
+    it("halts runtime acquisition immediately when runtime is superseded during model setup", async () => {
+      const candidateCalls: Array<{ provider: string; model: string }> = [];
+      const staleRuntime = {
+        agentDir: "/tmp/agent",
+        workspaceDir: "/tmp/workspace",
+        isCurrent: () => false,
+      };
+
+      await expect(
+        runEmbeddedAgentEntry({
+          selection: {
+            cfg: {} as OpenClawConfig,
+            provider: "openai",
+            model: "gpt-6-luna",
+            fallbacksOverride: ["xai/grok-4.7"],
+          },
+          identity: {
+            runId: "run-model-setup-superseded",
+            agentId: "main",
+            sessionId: "session-1",
+          },
+          harness: createDirectHarness(),
+          behavior: { kind: "command-rpc", hasCommittedSideEffect: () => false },
+          sessionOverride: { kind: "preserve" },
+          runCandidate: async (provider, model) => {
+            candidateCalls.push({ provider, model });
+            // Production runtime model setup guard: throws PreparedModelRuntimePublicationSupersededError
+            assertPreparedModelRuntimeInputCurrent(staleRuntime, staleRuntime.isCurrent);
+            return makeResult({ provider, model });
+          },
+        }),
+      ).rejects.toBeInstanceOf(PreparedModelRuntimePublicationSupersededError);
+
+      // Fault verification: runtime boundary halts on first candidate, never calls secondary fallback
+      expect(candidateCalls).toEqual([{ provider: "openai", model: "gpt-6-luna" }]);
+    });
+
+    it.each([
+      ["plugin instance unavailable", new PluginInstanceUnavailableError("test-plugin")],
+      [
+        "retired plugin generation",
+        new PreparedModelRuntimePluginGenerationRetiredError("generation retired"),
+      ],
+    ])(
+      "aborts execution immediately on %s without attempting secondary fallbacks",
+      async (_label, lifecycleError) => {
+        const candidateCalls: Array<{ provider: string; model: string }> = [];
+        await expect(
+          runEmbeddedAgentEntry({
+            selection: {
+              cfg: {} as OpenClawConfig,
+              provider: "openai",
+              model: "gpt-6-luna",
+              fallbacksOverride: ["xai/grok-4.7"],
+            },
+            identity: {
+              runId: "run-lifecycle-boundary",
+              agentId: "main",
+              sessionId: "session-1",
+            },
+            harness: createDirectHarness(),
+            behavior: { kind: "command-rpc", hasCommittedSideEffect: () => false },
+            sessionOverride: { kind: "preserve" },
+            runCandidate: async (provider, model) => {
+              candidateCalls.push({ provider, model });
+              throw lifecycleError;
+            },
+          }),
+        ).rejects.toBe(lifecycleError);
+
+        // Verification: internal lifecycle failures must halt immediately without rotating to secondary models
+        expect(candidateCalls).toEqual([{ provider: "openai", model: "gpt-6-luna" }]);
+      },
+    );
   });
 });
