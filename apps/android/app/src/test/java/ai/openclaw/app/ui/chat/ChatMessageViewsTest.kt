@@ -131,19 +131,21 @@ class ChatMessageViewsTest {
 
     composeRule.onNodeWithText("github.com").assertIsDisplayed()
     composeRule.onNode(hasContentDescription("Collapse link preview")).assertIsDisplayed()
-    org.junit.Assert.assertNull(shadowApp.nextStartedActivity)
+    org.junit.Assert.assertNull("Expanding preview must not launch browser activity", shadowApp.nextStartedActivity)
 
+    // Verify collapsing preview returns to compact state without launching browser activity
     composeRule.onNode(hasContentDescription("Collapse link preview")).performClick()
 
     composeRule.onNodeWithText("Preview · github.com").assertIsDisplayed()
     composeRule.onNode(hasContentDescription("Expand link preview")).assertIsDisplayed()
     composeRule.onAllNodesWithText("github.com").assertCountEquals(0)
-    org.junit.Assert.assertNull(shadowApp.nextStartedActivity)
+    org.junit.Assert.assertNull("Collapsing preview must not launch browser activity", shadowApp.nextStartedActivity)
 
+    // Verify re-expanding and tapping card body launches external browser activity with URL
     composeRule.onNode(hasContentDescription("Expand link preview")).performClick()
     composeRule.onNodeWithText("github.com").performClick()
     val launchedIntent = shadowApp.nextStartedActivity
-    org.junit.Assert.assertNotNull(launchedIntent)
+    org.junit.Assert.assertNotNull("Card body click must launch browser activity", launchedIntent)
     assertEquals(android.content.Intent.ACTION_VIEW, launchedIntent.action)
     assertEquals("https://github.com/openclaw/openclaw/issues/123", launchedIntent.dataString)
   }
