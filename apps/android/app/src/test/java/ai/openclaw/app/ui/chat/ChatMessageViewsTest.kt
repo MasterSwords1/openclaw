@@ -8,6 +8,7 @@ import ai.openclaw.app.chat.ChatOutboxStatus
 import ai.openclaw.app.chat.parseChatMessageContent
 import ai.openclaw.app.ui.design.ClawDesignTheme
 import ai.openclaw.app.ui.design.ClawTheme
+import android.content.Intent
 import android.graphics.Rect
 import android.provider.Settings
 import android.view.View
@@ -27,8 +28,6 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.toPixelMap
-import androidx.compose.ui.platform.LocalUriHandler
-import androidx.compose.ui.platform.UriHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertCountEquals
@@ -110,23 +109,17 @@ class ChatMessageViewsTest {
 
   @Test
   fun linkPreviewExpandsAndCollapsesWithoutOpeningUri() {
-    val openedUris = mutableListOf<String>()
-    val testUriHandler =
-      object : UriHandler {
-        override fun openUri(uri: String) {
-          openedUris += uri
-        }
-      }
+    val application = RuntimeEnvironment.getApplication()
+    val shadowApp = org.robolectric.Shadows.shadowOf(application)
+    shadowApp.clearNextStartedActivities()
 
     composeRule.setContent {
       ClawDesignTheme {
-        CompositionLocalProvider(LocalUriHandler provides testUriHandler) {
-          ChatMessageLinkPreview(
-            messageId = "expandable-link",
-            role = "assistant",
-            content = listOf(ChatMessageContent(text = "[issue](https://github.com/openclaw/openclaw/issues/123)")),
-          )
-        }
+        ChatMessageLinkPreview(
+          messageId = "expandable-link",
+          role = "assistant",
+          content = listOf(ChatMessageContent(text = "[issue](https://github.com/openclaw/openclaw/issues/123)")),
+        )
       }
     }
 
@@ -138,18 +131,21 @@ class ChatMessageViewsTest {
 
     composeRule.onNodeWithText("github.com").assertIsDisplayed()
     composeRule.onNode(hasContentDescription("Collapse link preview")).assertIsDisplayed()
-    assertEquals(emptyList<String>(), openedUris)
+    org.junit.Assert.assertNull(shadowApp.nextStartedActivity)
 
     composeRule.onNode(hasContentDescription("Collapse link preview")).performClick()
 
     composeRule.onNodeWithText("Preview · github.com").assertIsDisplayed()
     composeRule.onNode(hasContentDescription("Expand link preview")).assertIsDisplayed()
     composeRule.onAllNodesWithText("github.com").assertCountEquals(0)
-    assertEquals(emptyList<String>(), openedUris)
+    org.junit.Assert.assertNull(shadowApp.nextStartedActivity)
 
     composeRule.onNode(hasContentDescription("Expand link preview")).performClick()
     composeRule.onNodeWithText("github.com").performClick()
-    assertEquals(listOf("https://github.com/openclaw/openclaw/issues/123"), openedUris)
+    val launchedIntent = shadowApp.nextStartedActivity
+    org.junit.Assert.assertNotNull(launchedIntent)
+    assertEquals(android.content.Intent.ACTION_VIEW, launchedIntent.action)
+    assertEquals("https://github.com/openclaw/openclaw/issues/123", launchedIntent.dataString)
   }
 
   @Test
