@@ -27,6 +27,8 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.toPixelMap
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.platform.UriHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertCountEquals
@@ -104,6 +106,50 @@ class ChatMessageViewsTest {
     composeRule.onAllNodesWithText("Preview · gateway.example").assertCountEquals(0)
     composeRule.onNodeWithText("Preview · github.com").assertIsDisplayed()
     composeRule.onNodeWithText("Preview · reader.example").assertIsDisplayed()
+  }
+
+  @Test
+  fun linkPreviewExpandsAndCollapsesWithoutOpeningUri() {
+    val openedUris = mutableListOf<String>()
+    val testUriHandler =
+      object : UriHandler {
+        override fun openUri(uri: String) {
+          openedUris += uri
+        }
+      }
+
+    composeRule.setContent {
+      ClawDesignTheme {
+        CompositionLocalProvider(LocalUriHandler provides testUriHandler) {
+          ChatMessageLinkPreview(
+            messageId = "expandable-link",
+            role = "assistant",
+            content = listOf(ChatMessageContent(text = "[issue](https://github.com/openclaw/openclaw/issues/123)")),
+          )
+        }
+      }
+    }
+
+    composeRule.onNodeWithText("Preview · github.com").assertIsDisplayed()
+    composeRule.onNode(hasContentDescription("Expand link preview")).assertIsDisplayed()
+    composeRule.onAllNodesWithText("github.com").assertCountEquals(0)
+
+    composeRule.onNode(hasContentDescription("Expand link preview")).performClick()
+
+    composeRule.onNodeWithText("github.com").assertIsDisplayed()
+    composeRule.onNode(hasContentDescription("Collapse link preview")).assertIsDisplayed()
+    assertEquals(emptyList<String>(), openedUris)
+
+    composeRule.onNode(hasContentDescription("Collapse link preview")).performClick()
+
+    composeRule.onNodeWithText("Preview · github.com").assertIsDisplayed()
+    composeRule.onNode(hasContentDescription("Expand link preview")).assertIsDisplayed()
+    composeRule.onAllNodesWithText("github.com").assertCountEquals(0)
+    assertEquals(emptyList<String>(), openedUris)
+
+    composeRule.onNode(hasContentDescription("Expand link preview")).performClick()
+    composeRule.onNodeWithText("github.com").performClick()
+    assertEquals(listOf("https://github.com/openclaw/openclaw/issues/123"), openedUris)
   }
 
   @Test
