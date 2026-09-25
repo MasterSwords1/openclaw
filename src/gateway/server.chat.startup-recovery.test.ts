@@ -11,11 +11,17 @@ import { createTempDirTracker } from "../../test/helpers/temp-dir.js";
 import { resetConfigRuntimeState } from "../config/config.js";
 import { clearAgentRunContext, registerAgentRunContext } from "../infra/agent-run-registry.js";
 import { registerChatAbortController } from "./chat-abort.js";
-import { createDirectChatContext } from "./server-chat.agent-events.test-helpers.js";
+import {
+  createDirectChatContext,
+  createTextTranscriptEvent,
+} from "./server-chat.agent-events.test-helpers.js";
 import { initializeSessionReadContext } from "./server-methods/sessions-read-cache.test-support.js";
 import type { GatewayRequestContext } from "./server-methods/shared-types.js";
 import { captureChatResponse } from "./server.chat-response.test-support.js";
-import { createDirectChatSessionStoreFixture } from "./server.chat-session-store.test-support.js";
+import {
+  createDirectChatSessionStoreFixture,
+  writeMainChatSessionTranscript,
+} from "./server.chat-session-store.test-support.js";
 import { testState, writeSessionStore } from "./test-helpers.js";
 
 const autoCleanupTempDirs = createTempDirTracker();
@@ -65,7 +71,11 @@ async function readStartupPayload(context: GatewayRequestContext) {
   expect(responses).toHaveLength(1);
   expect(responses[0]?.ok, JSON.stringify(responses[0]?.error)).toBe(true);
   return responses[0]?.payload as
-    | { sessionInfo?: { status?: unknown; hasActiveRun?: unknown }; inFlightRun?: unknown }
+    | {
+        sessionInfo?: { status?: unknown; hasActiveRun?: unknown };
+        inFlightRun?: unknown;
+        messages?: Array<{ role?: unknown; content?: Array<{ text?: unknown }> }>;
+      }
     | undefined;
 }
 
@@ -90,9 +100,18 @@ describe("chat.startup after restart recovery", () => {
           main: { sessionId: "sess-main", updatedAt: Date.now() },
         },
       });
-      // Post-recovery shape: the resumed turn owns a kind-"agent" abort entry
-      // and a registry context flagged as a restart-recovery resume, while the
-      // fresh process holds no chat run state for it.
+      // Post-recovery shape: the canonical transcript holds only the synthetic
+      // restart-recovery notices, the resumed turn owns a kind-"agent" abort
+      // entry and a flagged registry context, and the fresh process holds no
+      // chat run state for it.
+      await writeMainChatSessionTranscript([
+        createTextTranscriptEvent("user", "Gateway restarted. Recovery in progress.", {
+          timestamp: Date.now() - 60_000,
+        }),
+        createTextTranscriptEvent("user", "Recovery resumed the active turn.", {
+          timestamp: Date.now() - 30_000,
+        }),
+      ]);
       registerAgentRunContext("run-recovery", {
         sessionKey: "agent:main:main",
         sessionId: "sess-main",
@@ -106,7 +125,19 @@ describe("chat.startup after restart recovery", () => {
       try {
         const payload = await readStartupPayload(context);
         expect(payload?.sessionInfo).toMatchObject({ status: "running", hasActiveRun: true });
-        expect(payload?.inFlightRun).toMatchObject({ runId: "run-recovery", text: "" });
+        expect(payload?.inFlightRun).toMatchObject({
+          runId: "run-recovery",
+          text: "",
+          sessionAbortable: true,
+        });
+        expect(
+          (payload?.messages ?? []).flatMap((message) =>
+            (message.content ?? []).map((part) => part.text),
+          ),
+        ).toEqual([
+          "Gateway restarted. Recovery in progress.",
+          "Recovery resumed the active turn.",
+        ]);
       } finally {
         abortRegistration.cleanup();
       }

@@ -58,10 +58,10 @@ export type InFlightRunSnapshot = {
   text: string;
   startedAt?: number;
   /**
-   * True when the in-flight run is owned by the embedded-run registry and can
-   * only be cancelled through the session-owned abort path (sessions.abort),
-   * never through run-specific chat.abort. Control UI uses this to keep Stop
-   * routing session-scoped for recovered embedded runs.
+   * True when the in-flight run must be cancelled through the session-owned
+   * abort path (sessions.abort), never through run-specific chat.abort. Control
+   * UI uses this to keep Stop routing session-scoped for recovered embedded
+   * runs and adopted restart-recovery resumes.
    */
   sessionAbortable?: boolean;
   plan?: ChatRunPlanSnapshot;
@@ -395,7 +395,7 @@ export function resolveInFlightRunSnapshot(params: {
   // (sessionKey, agentId), Map insertion order is not a meaningful selector;
   // the latest `startedAtMs` is the run a switching-back client wants, and the
   // runId tie-break keeps the choice deterministic when timestamps collide.
-  let best: { runId: string; startedAtMs: number } | undefined;
+  let best: { runId: string; startedAtMs: number; recovery: boolean } | undefined;
   for (const [runId, entry] of params.chatAbortControllers) {
     // Active unless explicitly projected inactive — mirrors sessions.list's
     // collectTrackedActiveSessionRuns (`projectSessionActive !== false`), so a run
@@ -426,18 +426,20 @@ export function resolveInFlightRunSnapshot(params: {
     const newer = best === undefined || entry.startedAtMs > best.startedAtMs;
     const tie = best !== undefined && entry.startedAtMs === best.startedAtMs && runId > best.runId;
     if (newer || tie) {
-      best = { runId, startedAtMs: entry.startedAtMs };
+      best = { runId, startedAtMs: entry.startedAtMs, recovery: isRecoveryResume };
     }
   }
   if (best === undefined) {
     return undefined;
   }
   // A run can be active before its first text arrives. Adopt it now so the UI
-  // stays streaming and can reconcile the eventual reply.
+  // stays streaming and can reconcile the eventual reply. Recovery adoptions
+  // keep Stop session-scoped, matching the embedded recovery owner.
   return projectInFlightRunSnapshot({
     chatRunState: params.chatRunState,
     runId: best.runId,
     startedAtMs: best.startedAtMs,
+    ...(best.recovery ? { sessionAbortable: true } : {}),
   });
 }
 
