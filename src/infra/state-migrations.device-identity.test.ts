@@ -3,6 +3,7 @@ import { createHash, generateKeyPairSync } from "node:crypto";
 import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
+import { configureFsSafeNative } from "@openclaw/fs-safe/config";
 import { afterEach, describe, expect, it } from "vitest";
 import { useAutoCleanupTempDirTracker } from "../../test/helpers/temp-dir.js";
 import type { DB as OpenClawStateKyselyDatabase } from "../state/openclaw-state-db.generated.js";
@@ -15,7 +16,6 @@ import {
   type NormalizedLegacyDeviceIdentity,
 } from "./device-identity-legacy.js";
 import { deriveDeviceIdFromPublicKey } from "./device-identity.js";
-import { configureFsSafeNative } from "./fs-safe-defaults.js";
 import { acquireGatewayLock } from "./gateway-lock.js";
 import {
   executeSqliteQuerySync,
@@ -873,24 +873,34 @@ describe("legacy device identity Doctor migration", () => {
     });
   });
 
-  it("migrates legacy device identity when native fs-safe mode is off", async () => {
-    configureFsSafeNative({ mode: "off" });
-    try {
-      const { env, stateDir } = useStateDir();
-      const sourcePath = await writeLegacy({ stateDir });
+  it.each(["source", "interrupted link pair"])(
+    "migrates legacy device identity from %s when native fs-safe mode is off",
+    async (initialState) => {
+      configureFsSafeNative({ mode: "off" });
+      try {
+        const { env, stateDir } = useStateDir();
+        const sourcePath = await writeLegacy({ stateDir });
 
-      const result = await migrate(stateDir, env);
+        if (initialState === "interrupted link pair") {
+          await fsp.link(sourcePath, `${sourcePath}.doctor-importing`);
+        }
 
-      expect(result.warnings).toEqual([]);
-      expect(result.changes).toEqual(["Migrated primary device identity to SQLite."]);
-      expect(fs.existsSync(sourcePath)).toBe(false);
-      expect(identityRow(env)).toMatchObject({
-        identity_key: "primary",
-        device_id: normalizedSwift().deviceId,
-      });
-      expect(receipt(env)).toMatchObject({ removed_source: 1 });
-    } finally {
-      configureFsSafeNative({ mode: "auto" });
-    }
-  });
+        const result = await migrate(stateDir, env);
+
+        expect(result.warnings).toEqual([]);
+        expect(result.changes).toEqual(["Migrated primary device identity to SQLite."]);
+        expect(fs.existsSync(sourcePath)).toBe(false);
+        expect(fs.existsSync(`${sourcePath}.doctor-importing`)).toBe(false);
+        expect(identityRow(env)).toMatchObject({
+          identity_key: "primary",
+          device_id: normalizedSwift().deviceId,
+          public_key_pem: normalizedSwift().publicKeyPem,
+          private_key_pem: normalizedSwift().privateKeyPem,
+        });
+        expect(receipt(env)).toMatchObject({ removed_source: 1 });
+      } finally {
+        configureFsSafeNative({ mode: "auto" });
+      }
+    },
+  );
 });

@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import type { Root } from "@openclaw/fs-safe";
+import { getFsSafeNativeConfig } from "@openclaw/fs-safe/config";
 import { FsSafeError } from "@openclaw/fs-safe/errors";
 import {
   pinDirectory,
@@ -10,7 +11,6 @@ import {
   type PinnedDirectory,
 } from "./directory-durability.js";
 import { hasErrnoCode } from "./errno.js";
-import { getFsSafeNativeConfig } from "./fs-safe-defaults.js";
 import { pathMayExistSync } from "./path-existence.js";
 
 /** The stable source identity every doctor-owned import verifies before cleanup. */
