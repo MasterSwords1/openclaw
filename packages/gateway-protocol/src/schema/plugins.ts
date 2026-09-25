@@ -223,7 +223,7 @@ export const PluginCatalogEntrySchema = closedObject({
   packageName: Type.Optional(NonEmptyString),
   /** Canonical ClawHub identity proven by install provenance or the official catalog. */
   clawhubPackage: Type.Optional(NonEmptyString),
-  /** Opaque discovery identity for loading optional ClawHub presentation metadata. */
+  /** Opaque discovery identity for loading local or ClawHub presentation metadata. */
   catalogId: Type.Optional(NonEmptyString),
   description: Type.Optional(Type.String()),
   version: Type.Optional(NonEmptyString),
@@ -547,6 +547,8 @@ export const PluginsInspectResultSchema = closedObject({
 });
 
 const PluginInstallOptions = {
+  /** False preserves existing enablement policy while installing the source. */
+  enable: Type.Optional(Type.Boolean()),
   mode: Type.Optional(Type.Union([Type.Literal("install"), Type.Literal("update")])),
   acknowledgeInstallPolicyWarning: Type.Optional(Type.Literal(true)),
   acknowledgeCapabilities: Type.Optional(PluginCapabilityAcknowledgmentSchema),
