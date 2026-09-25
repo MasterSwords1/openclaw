@@ -8,6 +8,11 @@
 // is not recoverable, so live commentary resumes through post-reconnect events.
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "vitest";
 import { createTempDirTracker } from "../../test/helpers/temp-dir.js";
+import type { EmbeddedAgentQueueHandle } from "../agents/embedded-agent-runner/run-state.js";
+import {
+  clearActiveEmbeddedRun,
+  setActiveEmbeddedRun,
+} from "../agents/embedded-agent-runner/runs.js";
 import { resetConfigRuntimeState } from "../config/config.js";
 import { clearAgentRunContext, registerAgentRunContext } from "../infra/agent-run-registry.js";
 import { registerChatAbortController } from "./chat-abort.js";
@@ -122,14 +127,30 @@ describe("chat.startup after restart recovery", () => {
       const context = createDirectChatContext();
       const abortRegistration = registerAgentKindRun(context, "run-recovery");
       expect(abortRegistration.markExecutionStarted()).toBe(true);
+      // The live process keeps buffering the resumed run's commentary and
+      // tool activity under its run id; the adopted snapshot must surface it.
+      Object.assign(context.chatRunState.getOrCreate("run-recovery"), {
+        rawBuffer: "Resumed progress is streaming.",
+      });
+      context.chatRunState.recordProgressEvent("run-recovery", {
+        runId: "run-recovery",
+        seq: 1,
+        stream: "tool",
+        ts: Date.now(),
+        sessionKey: "agent:main:main",
+        data: { phase: "start", toolCallId: "tool-recovery", name: "read" },
+      });
       try {
         const payload = await readStartupPayload(context);
         expect(payload?.sessionInfo).toMatchObject({ status: "running", hasActiveRun: true });
         expect(payload?.inFlightRun).toMatchObject({
           runId: "run-recovery",
-          text: "",
+          text: "Resumed progress is streaming.",
           sessionAbortable: true,
         });
+        expect(
+          (payload?.inFlightRun as { events?: unknown[] } | undefined)?.events ?? [],
+        ).not.toHaveLength(0);
         expect(
           (payload?.messages ?? []).flatMap((message) =>
             (message.content ?? []).map((part) => part.text),
@@ -172,6 +193,48 @@ describe("chat.startup after restart recovery", () => {
         abortRegistration.cleanup();
       }
     } finally {
+      await sessionStoreFixture.reset();
+    }
+  });
+
+  test("keeps Stop session-scoped when an embedded recovery owner coexists", async () => {
+    sessionStoreFixture.open({ fresh: true });
+    const embeddedHandle: EmbeddedAgentQueueHandle = {
+      abort: () => undefined,
+      isAborted: () => false,
+      isCompacting: () => false,
+      isStreaming: () => true,
+      queueMessage: async () => undefined,
+      runId: "run-embedded",
+    };
+    try {
+      await writeSessionStore({
+        entries: {
+          main: { sessionId: "sess-main", updatedAt: Date.now() },
+        },
+      });
+      registerAgentRunContext("run-recovery", {
+        sessionKey: "agent:main:main",
+        sessionId: "sess-main",
+        agentId: "main",
+        projectSessionActive: true,
+        mainSessionRestartRecovery: true,
+      });
+      setActiveEmbeddedRun("sess-main", embeddedHandle, "agent:main:main");
+      const context = createDirectChatContext();
+      const abortRegistration = registerAgentKindRun(context, "run-recovery");
+      expect(abortRegistration.markExecutionStarted()).toBe(true);
+      try {
+        const payload = await readStartupPayload(context);
+        expect(payload?.sessionInfo).toMatchObject({ status: "running", hasActiveRun: true });
+        // Either owner may win the snapshot, but Stop must stay session-scoped.
+        expect(payload?.inFlightRun).toMatchObject({ sessionAbortable: true });
+      } finally {
+        abortRegistration.cleanup();
+      }
+    } finally {
+      clearActiveEmbeddedRun("sess-main", embeddedHandle, "agent:main:main");
+      clearAgentRunContext("run-recovery");
       await sessionStoreFixture.reset();
     }
   });
